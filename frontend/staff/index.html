@@ -19,23 +19,27 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header class="topbar">
-    <p class="brand"><span class="brand-mark" aria-hidden="true"></span>SamePage<span class="brand-area">Staff review</span></p>
-    <p class="role-note"><span class="pill-note">Fictional data</span><span class="pill-note">Simulated staff role</span></p>
-  </header>
+  <div class="app">
+    <aside class="sidebar">
+      <p class="brand">SamePage</p>
+      <p class="brand-area">Staff review</p>
+      <nav id="views" class="views" aria-label="Request views"></nav>
+      <div class="side-foot">
+        <p class="side-hint" aria-hidden="true"><kbd>J</kbd><kbd>K</kbd> next and previous</p>
+        <p class="side-hint" aria-hidden="true"><kbd>/</kbd> search</p>
+        <p class="side-note">Simulated staff role. Every client, account, and advisor here is fictional.</p>
+      </div>
+    </aside>
 
-  <main class="shell">
     <section class="queue" aria-labelledby="queue-title">
       <div class="queue-head">
         <h1 id="queue-title">Requests</h1>
         <button type="button" id="refresh" class="icon-button" aria-label="Refresh requests" title="Refresh"></button>
       </div>
-      <div class="views" id="views" role="group" aria-label="Show"></div>
       <form class="tools" id="filters" aria-label="Filter requests">
         <label class="search">
           <span class="visually-hidden">Search requests</span>
           <input type="search" id="search" placeholder="Search requests" autocomplete="off">
-          <kbd aria-hidden="true">/</kbd>
         </label>
         <label class="category">
           <span class="visually-hidden">Category</span>
@@ -44,7 +48,6 @@
       </form>
       <p id="queue-status" class="queue-status" role="status" aria-live="polite"></p>
       <ol id="case-list" class="case-list"></ol>
-      <p class="queue-foot" aria-hidden="true"><kbd>J</kbd><kbd>K</kbd> move between requests</p>
     </section>
 
     <section class="case" id="case" aria-label="Selected request" tabindex="-1">
@@ -53,7 +56,7 @@
         <p>You'll see what the client said, what they confirmed, and the account facts behind it.</p>
       </div>
     </section>
-  </main>
+  </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="app.js"></script>

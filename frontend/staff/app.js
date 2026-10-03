@@ -30,7 +30,7 @@
     not_needed: "No account needed"
   };
   var VIEWS = [
-    { id: "all", label: "All", test: function () { return true; } },
+    { id: "all", label: "All requests", test: function () { return true; } },
     { id: "open", label: "To assign", test: function (c) { return c.status !== "assigned" && !isSecurity(c); } },
     { id: "flagged", label: "Flagged", test: function (c) { return (c.flags || []).length > 0; } },
     { id: "assigned", label: "Assigned", test: function (c) { return c.status === "assigned"; } }
@@ -264,6 +264,8 @@
   }
 
   function renderViews() {
+    var current = VIEWS.filter(function (v) { return v.id === state.view; })[0];
+    document.getElementById("queue-title").textContent = current.id === "all" ? "Requests" : current.label;
     viewsEl.textContent = "";
     VIEWS.forEach(function (view) {
       viewsEl.appendChild(el("button", {
