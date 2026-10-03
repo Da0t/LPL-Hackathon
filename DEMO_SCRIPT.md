@@ -44,7 +44,7 @@ Roles: one person speaks, one clicks, one watches the clock and calls the cuts.
 | Point at the new case at the top of the queue. Open it. | This is the staff queue. The same case just arrived. Nobody retyped it. |
 | Point at the quote, then the yellow notice. | Here are her exact words, and what she confirmed. And here is the catch: her wording did not match her records. That was settled with Mara before any advisor saw it. |
 | Scroll to page 2. Point at the source labels. | Page two shows only the account that matters: a masked number, a balance with its date, and the rollover that explains why she called it the account from her old job. Every fact shows its source. |
-| Choose Jordan Lee. Type **"Retirement-income specialty, available, offers phone meetings."** Click **Assign case**. | The system suggests advisors and says why. A person decides, and records the reason. |
+| Choose Jordan Lee. Type **"Retirement-income specialty, available, offers phone meetings."** Click **Assign case**. (If typing is slow, **Use suggested reason** fills the box with the system's reason for you to accept or edit.) | The system suggests advisors and says why. A person decides, and records the reason. |
 | Open `CASE-SEC-1`. Show the red banner. | And a client who reports a strange sign-in goes to security specialists, never to a planning advisor. |
 
 ## 3:55 Why LPL buys it (25 seconds, slide)

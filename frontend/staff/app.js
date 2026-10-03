@@ -27,25 +27,48 @@
   var MATCH_LABELS = {
     client_confirmed: "Confirmed by the client",
     unresolved: "Not resolved",
-    not_needed: "No account needed for this request"
+    not_needed: "No account needed"
+  };
+  var VIEWS = [
+    { id: "all", label: "All", test: function () { return true; } },
+    { id: "open", label: "To assign", test: function (c) { return c.status !== "assigned" && !isSecurity(c); } },
+    { id: "flagged", label: "Flagged", test: function (c) { return (c.flags || []).length > 0; } },
+    { id: "assigned", label: "Assigned", test: function (c) { return c.status === "assigned"; } }
+  ];
+  // Static icon markup only; never built from API data.
+  var ICONS = {
+    refresh: '<path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/>',
+    flag: '<path d="M3.5 14V2.5M3.5 3h8l-1.8 2.75L11.5 8.5h-8"/>',
+    shield: '<path d="M8 1.8 2.8 3.6v4c0 3 2 5.3 5.2 6.6 3.2-1.3 5.2-3.600 5.2-6.600v-4z"/><path d="M8 5.500v3M8 10.600v.1"/>',
+    mic: '<rect x="5.75" y="1.75" width="4.5" height="7.5" rx="2.25"/><path d="M3.5 7.500a4.500 4.500 0 0 0 9 0M8 12v2.250"/>',
+    keyboard: '<rect x="1.75" y="4" width="12.5" height="8" rx="1.500"/><path d="M4.500 6.750h.1M7 6.750h.1M9.500 6.750h.1M11.500 6.750h.1M5 9.500h6"/>',
+    check: '<path d="m3 8.500 3.200 3.200L13 4.800"/>',
+    doc: '<path d="M4 1.750h5l3 3v9.500H4z"/><path d="M9 1.750v3h3"/>',
+    info: '<circle cx="8" cy="8" r="6.250"/><path d="M8 7.250v4M8 4.900v.1"/>',
+    alert: '<path d="M8 2 1.750 13.250h12.500z"/><path d="M8 6.500v3.250M8 11.500v.1"/>'
   };
 
   var state = {
     cases: [],
     known: null, // case IDs seen so far; null until the first successful load
     arrived: {},
+    unread: {},
     signature: null,
     openStatus: null,
     selectedId: null,
-    openToken: 0
+    openToken: 0,
+    view: "all"
   };
 
   var listEl = document.getElementById("case-list");
   var queueStatusEl = document.getElementById("queue-status");
   var caseEl = document.getElementById("case");
-  var statusFilter = document.getElementById("filter-status");
+  var viewsEl = document.getElementById("views");
+  var searchEl = document.getElementById("search");
   var categoryFilter = document.getElementById("filter-category");
-  var flaggedFilter = document.getElementById("filter-flagged");
+  var refreshEl = document.getElementById("refresh");
+  var toastEl = document.getElementById("toast");
+  var toastTimer = null;
 
   // ---------- helpers ----------
 
@@ -67,6 +90,13 @@
     return node;
   }
 
+  function icon(name) {
+    var holder = document.createElement("span");
+    holder.innerHTML = '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" ' +
+      'stroke-width="1.500" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS[name] + "</svg>";
+    return holder.firstChild;
+  }
+
   function humanize(value) {
     var text = String(value || "").replace(/_/g, " ");
     return text.charAt(0).toUpperCase() + text.slice(1);
@@ -76,10 +106,28 @@
     return map[value] || humanize(value);
   }
 
+  function avatar(name, size) {
+    var words = String(name || "?").trim().split(/\s+/);
+    var initials = (words[0].charAt(0) + (words.length > 1 ? words[words.length - 1].charAt(0) : "")).toUpperCase();
+    var sum = 0;
+    for (var i = 0; i < String(name).length; i++) sum += String(name).charCodeAt(i);
+    return el("span", { class: "avatar hue-" + (sum % 5) + (size ? " " + size : ""), "aria-hidden": "true", text: initials });
+  }
+
   function formatTime(iso) {
     var date = new Date(iso);
     if (isNaN(date)) return iso || "";
     return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  }
+
+  function formatAgo(iso) {
+    var date = new Date(iso);
+    if (isNaN(date)) return iso || "";
+    var minutes = Math.round((Date.now() - date.getTime()) / 60000);
+    if (minutes < 0 || minutes >= 24 * 60) return formatTime(iso);
+    if (minutes < 1) return "Just now";
+    if (minutes < 60) return minutes + " min ago";
+    return Math.floor(minutes / 60) + " hr ago";
   }
 
   function formatDate(day) {
@@ -106,7 +154,29 @@
   }
 
   function source(id) {
-    return id ? el("span", { class: "source", text: id }) : null;
+    return id ? el("span", { class: "source", title: "Source record " + id }, icon("doc"), id) : null;
+  }
+
+  function categoryTag(category, matched) {
+    return el("span", {
+      class: "tag" + (category === "fraud_or_security" ? " security" : matched ? " match" : ""),
+      text: humanize(category)
+    });
+  }
+
+  function notice(kind, title, body) {
+    return el("div", { class: "notice " + kind, role: kind === "error" ? "alert" : "status" },
+      icon(kind === "error" ? "alert" : "check"),
+      el("div", {}, el("strong", { text: title }), body || null));
+  }
+
+  function toast(message) {
+    toastEl.textContent = "";
+    toastEl.appendChild(icon("check"));
+    toastEl.appendChild(document.createTextNode(message));
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove("show"); }, 3200);
   }
 
   function api(path, options) {
@@ -140,19 +210,21 @@
       });
       if (state.known) {
         cases.forEach(function (item) {
-          if (!state.known[item.case_id]) state.arrived[item.case_id] = true;
+          if (!state.known[item.case_id]) {
+            state.arrived[item.case_id] = true;
+            state.unread[item.case_id] = true;
+          }
         });
       }
       state.known = {};
       cases.forEach(function (item) { state.known[item.case_id] = true; });
       // Skip the redraw when nothing changed so polling never steals keyboard focus.
       var signature = JSON.stringify(cases);
-      var wasError = queueStatusEl.className !== "queue-status";
+      var wasError = queueStatusEl.classList.contains("error");
       if (signature === state.signature && !wasError) return;
       state.signature = signature;
       state.cases = cases;
-      queueStatusEl.className = "queue-status";
-      syncFilterOptions();
+      syncCategories();
       renderQueue();
       // If the open case changed elsewhere (for example, a colleague assigned it), reload it.
       var open = cases.filter(function (item) { return item.case_id === state.selectedId; })[0];
@@ -163,102 +235,125 @@
     });
   }
 
-  function syncFilterOptions() {
-    fillSelect(statusFilter, unique(state.cases.map(function (c) { return c.status; })), STATUS_LABELS);
-    fillSelect(categoryFilter, unique([].concat.apply([], state.cases.map(function (c) { return c.categories || []; }))), {});
-  }
-
-  function unique(values) {
-    return values.filter(function (value, index) { return value && values.indexOf(value) === index; }).sort();
-  }
-
-  function fillSelect(select, values, labels) {
-    var current = select.value;
+  function syncCategories() {
+    var all = [].concat.apply([], state.cases.map(function (c) { return c.categories || []; }));
+    var values = all.filter(function (value, index) { return value && all.indexOf(value) === index; }).sort();
     var wanted = [""].concat(values);
-    var existing = Array.prototype.map.call(select.options, function (o) { return o.value; });
+    var existing = Array.prototype.map.call(categoryFilter.options, function (o) { return o.value; });
     if (wanted.join("|") === existing.join("|")) return;
-    select.textContent = "";
+    var current = categoryFilter.value;
+    categoryFilter.textContent = "";
     wanted.forEach(function (value) {
-      select.appendChild(el("option", { value: value, text: value ? label(labels, value) : "All" }));
+      categoryFilter.appendChild(el("option", { value: value, text: value ? humanize(value) : "All categories" }));
     });
-    select.value = wanted.indexOf(current) !== -1 ? current : "";
+    categoryFilter.value = wanted.indexOf(current) !== -1 ? current : "";
   }
 
   function visibleCases() {
+    var view = VIEWS.filter(function (v) { return v.id === state.view; })[0];
+    var query = searchEl.value.trim().toLowerCase();
     return state.cases.filter(function (item) {
-      if (statusFilter.value && item.status !== statusFilter.value) return false;
+      if (!view.test(item)) return false;
       if (categoryFilter.value && (item.categories || []).indexOf(categoryFilter.value) === -1) return false;
-      if (flaggedFilter.checked && !(item.flags || []).length) return false;
+      if (query) {
+        var haystack = [item.case_id, item.client_display_name, item.confirmed_plain_language_request].join(" ").toLowerCase();
+        if (haystack.indexOf(query) === -1) return false;
+      }
       return true;
+    });
+  }
+
+  function renderViews() {
+    viewsEl.textContent = "";
+    VIEWS.forEach(function (view) {
+      viewsEl.appendChild(el("button", {
+        type: "button", class: "view", "aria-pressed": String(view.id === state.view),
+        onclick: function () { state.view = view.id; renderQueue(); }
+      }, view.label, el("span", { class: "count", text: String(state.cases.filter(view.test).length) })));
     });
   }
 
   function renderQueue() {
     var rows = visibleCases();
+    renderViews();
     listEl.textContent = "";
+    queueStatusEl.className = "queue-status";
+    queueStatusEl.textContent = "";
 
     if (!state.cases.length) {
+      queueStatusEl.className = "queue-status empty";
       queueStatusEl.textContent = "No requests are waiting. A request appears here as soon as a client confirms it.";
       return;
     }
     if (!rows.length) {
-      queueStatusEl.textContent = "";
-      queueStatusEl.appendChild(document.createTextNode("No requests match these filters. "));
+      queueStatusEl.className = "queue-status empty";
+      queueStatusEl.appendChild(document.createTextNode("No requests match. "));
       queueStatusEl.appendChild(el("button", { type: "button", class: "quiet", text: "Clear filters", onclick: clearFilters }));
       return;
     }
-    queueStatusEl.textContent = rows.length === state.cases.length
-      ? rows.length + (rows.length === 1 ? " request" : " requests")
-      : "Showing " + rows.length + " of " + state.cases.length + " requests";
 
     rows.forEach(function (item) {
       var security = isSecurity(item);
-      var flagged = (item.flags || []).length > 0;
+      var categories = item.categories || [];
       var tags = el("div", { class: "row-tags" },
         el("span", { class: "tag status " + item.status, text: label(STATUS_LABELS, item.status) }));
-      (item.categories || []).forEach(function (category) {
-        tags.appendChild(el("span", {
-          class: "tag" + (category === "fraud_or_security" ? " security" : ""), text: humanize(category)
-        }));
-      });
-      (item.flags || []).forEach(function (flag) {
-        tags.appendChild(el("span", { class: "tag flag", text: label(FLAG_LABELS, flag) }));
-      });
+      if (categories.length) tags.appendChild(categoryTag(categories[0]));
+      if (categories.length > 1) tags.appendChild(el("span", { class: "tag", text: "+" + (categories.length - 1), title: categories.slice(1).map(humanize).join(", ") }));
+      if ((item.flags || []).length && !security) {
+        tags.appendChild(el("span", { class: "tag flag", title: item.flags.map(function (f) { return label(FLAG_LABELS, f); }).join(", ") },
+          icon("flag"), "Flagged"));
+      }
 
       var button = el("button", {
         type: "button",
-        class: "case-row" + (security ? " security" : flagged ? " flagged" : "") + (state.arrived[item.case_id] ? " arrived" : ""),
+        class: "case-row" + (security ? " security" : "") + (state.arrived[item.case_id] ? " arrived" : ""),
+        "data-case": item.case_id,
         "aria-current": item.case_id === state.selectedId ? "true" : null,
         onclick: function () { openCase(item.case_id, true); }
       },
-        el("div", { class: "row-top" },
-          el("strong", { text: item.case_id }),
-          el("span", { text: formatTime(item.created_at) })),
-        el("div", { class: "row-client", text: item.client_display_name }),
-        el("p", { class: "row-request", text: item.confirmed_plain_language_request }),
-        tags);
+        state.unread[item.case_id] ? el("span", { class: "unread", title: "New" }) : null,
+        avatar(item.client_display_name),
+        el("div", { class: "row-body" },
+          el("div", { class: "row-top" },
+            el("span", { class: "row-client" }, item.client_display_name, el("small", { text: item.case_id })),
+            el("span", { class: "row-time", text: formatAgo(item.created_at) })),
+          el("p", { class: "row-request", text: item.confirmed_plain_language_request }),
+          tags));
       listEl.appendChild(el("li", {}, button));
     });
     state.arrived = {};
   }
 
   function clearFilters() {
-    statusFilter.value = "";
+    state.view = "all";
+    searchEl.value = "";
     categoryFilter.value = "";
-    flaggedFilter.checked = false;
     renderQueue();
   }
 
-  // ---------- case document ----------
+  function moveSelection(step) {
+    var rows = visibleCases();
+    if (!rows.length) return;
+    var index = rows.map(function (c) { return c.case_id; }).indexOf(state.selectedId);
+    var next = rows[Math.max(0, Math.min(rows.length - 1, index === -1 ? 0 : index + step))];
+    openCase(next.case_id, false);
+    var row = listEl.querySelector('[data-case="' + next.case_id + '"]');
+    if (row) row.scrollIntoView({ block: "nearest" });
+  }
+
+  // ---------- case detail ----------
 
   function openCase(caseId, moveFocus) {
     state.selectedId = caseId;
     state.openStatus = null;
+    toastEl.classList.remove("show");
+    delete state.unread[caseId];
     if (location.hash.slice(1) !== caseId) history.replaceState(null, "", "#" + caseId);
     renderQueue();
     var token = ++state.openToken;
     caseEl.textContent = "";
-    caseEl.appendChild(el("div", { class: "placeholder" }, el("p", { text: "Opening " + caseId + "…" })));
+    caseEl.appendChild(el("div", { class: "sheet skeleton", "aria-label": "Opening " + caseId },
+      el("i", { style: "width:35%" }), el("i", { style: "width:80%" }), el("i", { style: "width:65%" }), el("i", { style: "width:72%" })));
 
     var id = encodeURIComponent(caseId);
     var candidates = api("/staff/cases/" + id + "/candidates").then(
@@ -268,16 +363,24 @@
     Promise.all([api("/staff/cases/" + id), candidates]).then(function (results) {
       if (token !== state.openToken) return;
       renderCase(results[0], results[1]);
-      if (moveFocus) caseEl.focus();
+      caseEl.scrollTop = 0;
+      if (moveFocus) {
+        caseEl.focus({ preventScroll: true });
+        // On a narrow screen the case sits below the queue, so bring it into view.
+        if (window.matchMedia("(max-width: 54rem)").matches) caseEl.scrollIntoView({ block: "start" });
+      }
     }).catch(function (error) {
       if (token !== state.openToken) return;
       caseEl.textContent = "";
       caseEl.appendChild(el("div", { class: "sheet" },
-        el("div", { class: "notice error", role: "alert" },
-          el("strong", { text: "Couldn't open " + caseId }),
-          error.message),
+        notice("error", "Couldn't open " + caseId, error.message),
         el("button", { type: "button", class: "primary", text: "Try again", onclick: function () { openCase(caseId, true); } })));
     });
+  }
+
+  function step(kind, title, body, origin) {
+    return el("li", { class: "step " + kind },
+      el("h3", { text: title }), body, origin ? el("p", { class: "origin", text: origin }) : null);
   }
 
   // Says only what the case record supports: the recorded account type, any sourced
@@ -300,291 +403,311 @@
     return box;
   }
 
-  function block(title, body, origin) {
-    return el("div", { class: "block" },
-      el("h3", { text: title }), body, origin ? el("p", { class: "origin", text: origin }) : null);
+  function tile(name, value, detail) {
+    return el("div", { class: "tile" },
+      el("dt", { text: name }),
+      el("dd", {}, value, detail ? el("small", { text: detail }) : null));
   }
 
-  function renderCase(record, candidates, notice) {
+  function renderCase(record, candidates, banner) {
     var security = isSecurity(record);
     var routing = record.routing || {};
     var context = record.account_context;
+    var flags = record.flags || [];
     state.openStatus = record.status;
     caseEl.textContent = "";
 
+    var voice = record.input_mode === "voice";
+    caseEl.appendChild(el("header", { class: "case-head" },
+      avatar(record.client_display_name, "large"),
+      el("div", {},
+        el("h2", { text: record.client_display_name }),
+        el("div", { class: "case-meta" },
+          el("strong", { text: record.case_id }),
+          el("span", { text: "Received " + formatTime(record.created_at) }),
+          el("span", { class: "with-icon" }, icon(voice ? "mic" : "keyboard"), voice ? "Spoken" : "Typed"),
+          record.preferred_contact_channel
+            ? el("span", { text: "Prefers contact by " + humanize(record.preferred_contact_channel).toLowerCase() }) : null,
+          el("span", { class: "tag status " + record.status, text: label(STATUS_LABELS, record.status) })))));
+
     if (security) {
       caseEl.appendChild(el("div", { class: "security-banner", role: "alert" },
-        el("h2", { text: "Send to " + humanize(routing.destination || "security_specialist_review").toLowerCase() }),
-        el("p", { text: "This request reports possible unauthorized access. It goes to the specialist queue for review, not to a planning advisor." })));
+        icon("shield"),
+        el("div", {},
+          el("h2", { text: "Send to " + humanize(routing.destination || "security_specialist_review").toLowerCase() }),
+          el("p", { text: "This request reports possible unauthorized access. It goes to the specialist queue for review, not to a planning advisor." }))));
     }
 
     // Page 1: request and routing
-    var page1 = el("article", { class: "sheet" },
-      el("div", { class: "sheet-head" },
-        el("h2", { text: "Request and routing" }),
-        el("p", { text: "Page 1 of 2" })),
-      el("div", { class: "case-meta" },
-        el("strong", { text: record.case_id }),
-        el("span", { text: record.client_display_name }),
-        el("span", { text: "Received " + formatTime(record.created_at) }),
-        record.preferred_contact_channel
-          ? el("span", { text: "Prefers contact by " + humanize(record.preferred_contact_channel).toLowerCase() }) : null,
-        el("span", { class: "tag status " + record.status, text: label(STATUS_LABELS, record.status) })),
-      block("What the client said",
+    var steps = el("ol", { class: "steps" },
+      step("said", "Client said",
         el("blockquote", { class: "client-words", text: "“" + record.original_words + "”" }),
-        record.input_mode === "voice" ? "Spoken by the client and transcribed. Unedited." : "Typed by the client. Unedited."));
-
-    if ((record.flags || []).indexOf("client_term_did_not_match_account_type") !== -1) {
-      page1.appendChild(mismatchNotice(record, context));
+        voice ? "Spoken by the client and transcribed. Unedited." : "Typed by the client. Unedited."));
+    if (flags.indexOf("client_term_did_not_match_account_type") !== -1) {
+      steps.appendChild(step("caught", "Checked against the client's records", mismatchNotice(record, context)));
     }
-
-    page1.appendChild(block("What the client confirmed",
+    steps.appendChild(step("done", "Client confirmed",
       el("p", { class: "confirmed", text: record.confirmed_plain_language_request }),
       record.client_confirmed_at
         ? "Reviewed and confirmed by the client, " + formatTime(record.client_confirmed_at) + "."
         : "Reviewed and confirmed by the client before sending."));
-    page1.appendChild(block("Staff summary",
+    steps.appendChild(step("done", "Staff summary",
       el("p", { text: record.staff_summary }),
       "Drafted by the triage agent. It describes the question; it is not advice to take any action."));
 
-    var facts = el("dl", { class: "facts" });
-    function fact(name) {
-      var dd = el("dd", {});
-      for (var i = 1; i < arguments.length; i++) {
-        var part = arguments[i];
-        if (part) dd.appendChild(typeof part === "string" ? document.createTextNode(part) : part);
-      }
-      facts.appendChild(el("dt", { text: name }));
-      facts.appendChild(dd);
-    }
-    fact("Intent", humanize(record.intent));
-    fact("Amount", record.amount_requested != null
-      ? formatMoney(record.amount_requested, record.currency) + ", stated and confirmed by the client"
-      : "None stated");
-    fact("Account", label(MATCH_LABELS, record.account_match_status),
-      record.selected_account_id ? el("span", { class: "muted", text: record.selected_account_id }) : null);
-    var categoryTags = el("span", { class: "row-tags" });
-    (record.categories || []).forEach(function (category) {
-      categoryTags.appendChild(el("span", {
-        class: "tag" + (category === "fraud_or_security" ? " security" : ""), text: humanize(category)
-      }));
+    var tiles = el("dl", { class: "tiles" },
+      tile("Intent", humanize(record.intent)),
+      tile("Amount", record.amount_requested != null ? formatMoney(record.amount_requested, record.currency) : "None stated",
+        record.amount_requested != null ? "Stated and confirmed by the client" : null),
+      tile("Account", label(MATCH_LABELS, record.account_match_status), record.selected_account_id),
+      tile("Suggested destination", humanize(routing.destination || "staff_review"), routing.reason));
+
+    var labels = el("div", { class: "row-tags" });
+    (record.categories || []).forEach(function (category) { labels.appendChild(categoryTag(category)); });
+    flags.forEach(function (flag) {
+      labels.appendChild(el("span", { class: "tag flag" }, icon("flag"), label(FLAG_LABELS, flag)));
     });
-    fact("Categories", categoryTags);
-    if ((record.flags || []).length) {
-      var flagTags = el("span", { class: "row-tags" });
-      record.flags.forEach(function (flag) {
-        flagTags.appendChild(el("span", { class: "tag flag", text: label(FLAG_LABELS, flag) }));
-      });
-      fact("Flags", flagTags);
-    }
-    fact("Suggested destination", humanize(routing.destination || "staff_review"),
-      routing.reason ? el("span", { class: "muted", text: routing.reason }) : null);
-    page1.appendChild(el("div", { class: "block" }, facts));
 
     var questions = record.unresolved_questions || [];
-    var questionList = el("ul", { class: "plain-list" });
+    var questionList = el("ul", { class: "open-list" });
     questions.forEach(function (question) { questionList.appendChild(el("li", { text: question })); });
-    page1.appendChild(block("Still open",
-      questions.length ? questionList : el("p", { class: "muted", text: "Nothing was left open at intake." })));
-    caseEl.appendChild(page1);
+
+    var page1 = el("article", { class: "sheet" },
+      el("div", { class: "sheet-head" }, el("h2", { text: "Request and routing" }), el("p", { text: "Page 1 of 2" })),
+      steps, tiles,
+      el("div", { class: "block" }, el("h3", { text: "Categories and flags" }), labels),
+      el("div", { class: "block" }, el("h3", { text: "Still open" }),
+        questions.length ? questionList : el("p", { class: "muted", text: "Nothing was left open at intake." })));
 
     // Page 2: relevant account context
     var page2 = el("article", { class: "sheet" },
-      el("div", { class: "sheet-head" },
-        el("h2", { text: "Relevant account context" }),
-        el("p", { text: "Page 2 of 2" })));
+      el("div", { class: "sheet-head" }, el("h2", { text: "Relevant account context" }), el("p", { text: "Page 2 of 2" })));
     if (!context) {
       page2.appendChild(el("p", { class: "muted", text: security
         ? "No account details are attached. The specialist queue reviews account access directly."
         : "No account is attached to this request." }));
     } else {
-      var accountFacts = el("dl", { class: "facts" });
-      [
-        context.familiar_label ? ["Client knows it as", context.familiar_label] : null,
-        ["Account type", label(ACCOUNT_TYPE_LABELS, context.account_type)],
-        ["Account number", context.masked_identifier],
-        ["Balance snapshot", formatMoney(context.balance, context.currency) + " as of " + formatDate(context.balance_as_of)]
-      ].filter(Boolean).forEach(function (row) {
-        accountFacts.appendChild(el("dt", { text: row[0] }));
-        accountFacts.appendChild(el("dd", {}, row[1], source(context.account_source_id)));
-      });
-      page2.appendChild(el("div", { class: "block" }, accountFacts));
+      var facts = el("dl", { class: "kv" });
+      var row = function (name, value, detail, sourceId, extra) {
+        facts.appendChild(el("div", { class: extra || null },
+          el("dt", { text: name }),
+          el("dd", {}, value, detail ? el("small", { text: " " + detail }) : null),
+          el("span", { class: "src" }, source(sourceId))));
+      };
+      if (context.familiar_label) row("Client knows it as", context.familiar_label, null, context.account_source_id);
+      row("Account type", label(ACCOUNT_TYPE_LABELS, context.account_type), null, context.account_source_id);
+      row("Account number", context.masked_identifier, null, context.account_source_id);
+      row("Balance snapshot", formatMoney(context.balance, context.currency),
+        "as of " + formatDate(context.balance_as_of), context.account_source_id, "balance");
+      page2.appendChild(facts);
 
       var events = context.relevant_events || [];
-      var eventList = el("dl", { class: "facts" });
+      var eventList = el("dl", { class: "kv" });
       events.forEach(function (event) {
-        eventList.appendChild(el("dt", { text: formatDate(event.date) }));
-        eventList.appendChild(el("dd", {},
-          humanize(event.type) + (event.summary ? ": " + event.summary : ""), source(event.source_id)));
+        eventList.appendChild(el("div", {},
+          el("dt", { text: formatDate(event.date) }),
+          el("dd", {}, humanize(event.type), event.summary ? el("small", { text: " " + event.summary }) : null),
+          el("span", { class: "src" }, source(event.source_id))));
       });
-      page2.appendChild(block("Earlier activity that explains this request",
+      page2.appendChild(el("div", { class: "block" },
+        el("h3", { text: "Earlier activity that explains this request" }),
         events.length ? eventList : el("p", { class: "muted", text: "No earlier activity is relevant to this request." })));
 
-      page2.appendChild(block("Cautions",
-        el("ul", { class: "plain-list" },
-          el("li", { text: "The balance is a snapshot. It is not the amount available to withdraw." }),
-          el("li", { text: "Tax effects and eligibility have not been assessed." }))));
+      page2.appendChild(el("div", { class: "note" }, icon("info"),
+        el("p", { text: "The balance is a snapshot, not the amount available to withdraw. Tax effects and eligibility have not been assessed." })));
     }
-    caseEl.appendChild(page2);
 
-    caseEl.appendChild(renderAssignment(record, candidates, security, notice));
+    caseEl.appendChild(el("div", { class: "detail-grid" },
+      el("div", { class: "detail-main" }, page1, page2),
+      el("aside", { class: "detail-rail" }, renderAssignment(record, candidates, security, banner))));
   }
 
   // ---------- assignment ----------
 
-  function renderAssignment(record, candidates, security, notice) {
+  function advisorName(candidates, advisorId) {
+    var match = candidates.list.filter(function (c) { return c.advisor_id === advisorId; })[0];
+    return match ? match.display_name + " (" + match.advisor_id + ")" : advisorId;
+  }
+
+  function renderAssignment(record, candidates, security, banner) {
     var routing = record.routing || {};
     var sheet = el("article", { class: "sheet" },
-      el("div", { class: "sheet-head" },
-        el("h2", { text: security ? "Specialist review" : "Assign an advisor" }),
-        el("p", { text: "A staff member decides. Nothing is sent to an advisor from this prototype." })));
-
-    if (notice) sheet.appendChild(notice);
+      el("div", { class: "sheet-head" }, el("h2", { text: security ? "Specialist review" : "Assign an advisor" })));
 
     if (security) {
-      sheet.appendChild(el("p", { text: "Destination: " + humanize(routing.destination || "security_specialist_review") +
-        ". Advisor matching is turned off for this request." }));
+      sheet.appendChild(el("div", { class: "specialist" },
+        el("span", { class: "badge" }, icon("shield")),
+        el("strong", { text: humanize(routing.destination || "security_specialist_review") }),
+        el("p", { class: "muted", text: "Advisor matching is turned off for this request. A staff member decides the next step; nothing is sent from this prototype." })));
       return sheet;
     }
 
+    sheet.appendChild(el("p", { class: "assign-sub", text: "You decide. Nothing is sent to an advisor from this prototype." }));
+    if (banner) sheet.appendChild(banner);
+
     if (record.status === "assigned" && routing.assigned_advisor_id) {
-      var match = candidates.list.filter(function (c) { return c.advisor_id === routing.assigned_advisor_id; })[0];
-      if (!notice) {
-        sheet.appendChild(el("div", { class: "notice ok" },
-          el("strong", { text: "Assigned to " + (match ? match.display_name + " (" + match.advisor_id + ")" : routing.assigned_advisor_id) })));
-      }
+      if (!banner) sheet.appendChild(notice("ok", "Assigned to " + advisorName(candidates, routing.assigned_advisor_id)));
       if (routing.staff_decision) {
-        sheet.appendChild(block("Staff reason", el("p", { text: routing.staff_decision })));
+        sheet.appendChild(el("div", { class: "block" }, el("h3", { text: "Staff reason" }), el("p", { text: routing.staff_decision })));
       }
       return sheet;
     }
 
     var shown = candidates.list.slice(0, MAX_CANDIDATES);
     var recommended = routing.recommended_advisor_ids || [];
+    var wanted = record.categories || [];
+    var reasons = {};
     var form = el("form", { novalidate: true });
     var group = el("fieldset", { class: "candidates" }, el("legend", { text: "Suggested advisors" }));
 
     if (candidates.error) {
-      group.appendChild(el("div", { class: "notice error" },
-        el("strong", { text: "Couldn't load advisor suggestions" }), candidates.error));
+      group.appendChild(notice("error", "Couldn't load advisor suggestions", candidates.error));
     } else if (!shown.length) {
       group.appendChild(el("p", { class: "muted", text: "No advisors were suggested for this request. Enter an advisor ID below to assign it yourself." }));
     }
 
     shown.forEach(function (candidate) {
-      var details = el("dl", {});
-      function row(name, value) {
-        details.appendChild(el("dt", { text: name }));
-        details.appendChild(typeof value === "string" ? el("dd", { text: value }) : el("dd", {}, value));
-      }
-      row("Specialty", (candidate.specialties || []).map(humanize).join(", ") || "None listed");
-      row("Availability", el("span", {
-        class: candidate.available ? "avail-yes" : "avail-no",
-        text: candidate.available ? "Available for a new case" : "Not available"
-      }));
-      // existing_client_relationship is an optional version-two field; version one does not send it.
-      row("Existing client", candidate.existing_client_relationship === true ? "Yes, this is the client's current advisor"
-        : candidate.existing_client_relationship === false ? "No existing relationship"
-        : "Not reported");
-      if (candidate.meeting_mode) row("Meets by", candidate.meeting_mode.map(humanize).join(", ").toLowerCase());
-      if (candidate.capacity != null) row("Room for", candidate.capacity + (candidate.capacity === 1 ? " more case" : " more cases"));
-      row("Why suggested", candidate.reason || "No reason given");
+      reasons[candidate.advisor_id] = candidate.reason;
+      var tags = el("div", { class: "cand-tags" });
+      if (recommended.indexOf(candidate.advisor_id) !== -1) tags.appendChild(el("span", { class: "tag recommended", text: "Recommended", title: "Recommended when the request was triaged" }));
+      if (candidate.existing_client_relationship === true) tags.appendChild(el("span", { class: "tag match", text: "Current advisor" }));
+      (candidate.specialties || []).forEach(function (specialty) {
+        tags.appendChild(el("span", {
+          class: "tag" + (wanted.indexOf(specialty) !== -1 ? " match" : ""),
+          title: wanted.indexOf(specialty) !== -1 ? "Matches this request" : null, text: humanize(specialty)
+        }));
+      });
+
+      var facts = el("div", { class: "cand-facts" },
+        el("span", {}, el("i", { class: "dot" + (candidate.available ? "" : " no") }),
+          candidate.available ? "Available for a new case" : "Not available"));
+      // existing_client_relationship, meeting_mode, and capacity are optional version-two fields.
+      facts.appendChild(el("span", { text: candidate.existing_client_relationship === true ? "Already works with this client"
+        : candidate.existing_client_relationship === false ? "No existing relationship with this client"
+        : "Existing relationship: not reported" }));
+      if (candidate.meeting_mode) facts.appendChild(el("span", { text: "Meets by " + candidate.meeting_mode.map(humanize).join(", ").toLowerCase() }));
+      if (candidate.capacity != null) facts.appendChild(el("span", { text: "Room for " + candidate.capacity + (candidate.capacity === 1 ? " more case" : " more cases") }));
 
       group.appendChild(el("label", { class: "candidate" },
         el("input", { type: "radio", name: "advisor", value: candidate.advisor_id }),
-        el("span", { class: "name" },
-          candidate.display_name,
-          el("small", { text: candidate.advisor_id }),
-          recommended.indexOf(candidate.advisor_id) !== -1 ? el("span", { class: "tag", text: "Recommended at triage" }) : null),
-        el("div", { class: "detail" }, details)));
+        el("div", { class: "cand-head" },
+          avatar(candidate.display_name, "small"),
+          el("div", { class: "cand-name" }, candidate.display_name, el("small", { text: candidate.advisor_id }))),
+        tags, facts,
+        el("p", { class: "cand-why" }, el("b", { text: "Why suggested: " }), candidate.reason || "No reason given")));
     });
 
     var otherInput = el("input", { type: "text", id: "other-advisor", placeholder: "ADV-00", autocomplete: "off", "aria-label": "Advisor ID" });
     var otherRadio = el("input", { type: "radio", name: "advisor", value: "__other__" });
-    group.appendChild(el("label", { class: "candidate" },
+    group.appendChild(el("label", { class: "candidate other" },
       otherRadio,
-      el("span", { class: "name", text: "Choose a different advisor" }),
-      el("div", { class: "detail" }, otherInput,
-        el("p", { class: "muted", text: "Enter the advisor's ID. The case service rejects IDs it does not know." }))));
+      el("div", { class: "cand-name", text: "Choose a different advisor" }),
+      otherInput,
+      el("p", { class: "muted", text: "Enter the advisor's ID. The case service rejects IDs it does not know." })));
     form.appendChild(group);
 
     var reason = el("textarea", { id: "staff-reason", required: true, "aria-describedby": "reason-hint" });
+    var useSuggested = el("button", { type: "button", class: "quiet", text: "Use suggested reason", disabled: true });
     form.appendChild(el("div", { class: "field" },
-      el("label", { for: "staff-reason", text: "Reason for this assignment" }),
-      el("span", { class: "hint", id: "reason-hint", text: "Required. Saved with the case so the decision can be reviewed." }),
-      reason));
+      el("div", { class: "field-top" },
+        el("label", { for: "staff-reason", text: "Reason" }), useSuggested),
+      reason,
+      el("span", { class: "hint", id: "reason-hint", text: "Required. Saved with the case so the decision can be reviewed." })));
 
     var errorSlot = el("div", {});
     var submit = el("button", { type: "submit", class: "primary", text: "Assign case", disabled: true });
     form.appendChild(errorSlot);
     form.appendChild(submit);
 
-    function chosenAdvisor() {
+    function checkedValue() {
       var checked = form.querySelector('input[name="advisor"]:checked');
-      if (!checked) return "";
-      return checked.value === "__other__" ? otherInput.value.trim() : checked.value;
+      return checked ? checked.value : "";
+    }
+    function chosenAdvisor() {
+      var value = checkedValue();
+      return value === "__other__" ? otherInput.value.trim() : value;
     }
     function update() {
       submit.disabled = !(chosenAdvisor() && reason.value.trim());
+      useSuggested.disabled = !reasons[checkedValue()];
     }
     otherInput.addEventListener("focus", function () { otherRadio.checked = true; update(); });
+    useSuggested.addEventListener("click", function () {
+      reason.value = reasons[checkedValue()] || "";
+      reason.focus();
+      update();
+    });
     form.addEventListener("input", update);
     form.addEventListener("change", update);
 
     form.addEventListener("submit", function (event) {
       event.preventDefault();
       var advisorId = chosenAdvisor();
-      if (!advisorId || !reason.value.trim()) return;
+      var staffReason = reason.value.trim();
+      if (!advisorId || !staffReason) return;
       submit.disabled = true;
       submit.textContent = "Assigning…";
       errorSlot.textContent = "";
       api("/staff/cases/" + encodeURIComponent(record.case_id) + "/assign", {
         method: "POST",
-        body: { advisor_id: advisorId, staff_reason: reason.value.trim() }
+        body: { advisor_id: advisorId, staff_reason: staffReason }
       }).then(function (result) {
         // Only a successful response changes what the page shows.
         var updated = Object.assign({}, record, {
           status: result.status,
-          routing: Object.assign({}, routing, {
-            assigned_advisor_id: result.assigned_advisor_id,
-            staff_decision: reason.value.trim()
-          })
+          routing: Object.assign({}, routing, { assigned_advisor_id: result.assigned_advisor_id, staff_decision: staffReason })
         });
-        var name = candidates.list.filter(function (c) { return c.advisor_id === result.assigned_advisor_id; })[0];
-        renderCase(updated, candidates, el("div", { class: "notice ok", role: "status" },
-          el("strong", { text: "Assigned to " + (name ? name.display_name + " (" + name.advisor_id + ")" : result.assigned_advisor_id) }),
-          "The case status is now " + label(STATUS_LABELS, result.status).toLowerCase() + "."));
+        var name = advisorName(candidates, result.assigned_advisor_id);
+        renderCase(updated, candidates, notice("ok", "Assigned to " + name,
+          el("span", { text: "The case status is now " + label(STATUS_LABELS, result.status).toLowerCase() + "." })));
         var confirmation = caseEl.querySelector(".notice.ok");
         if (confirmation) {
           confirmation.setAttribute("tabindex", "-1");
           confirmation.focus();
         }
+        toast("Assigned to " + name);
         loadQueue();
       }).catch(function (error) {
         submit.textContent = "Assign case";
         update();
         errorSlot.textContent = "";
-        errorSlot.appendChild(el("div", { class: "notice error", role: "alert" },
-          el("strong", { text: "The case was not assigned" }), error.message));
+        errorSlot.appendChild(notice("error", "The case was not assigned", error.message));
       });
     });
 
-    return sheet.appendChild(form), sheet;
+    sheet.appendChild(form);
+    return sheet;
   }
 
   // ---------- start ----------
 
-  [statusFilter, categoryFilter, flaggedFilter].forEach(function (control) {
-    control.addEventListener("change", renderQueue);
+  refreshEl.appendChild(icon("refresh"));
+  refreshEl.addEventListener("click", function () {
+    refreshEl.classList.remove("spinning");
+    void refreshEl.offsetWidth;
+    refreshEl.classList.add("spinning");
+    loadQueue();
   });
+  searchEl.addEventListener("input", renderQueue);
+  categoryFilter.addEventListener("change", renderQueue);
   document.getElementById("filters").addEventListener("submit", function (event) { event.preventDefault(); });
-  document.getElementById("refresh").addEventListener("click", loadQueue);
+
+  document.addEventListener("keydown", function (event) {
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    var typing = /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName);
+    if (event.key === "Escape" && event.target === searchEl) { searchEl.value = ""; renderQueue(); searchEl.blur(); return; }
+    if (typing) return;
+    if (event.key === "/") { event.preventDefault(); searchEl.focus(); }
+    else if (event.key === "j") moveSelection(1);
+    else if (event.key === "k") moveSelection(-1);
+  });
+
   window.addEventListener("hashchange", function () {
     var id = decodeURIComponent(location.hash.slice(1));
     if (id && id !== state.selectedId) openCase(id, true);
   });
 
-  queueStatusEl.textContent = "Loading requests…";
+  renderViews();
   loadQueue().then(function () {
     var id = decodeURIComponent(location.hash.slice(1));
     if (id) openCase(id, false);

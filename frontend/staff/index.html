@@ -20,36 +20,42 @@
 </head>
 <body>
   <header class="topbar">
-    <p class="brand">SamePage <span>staff review</span></p>
-    <p class="role-note">Simulated staff role. All clients, accounts, and advisors are fictional.</p>
+    <p class="brand"><span class="brand-mark" aria-hidden="true"></span>SamePage<span class="brand-area">Staff review</span></p>
+    <p class="role-note"><span class="pill-note">Fictional data</span><span class="pill-note">Simulated staff role</span></p>
   </header>
 
-  <main class="desk">
+  <main class="shell">
     <section class="queue" aria-labelledby="queue-title">
       <div class="queue-head">
-        <h1 id="queue-title">Client requests</h1>
-        <button type="button" id="refresh" class="quiet">Refresh</button>
+        <h1 id="queue-title">Requests</h1>
+        <button type="button" id="refresh" class="icon-button" aria-label="Refresh requests" title="Refresh"></button>
       </div>
-      <form class="filters" id="filters" aria-label="Filter the queue">
-        <label>Status
-          <select id="filter-status"><option value="">All</option></select>
+      <div class="views" id="views" role="group" aria-label="Show"></div>
+      <form class="tools" id="filters" aria-label="Filter requests">
+        <label class="search">
+          <span class="visually-hidden">Search requests</span>
+          <input type="search" id="search" placeholder="Search requests" autocomplete="off">
+          <kbd aria-hidden="true">/</kbd>
         </label>
-        <label>Category
-          <select id="filter-category"><option value="">All</option></select>
+        <label class="category">
+          <span class="visually-hidden">Category</span>
+          <select id="filter-category"><option value="">All categories</option></select>
         </label>
-        <label class="check"><input type="checkbox" id="filter-flagged"> Flagged only</label>
       </form>
       <p id="queue-status" class="queue-status" role="status" aria-live="polite"></p>
       <ol id="case-list" class="case-list"></ol>
+      <p class="queue-foot" aria-hidden="true"><kbd>J</kbd><kbd>K</kbd> move between requests</p>
     </section>
 
     <section class="case" id="case" aria-label="Selected request" tabindex="-1">
       <div class="placeholder">
-        <p>Choose a request from the queue to read what the client said, what they confirmed, and the account facts behind it.</p>
+        <p class="placeholder-title">Select a request</p>
+        <p>You'll see what the client said, what they confirmed, and the account facts behind it.</p>
       </div>
     </section>
   </main>
 
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="app.js"></script>
 </body>
 </html>

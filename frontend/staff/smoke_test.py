@@ -90,7 +90,8 @@ def run(base: str, shots: Path | None, preview: bool):
             browser = p.chromium.launch()
         except Exception:
             browser = p.chromium.launch(channel="chrome")
-        page = browser.new_page(viewport={"width": 1360, "height": 900})
+        # Tall when taking screenshots so the whole case is captured; a laptop size otherwise.
+        page = browser.new_page(viewport={"width": 1440, "height": 1500 if shots else 900})
         page_errors = []
         page.on("pageerror", lambda error: page_errors.append(str(error)))
 
@@ -98,7 +99,9 @@ def run(base: str, shots: Path | None, preview: bool):
         page.wait_for_selector(".case-row")
         check("queue lists the seed cases", page.locator(".case-row:has-text('CASE-1042')").count() == 1
               and page.locator(".case-row:has-text('CASE-SEC-1')").count() == 1)
-        check("bundled fonts load", page.evaluate("document.fonts.check('16px \"Public Sans\"') && document.fonts.check('16px Newsreader')"))
+        check("bundled fonts load", page.evaluate(
+            "Promise.all([document.fonts.load('16px Geist'), document.fonts.load('italic 16px Newsreader')])"
+            ".then(loaded => loaded.every(faces => faces.length > 0))"))
         shot(page, "1-queue.png")
 
         if has_client_page(base):
@@ -152,9 +155,15 @@ def run(base: str, shots: Path | None, preview: bool):
             check("a rejected assignment leaves the status unchanged",
                   page.inner_text(".case-meta .tag.status") != "Assigned")
 
+        page.keyboard.press("j")
+        check("J moves to the next request", page.locator(".case-row[aria-current='true']").count() == 1)
+        page.fill("#search", "sign-in")
+        check("search narrows the queue", page.locator(".case-row").count() == 1)
+        page.fill("#search", "")
+
         page.set_viewport_size({"width": 390, "height": 800})
         page.click(".case-row:has-text('CASE-1042')")
-        page.wait_for_selector(".sheet")
+        page.wait_for_selector(".case-head")
         check("no sideways scrolling at phone width", not page.evaluate("document.documentElement.scrollWidth > innerWidth"))
         shot(page, "5-phone.png", full_page=True)
 
