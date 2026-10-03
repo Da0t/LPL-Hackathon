@@ -1,6 +1,8 @@
-# SamePage AWS Setup (Agent 1)
+# Coherent AWS setup: Bedrock
 
-This covers the AWS side of SamePage: the Bedrock intake + triage adapter, its
+> **Status:** this covers Amazon Bedrock, the Guardrail, and Transcribe. Cognito and DynamoDB for the client portal are provisioned separately; see "Run it" in [`README.md`](README.md). Internal names still read `samepage` (for example `SAMEPAGE_AI_MODE`), and "Agent 1" refers to the branch that built this adapter.
+
+This covers the AWS side of Coherent: the Bedrock intake + triage adapter, its
 configuration, least-privilege IAM, the optional Guardrail, optional Transcribe,
 and the live smoke test. The judged path is **live Bedrock** with real
 tool use. The typed client flow must work before voice is attempted.
@@ -33,8 +35,9 @@ Two layers give better speech handling:
 
    Then `transcribe_pcm_chunks(...)` / `transcribe_wav(path)` use it automatically.
    Vocabulary name: `samepage-financial-terms` (override with `TRANSCRIBE_VOCAB_NAME`).
-   The client page still ships browser speech recognition as the default, labeled
-   as a browser feature; the Transcribe path is the AWS-native upgrade.
+   The client request editor uses browser speech recognition, labeled as a browser
+   feature. The Transcribe path is built and its vocabulary is live, but no page
+   calls it yet; do not describe the demo's voice input as Amazon Transcribe.
 
 ## 2. Configuration (environment only)
 

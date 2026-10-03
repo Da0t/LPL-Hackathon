@@ -1,5 +1,7 @@
 # Proposed optional fields for a version-two contract
 
+> **Status:** a proposal from the initial build, written against the legacy staff page in `frontend/staff/`. Kept for reference; it does not describe the current `web/` dashboard.
+
 Version one is frozen and this branch does not change it. The product spec asks the staff view to show a few things that version one's responses do not carry. Every field below is **optional**: the staff page already reads each one when present and works without it. Adopting any of them is a team decision.
 
 Preview them with `python3 frontend/staff/dev_server.py --v2`.
