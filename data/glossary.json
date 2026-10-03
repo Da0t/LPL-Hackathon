@@ -2,20 +2,20 @@
   "meta": {
     "version": "1",
     "synthetic_only": true,
-    "description": "Approved plain-language definitions. General explanations only, not personalized advice. The agent selects these; it does not write its own tax or legal rules. source_id and also_heard_as are optional additions."
+    "description": "Approved plain-language definitions. General explanations only, not personalized advice. The agent selects and offers these; it does not write its own tax or legal rules and does not recommend actions. also_heard_as lists casual phrasings, acronyms, and phonetic/spelled-out variants the agent may map to this term (and must then confirm with the client). source_id and also_heard_as are optional additions."
   },
   "glossary": [
     {
       "term": "rollover IRA",
       "plain": "A retirement account that holds money moved from an earlier workplace retirement plan.",
       "source_id": "GLOSSARY-01",
-      "also_heard_as": ["retirement money from my old job", "the account from my last employer"]
+      "also_heard_as": ["rollover", "roll over", "roll it over", "retirement money from my old job", "the account from my last employer"]
     },
     {
       "term": "Roth IRA",
       "plain": "A type of retirement account generally funded with money that has already been taxed. Withdrawal rules vary.",
       "source_id": "GLOSSARY-02",
-      "also_heard_as": ["Roth", "the Roth thing"]
+      "also_heard_as": ["Roth", "the Roth thing", "roth account"]
     },
     {
       "term": "distribution",
@@ -33,7 +33,7 @@
       "term": "brokerage account",
       "plain": "An account that holds investments such as stocks, bonds, and funds, without the special rules of a retirement account.",
       "source_id": "GLOSSARY-05",
-      "also_heard_as": ["my investments", "my stock account"]
+      "also_heard_as": ["brokerage", "my investments", "my stock account"]
     },
     {
       "term": "beneficiary",
@@ -51,7 +51,7 @@
       "term": "required minimum distribution",
       "plain": "An amount that the rules say must be taken out of certain retirement accounts each year after a set age. An advisor can explain whether it applies to you.",
       "source_id": "GLOSSARY-08",
-      "also_heard_as": ["RMD", "the amount I have to take out"]
+      "also_heard_as": ["RMD", "R M D", "the amount I have to take out"]
     },
     {
       "term": "advisor",
@@ -64,6 +64,60 @@
       "plain": "Someone you name whom the firm may reach out to if it cannot reach you or is concerned about your account. They cannot make changes or trades for you.",
       "source_id": "GLOSSARY-10",
       "also_heard_as": ["emergency contact", "someone you can call about me"]
+    },
+    {
+      "term": "return on investment",
+      "plain": "A general measure of how much an investment has gained or lost relative to its cost. This is an explanation of the term, not a statement about your accounts.",
+      "source_id": "GLOSSARY-11",
+      "also_heard_as": ["ROI", "R O I", "are oh eye", "my returns", "how much I made", "how it's doing"]
+    },
+    {
+      "term": "traditional IRA",
+      "plain": "A retirement account often funded with pre-tax money, where withdrawals are generally taxed later. Rules vary.",
+      "source_id": "GLOSSARY-12",
+      "also_heard_as": ["traditional", "regular IRA", "pre-tax IRA"]
+    },
+    {
+      "term": "401(k)",
+      "plain": "A retirement savings plan offered through an employer. Money is often contributed from your paycheck.",
+      "source_id": "GLOSSARY-13",
+      "also_heard_as": ["401k", "four oh one k", "my work retirement plan", "workplace plan"]
+    },
+    {
+      "term": "individual retirement account",
+      "plain": "A retirement account you open on your own, outside of an employer. Common types include traditional and Roth.",
+      "source_id": "GLOSSARY-14",
+      "also_heard_as": ["IRA", "I R A", "eye are ay"]
+    },
+    {
+      "term": "dividend",
+      "plain": "A payment some investments make to the people who hold them, usually from company profits.",
+      "source_id": "GLOSSARY-15",
+      "also_heard_as": ["dividends", "payout from my stocks"]
+    },
+    {
+      "term": "capital gains",
+      "plain": "The increase in value when an investment is sold for more than it cost. Tax rules may apply; an advisor can explain.",
+      "source_id": "GLOSSARY-16",
+      "also_heard_as": ["gains", "profit from selling", "cap gains"]
+    },
+    {
+      "term": "1099-R",
+      "plain": "A tax form that reports money taken out of a retirement account during the year.",
+      "source_id": "GLOSSARY-17",
+      "also_heard_as": ["1099", "1099 R", "ten ninety nine", "tax form", "tax doc", "the retirement tax form"]
+    },
+    {
+      "term": "account statement",
+      "plain": "A periodic summary of an account showing balances and activity for a time period.",
+      "source_id": "GLOSSARY-18",
+      "also_heard_as": ["statement", "my statement", "monthly statement", "the paper you send me"]
+    },
+    {
+      "term": "beneficiary form",
+      "plain": "The form used to name or change who would receive an account if you pass away.",
+      "source_id": "GLOSSARY-19",
+      "also_heard_as": ["beneficiary change form", "the form to change who gets my money"]
     }
   ]
 }

@@ -306,12 +306,14 @@ Hard rules:
 - If the client's words do not match any of their real accounts (for example they say "Roth" but no Roth account exists), do not claim that account exists. Set uncertainty explaining the mismatch and ask ONE gentle question proposing the closest real account.
 - Offer at most THREE suggestions, each mapping to a real account id from list_my_accounts.
 - Explain a financial term only by calling explain_term; never improvise a definition.
+- When the client uses shorthand, an acronym, a spelled-out or phonetic fragment (for example "R O", "RMD", "my 401k"), or names a financial document loosely (for example "the tax form"), call suggest_financial_terms to get APPROVED candidate terms. Offer at most three of them and ask which the client means. Never assert a term the client has not confirmed, and never use a financial term that was not returned by suggest_financial_terms or explain_term.
 - Ask at most ONE clarifying question per turn. Keep language simple and respectful; never assume the client's capacity.
 
 Process:
 1. Call list_my_accounts with the client's phrase to see their real accounts.
-2. Call explain_term for any term you want to explain in plain words.
-3. When ready, report your result by calling submit_intake exactly once."""
+2. If the client uses shorthand, an acronym, or names a document, call suggest_financial_terms to map it to approved terms.
+3. Call explain_term for any term you want to explain in plain words.
+4. When ready, report your result by calling submit_intake exactly once."""
 
 _INTAKE_TOOLS = [
     {
@@ -370,6 +372,24 @@ _INTAKE_TOOLS = [
 ]
 
 
+_SUGGEST_TERMS_TOOL = {
+    "toolSpec": {
+        "name": "suggest_financial_terms",
+        "description": "Map a client's shorthand, acronym, spelled-out/phonetic fragment, or loosely named document to approved glossary terms. Returns only approved candidates (term, plain). Use it, then confirm with the client; never invent a term.",
+        "inputSchema": {"json": {
+            "type": "object",
+            "properties": {"fragment": {"type": "string", "description": "The client's wording to normalize, e.g. 'R O', 'RMD', 'the tax form'."}},
+            "required": ["fragment"],
+        }},
+    }
+}
+
+
+def _get_optional_callback(tools: Any, name: str):
+    fn = tools.get(name) if isinstance(tools, dict) else getattr(tools, name, None)
+    return fn if callable(fn) else None
+
+
 def intake_turn(
     client_id: str,
     transcript: str,
@@ -417,6 +437,16 @@ def intake_turn(
 
     dispatch = {"list_my_accounts": _list_my_accounts, "explain_term": _explain_term}
 
+    # Term normalization is additive: offer the tool only if the backend supplies
+    # a suggest_terms callback, so the frozen four-callback contract still works.
+    tool_specs = _INTAKE_TOOLS
+    suggest = _get_optional_callback(tools, "suggest_terms")
+    if suggest is not None:
+        def _suggest_financial_terms(args: dict) -> list[dict]:
+            return suggest(args.get("fragment", "")) or []
+        dispatch["suggest_financial_terms"] = _suggest_financial_terms
+        tool_specs = _INTAKE_TOOLS[:-1] + [_SUGGEST_TERMS_TOOL, _INTAKE_TOOLS[-1]]
+
     hint = ""
     if selected_option_id:
         hint = f"\nThe client just selected suggestion id: {selected_option_id}."
@@ -424,7 +454,7 @@ def intake_turn(
 
     result = _run_tool_loop(
         client, cfg, pacer, _INTAKE_SYSTEM, first_user,
-        _INTAKE_TOOLS, "submit_intake", dispatch,
+        tool_specs, "submit_intake", dispatch,
     )
     return _normalize_intake(result, tools, client_id)
 

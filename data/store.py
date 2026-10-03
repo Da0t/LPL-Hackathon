@@ -14,6 +14,7 @@ order. It never invents a record: unknown IDs return None or an empty list.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 DATA_DIR = Path(__file__).resolve().parent
@@ -82,6 +83,46 @@ class Store:
             if wanted in (name.lower() for name in names):
                 return {"term": entry["term"], "plain": entry["plain"]}
         return None
+
+    def suggest_terms(self, fragment: str, limit: int = 5) -> list[dict]:
+        """Grounded term normalization: map a spoken/typed fragment, acronym, or
+        phonetic spelling to approved glossary terms. Returns candidates only from
+        the approved glossary, so the agent cannot invent a term. Each candidate is
+        {term, plain, source_id}. Empty for an empty fragment or no plausible match.
+        """
+        frag = (fragment or "").strip().lower()
+        if not frag:
+            return []
+        compact = re.sub(r"[^a-z0-9]", "", frag)
+        frag_words = set(re.findall(r"[a-z0-9]+", frag))
+        scored: list[tuple[int, dict]] = []
+        for entry in self.data["glossary"]:
+            term = entry["term"]
+            names = [term] + entry.get("also_heard_as", [])
+            names_l = [n.lower() for n in names]
+            initials = "".join(w[0] for w in re.findall(r"[a-z0-9]+", term.lower()))
+            score = 0
+            if frag in names_l:
+                score = 100
+            if compact and compact == initials:
+                score = max(score, 92)
+            for name in names_l:
+                name_compact = re.sub(r"[^a-z0-9]", "", name)
+                if compact and compact == name_compact:
+                    score = max(score, 96)
+                elif compact and len(compact) >= 3 and (compact in name_compact or name_compact in compact):
+                    score = max(score, 70)
+                if frag and (frag in name or name in frag):
+                    score = max(score, 66)
+                if frag_words & set(re.findall(r"[a-z0-9]+", name)):
+                    score = max(score, 42)
+            if frag in term.lower() or term.lower() in frag:
+                score = max(score, 62)
+            if score:
+                scored.append((score, {"term": term, "plain": entry["plain"],
+                                       "source_id": entry.get("source_id")}))
+        scored.sort(key=lambda pair: -pair[0])
+        return [candidate for _, candidate in scored[:limit]]
 
     def get_relevant_account_history(self, account_id: str) -> list[dict]:
         return [
