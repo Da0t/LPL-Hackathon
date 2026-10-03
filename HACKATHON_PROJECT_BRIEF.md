@@ -25,6 +25,7 @@ The decks do not define a detailed regulatory-compliance framework. At minimum, 
 - [ ] Make the solution AI-powered.
 - [ ] Build a working prototype or demo. The AWS workshop frames the target as a working agent.
 - [ ] Use at least one AWS service.
+- [ ] Use only hackathon-approved models from the allowlist in Section 2.
 - [ ] Use made-up/synthetic data only - never personal data or real financial data.
 - [ ] If using S3, keep every bucket private. Public S3 buckets are prohibited.
 - [ ] Use the provided LPL PowerPoint template for the final presentation.
@@ -49,11 +50,28 @@ The pitch should make clear:
 Treat these as build constraints, not suggestions:
 
 - **Region:** Work in `us-east-1` (N. Virginia). If access is denied, check the selected region first.
-- **Models:** Use Amazon Bedrock for model access. GPU instances are blocked in the provided accounts.
+- **Models:** Use Amazon Bedrock for model access and choose only from the hackathon model allowlist below. GPU instances are blocked in the provided accounts.
 - **Rate limit:** Plan for about **1 Bedrock call per second**. Add a short pause to loops so the demo is not throttled.
 - **Data:** Use synthetic/made-up data only. Do not use personal data or real financial data.
 - **Storage security:** Never make an S3 bucket public.
 - **Account lifetime:** The event AWS accounts will be deleted after the hackathon. Regularly push code to the team's own GitHub repository or download backups.
+
+### Hackathon model allowlist
+
+**Only the following models will be available for use during the hackathon.** The agent and any supporting embedding, reranking, or multimodal components must use models from this list:
+
+- **Amazon Nova:** Micro, Lite, Pro, Nova 2 Lite, Nova 2 Sonic, and Nova Multimodal Embeddings
+- **Amazon Titan:** Titan Embeddings
+- **Anthropic Claude:** Sonnet 5, Opus 5, Fable 5, Opus 4.8, Opus 4.7, Opus 4.6, Sonnet 4.6, Opus 4.5, Sonnet 4.5, and Haiku 4.5
+- **Cohere:** Embed English, Embed Multilingual, Embed v4, and Rerank 3.5
+- **DeepSeek:** DeepSeek-R1
+- **Meta Llama:** Llama 3, 3.1, 3.3, and 4. **Llama 3.2 is not available.**
+- **Mistral AI:** All models
+- **OpenAI:** GPT-5.4, GPT-5.5, GPT-5.6 Luna, GPT-5.6 Sol, and GPT-5.6 Terra
+- **TwelveLabs:** Marengo 3.0 and Pegasus 1.2
+- **Writer:** Palmyra X4 and Palmyra X5
+
+Before implementation, verify that the specific model ID selected in Bedrock corresponds to one of the allowed names above. Embedding and reranking models support retrieval pipelines; select a generation/reasoning-capable model from the allowlist for the agent itself.
 
 Additional engineering expectations emphasized by the AWS judging guidance:
 
@@ -222,7 +240,7 @@ Before the workshop/build begins, make sure the team has its event AWS account a
 
 ### Bedrock model guidance
 
-Start with one model and switch only for a specific reason. The workshop deck lists Amazon Nova, Anthropic Claude, Meta Llama, Mistral, DeepSeek-R1, OpenAI GPT-5.x, Writer Palmyra, and Cohere Embed/Rerank as available model families/options.
+Start with one model and switch only for a specific reason. Every model used must appear in the [hackathon model allowlist](#hackathon-model-allowlist); do not assume that another Bedrock model is available merely because it exists in the broader Bedrock catalog.
 
 ### Apply throughout the build
 
@@ -309,6 +327,7 @@ An idea should not advance until every answer is "yes."
 - [ ] It is AI-powered.
 - [ ] It can become a working prototype by the deadline.
 - [ ] It uses at least one AWS service for a defensible reason.
+- [ ] Its agent and supporting AI components use only models on the hackathon allowlist.
 - [ ] It can operate entirely on synthetic data.
 - [ ] It can keep S3 private and avoid hard-coded credentials.
 - [ ] It has a clear 5-minute live-demo story.
