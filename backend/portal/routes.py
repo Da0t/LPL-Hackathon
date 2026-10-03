@@ -339,3 +339,16 @@ def archive(case_id: str, request: Request):
     if not case or case["client_id"] != cid:
         raise ApiError(404, "CASE_NOT_FOUND", "Request not found.")
     return p.archive(cid, case)
+
+
+class SpeechInput(BaseModel):
+    text: str = Field(min_length=1, max_length=2500)
+
+
+@router.post('/portal/speech')
+def speech(body: SpeechInput, request: Request):
+    from backend.portal.speech import speak
+    _, cid = own(request)
+    if not body.text.strip():
+        raise ApiError(422, 'EMPTY_SPEECH', 'Choose some text to read aloud.')
+    return Response(content=speak(cid, body.text), media_type='audio/mpeg', headers={'Cache-Control': 'no-store', 'X-Speech-Provider': 'Amazon Polly'})

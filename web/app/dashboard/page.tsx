@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { ArrowRight, Menu, MessageSquareQuote } from "lucide-react";
 import {
-  getCases, getCase, getCandidates, assignCase, getBrief, getPlan, caseAction, getClientSnapshot, health,
+  cancelAgentRuns, getCases, getCase, getCandidates, assignCase, getBrief, getPlan, caseAction, getClientSnapshot, health,
   ApiError, prettyCategory, type CaseRow, type Candidate, type Brief, type ActionPlan, type AdvisorAction,
   type ClientSnapshot, type SentCompliance,
 } from "@/lib/api";
@@ -71,14 +71,18 @@ export default function DashboardPage() {
   }, [load]);
   useEffect(() => { health().then(setHc).catch(() => setHc(null)); }, []);
 
+  const activeCase = useRef<string | null>(null);
+  const planRun = useRef(0);
+  useEffect(() => () => { if (activeCase.current) cancelAgentRuns(activeCase.current); }, []);
   const loadBrief = useCallback(async (id: string, refresh = false) => {
     setBrief(null); setBriefLoading(true);
-    try { setBrief(await getBrief(id, refresh)); } catch { setBrief(null); } finally { setBriefLoading(false); }
+    try { const result = await getBrief(id, refresh); if (activeCase.current === id) setBrief(result); } catch { if (activeCase.current === id) setBrief(null); } finally { if (activeCase.current === id) setBriefLoading(false); }
   }, []);
 
   const loadPlan = useCallback(async (id: string, refresh = false) => {
     setPlan(null); setPlanLoading(true);
-    try { setPlan(await getPlan(id, refresh)); } catch { setPlan(null); } finally { setPlanLoading(false); }
+    const run = ++planRun.current;
+    try { const result = await getPlan(id, refresh); if (run === planRun.current && activeCase.current === id) setPlan(result); } catch { if (run === planRun.current && activeCase.current === id) setPlan(null); } finally { if (run === planRun.current && activeCase.current === id) setPlanLoading(false); }
   }, []);
 
   // Reloads the case without touching the brief, so acting on a case does not re-run the briefing agent.
@@ -89,25 +93,29 @@ export default function DashboardPage() {
       const [c, cand, snap] = await Promise.all([
         getCase(id), getCandidates(id).catch(() => ({ candidates: [] })), getClientSnapshot(id).catch(() => null),
       ]);
+      if (activeCase.current !== id) return null;
       setDetail(c);
       setCandidates((cand as any).candidates || []);
       setCandMeta({ destination: (cand as any).destination, reason: (cand as any).reason });
       setSnapshot(snap);
       return c;
     } catch (e) {
+      if (activeCase.current !== id) return null;
       setDetail({ _error: e instanceof ApiError ? e.message : "Could not load this request." });
       return null;
-    } finally { setDetailLoading(false); }
+    } finally { if (activeCase.current === id) setDetailLoading(false); }
   }, []);
 
   const openCase = useCallback((id: string, tab?: CaseTab) => {
+    if (activeCase.current) cancelAgentRuns(activeCase.current);
+    activeCase.current = id;
     setSelectedId(id); setInitialTab(tab); setActionError(null); setView("queue"); setPane("detail");
     window.history.replaceState(null, "", `?case=${encodeURIComponent(id)}${tab ? `&tab=${tab}` : ""}`);
     setBrief(null); setPlan(null);  // the prepared reply leads; the prep brief loads when its tab is opened
     // A request that was already answered or resolved shows what was sent, so no new reply is prepared for it.
     refreshCase(id, true).then((c) => {
       const done = (c?.history || []).some((h: any) => h.event === "action_approved" || h.event === "request_resolved");
-      if (c && !done) loadPlan(id);
+      if (c && !done && activeCase.current === id) loadPlan(id);
     });
   }, [loadPlan, refreshCase]);
 
@@ -132,7 +140,7 @@ export default function DashboardPage() {
     if (!selectedId) return { code: "NO_CASE", message: "No request is open." };
     setActionBusy(true); setActionError(null);
     try {
-      await caseAction(selectedId, action, text, compliance, acknowledgedFlags);
+      await caseAction(selectedId, action, text, compliance, acknowledgedFlags, action === "approve" ? plan?.plan_id : undefined);
       await Promise.all([load(true), refreshCase(selectedId, false)]);
       return null;
     } catch (e) {

@@ -20,8 +20,13 @@ log = logging.getLogger("samepage.staff")
 class StaffService:
     def __init__(self, store: Store):
         self.store = store
-        self._agent_cache: dict[tuple[str, str], tuple[Any, dict[str, Any], str | None]] = {}
-        self._verdicts: dict[tuple[str, str], str] = {}  # (case_id, message text) -> compliance verdict
+        self._agent_cache: dict[
+            tuple[str, str], tuple[Any, dict[str, Any], str | None]
+        ] = {}
+        self._audited_plans = {}
+        self._verdicts: dict[
+            tuple[str, str, str], str
+        ] = {}  # (case_id, case fingerprint, message text) -> compliance verdict
 
     def _case(self, case_id: str) -> dict[str, Any]:
         case = self.store.get_case(case_id)
@@ -86,7 +91,8 @@ class StaffService:
                 produce: Callable[[], tuple[dict[str, Any], str | None]]) -> tuple[dict[str, Any], str | None]:
         """Reuse an agent's last answer for a case until the case changes or the advisor regenerates.
         A live-mode fallback is never kept, so the model is tried again on the next view."""
-        slot, version = (kind, case["case_id"]), case.get("updated_at")
+        from backend.aws.auditor import fingerprint
+        slot, version = (kind, case["case_id"]), fingerprint(case)
         hit = self._agent_cache.get(slot)
         if hit and hit[0] == version and not refresh:
             return hit[1], hit[2]
@@ -108,9 +114,32 @@ class StaffService:
         client/advisor drafts, for human approval. Never mutates the case."""
         case = self._case(case_id)
         from backend.aws import bedrock_agent as ba
-        raw, note = self._cached("packet", case, ai_mode, refresh, lambda: self._run_agent(
-            ai_mode, lambda: ba.fulfillment_plan(case), lambda: ba._stub_plan(case), "plan"))
-        return {"case_id": case_id, "ai_mode": ai_mode, "note": note, **raw}
+        from backend.aws.auditor import audit_packet, fingerprint
+        from backend.aws.telemetry import agent
+
+        with agent("Forge"):
+            raw, note = self._cached("packet", case, ai_mode, refresh, lambda: self._run_agent(
+                ai_mode, lambda: ba.fulfillment_plan(case), lambda: ba._stub_plan(case), "plan"))
+        version = fingerprint(case)
+        plan_id = fingerprint({"case_version": version, "packet": raw})
+        previous = self._audited_plans.get(plan_id)
+        audit = previous["audit"] if previous and previous["audit"]["verdict"] == "pass" and not refresh else audit_packet(case, raw, ai_mode)
+        self._audited_plans[plan_id] = {
+            "case_id": case_id,
+            "version": version,
+            "audit": audit,
+        }
+        # Bounded, process-local approval receipts; regenerating is required after restart.
+        if len(self._audited_plans) > 200:
+            self._audited_plans.pop(next(iter(self._audited_plans)))
+        return {
+            "case_id": case_id,
+            "ai_mode": ai_mode,
+            "note": note,
+            "audit": audit,
+            "plan_id": plan_id,
+            **raw,
+        }
 
     def _agent_facts(self, case: dict[str, Any]) -> dict[str, Any]:
         """The case plus the approved plain-language definition of its account type, if any."""
@@ -201,32 +230,79 @@ class StaffService:
             "other_cases": others,
         }
 
-    def reply_draft(self, case_id: str, instruction: str | None = None, ai_mode: str = "mock") -> dict[str, Any]:
+    def reply_draft(
+        self, case_id: str, instruction: str | None = None, ai_mode: str = "mock"
+    ) -> dict[str, Any]:
         """Drafter + compliance-reviewer loop for a client message. Never mutates the case."""
-        facts = self._agent_facts(self._case(case_id))
+        from backend.aws.auditor import fingerprint
+
+        case = self._case(case_id)
+        version = fingerprint(case)
+        facts = self._agent_facts(case)
         instruction = clean_text(instruction, "The instruction")
         from backend.aws import advisor_agents as aa
+        from backend.aws.cited_compliance import review as cited_review
+
         result, note = self._run_agent(
             ai_mode,
-            lambda: run_reply_workflow(facts, instruction, aa.draft_reply, aa.compliance_review),
-            lambda: run_reply_workflow(facts, instruction, aa.stub_draft_reply, aa.stub_compliance_review), "agents")
-        self._verdicts[(case_id, result["draft"].strip())] = result["review"]["verdict"]
+            lambda: run_reply_workflow(
+                facts,
+                instruction,
+                aa.draft_reply,
+                lambda c, d: cited_review(c, d, ai_mode),
+            ),
+            lambda: run_reply_workflow(
+                facts, instruction, aa.stub_draft_reply, aa.stub_compliance_review
+            ),
+            "agents",
+        )
+        from backend.aws.auditor import audit_packet, fingerprint
+
+        result["audit"] = audit_packet(
+            facts, {"draft_client_message": result["draft"]}, ai_mode
+        )
+        self._verdicts[
+            (case_id, version, result["draft"].strip())
+        ] = result["review"]["verdict"]
         return {"case_id": case_id, "ai_mode": ai_mode, "note": note, **result}
 
-    def compliance_review(self, case_id: str, draft: str | None = None, ai_mode: str = "mock") -> dict[str, Any]:
+    def compliance_review(
+        self, case_id: str, draft: str | None = None, ai_mode: str = "mock"
+    ) -> dict[str, Any]:
         """Compliance reviewer on the case record and, if given, a draft. Never mutates the case."""
-        facts = self._agent_facts(self._case(case_id))
+        from backend.aws.auditor import fingerprint
+
+        case = self._case(case_id)
+        version = fingerprint(case)
+        facts = self._agent_facts(case)
         draft = clean_text(draft, "The draft")
-        from backend.aws import advisor_agents as aa
-        result, note = self._run_agent(ai_mode, lambda: aa.compliance_review(facts, draft),
-                                       lambda: aa.stub_compliance_review(facts, draft), "review")
+        from backend.aws.cited_compliance import review
+        from backend.aws.auditor import fingerprint
+
+        result = review(facts, draft, ai_mode)
         if draft:
-            self._verdicts[(case_id, draft)] = result["verdict"]
-        return {"case_id": case_id, "ai_mode": ai_mode, "note": note, **result}
+            from backend.aws.auditor import audit_packet
+
+            result["audit"] = audit_packet(
+                facts, {"draft_client_message": draft}, ai_mode
+            )
+            self._verdicts[(case_id, version, draft)] = result[
+                "verdict"
+            ]
+        return {
+            "case_id": case_id,
+            "ai_mode": ai_mode,
+            "note": result.get("review_note"),
+            **result,
+        }
 
     def _message_verdict(self, case_id: str, text: str, ai_mode: str) -> str:
-        """The reviewer's verdict on exactly this text: the one already given, or a fresh review."""
-        return self._verdicts.get((case_id, text)) or self.compliance_review(case_id, text, ai_mode)["verdict"]
+        from backend.aws.auditor import fingerprint
+
+        return (
+            self._verdicts.get((case_id, fingerprint(self._case(case_id)), text))
+            or self.compliance_review(case_id, text, ai_mode)["verdict"]
+        )
 
     _ACTIONS = {
         "claim": "advisor_claimed",
@@ -251,7 +327,7 @@ class StaffService:
             raise ApiError(409, "ALREADY_ESCALATED", "This request is already with the security specialist team.")
 
     def action(self, case_id: str, action: str, text: str | None = None, compliance: dict[str, Any] | None = None,
-               ai_mode: str = "mock", acknowledged_flags: Any = None) -> dict[str, Any]:
+               ai_mode: str = "mock", acknowledged_flags: Any = None, plan_id: str | None = None) -> dict[str, Any]:
         """Record an advisor action as a history event. 'clarify' moves the case to
         needs_client_followup; others keep the status and are derived from history.
         'approve' with text is the advisor signing off a prepared action: its message goes to
@@ -269,9 +345,20 @@ class StaffService:
         if action == "escalate" and "fraud_or_security" not in current.get("categories", []):
             raise ApiError(400, "NOT_A_SECURITY_CASE", "Only security cases go to the security specialist team.")
         self._refuse_if_closed(current, action)  # before the model call; repeated under the lock below
+        from backend.aws.auditor import fingerprint, audit_packet
+        reviewed_version = fingerprint(current)
+        if action == "approve":
+            receipt = self._audited_plans.get(plan_id) if isinstance(plan_id, str) else None
+            if not receipt or receipt["case_id"] != case_id or receipt["audit"]["verdict"] != "pass":
+                raise ApiError(409, "AUDIT_REQUIRED", "Generate a packet and pass the independent audit before approving.")
+            if receipt["version"] != reviewed_version:
+                raise ApiError(409, "STALE_PACKET", "This case changed. Regenerate and review the packet before approving.")
         reviewed = None
         to_client = action == "clarify" or (action == "approve" and bool(text))
         if to_client:
+            audit = audit_packet(current, {"draft_client_message":text}, ai_mode)
+            if audit["verdict"] != "pass":
+                raise ApiError(409, "DRAFT_AUDIT_FAILED", "The draft failed its record audit. Correct unsupported details and try again.")
             verdict = self._message_verdict(case_id, text, ai_mode)  # may call the model; outside the lock
             override = verdict == "needs_changes" and isinstance(compliance, dict) and bool(compliance.get("override"))
             if verdict == "needs_changes" and not override:
@@ -280,12 +367,20 @@ class StaffService:
         with self.store.lock:
             case = self._case(case_id)
             self._refuse_if_closed(case, action)
+            if (to_client or action == "approve") and reviewed_version != fingerprint(case):
+                raise ApiError(409, "STALE_REVIEW", "This case changed during review. Regenerate the packet or review the message again.")
             now = now_iso()
             details: dict[str, Any] = {"by": "advisor-demo"}
             if text:
                 details["text"] = text
             if reviewed:
                 details["compliance"] = reviewed
+                details["audit"] = audit
+            if action == "approve":
+                details["plan_id"] = plan_id
+                details["packet_audit"] = receipt["audit"]
+                if not to_client:
+                    details["audit"] = receipt["audit"]
             if action == "approve" and isinstance(acknowledged_flags, list):
                 # Flagged checks on the packet that the advisor signed off before approving.
                 details["acknowledged_flags"] = [f for f in acknowledged_flags if isinstance(f, str) and 0 < len(f) <= 80][:10]

@@ -159,6 +159,8 @@ def create_app(settings: Settings | None = None, *, store: Store | None = None, 
         log.exception("unhandled error: %s", type(exc).__name__)
         return JSONResponse(status_code=500, content={"error_code": "INTERNAL_ERROR", "message": "Something went wrong on our side. Your draft is preserved; please try again."})
 
+    from backend.services.agent_stream import router as agent_stream_router
+    app.include_router(agent_stream_router)
     app.include_router(api.router)
     from backend.portal.routes import router as portal_router
     app.include_router(portal_router)

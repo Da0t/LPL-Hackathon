@@ -10,5 +10,5 @@ pytest>=8
 # Agent 1 (AWS) dependencies, mirrored from requirements-aws.txt so a clean
 # checkout installs everything the judged SAMEPAGE_AI_MODE=bedrock path needs.
 # Keep these pins in sync with requirements-aws.txt.
-boto3>=1.35.0
-botocore>=1.35.0
+boto3>=1.43.108
+botocore>=1.43.108
