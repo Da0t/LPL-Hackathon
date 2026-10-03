@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import date, timedelta
 from typing import Any, Callable
 
 from backend.errors import ApiError
@@ -148,16 +149,23 @@ class StaffService:
             ai_mode, lambda: aa.plan_next_steps(facts), lambda: aa.stub_plan_next_steps(facts), "plan"))
         return {"case_id": case_id, "ai_mode": ai_mode, "note": note, **result}
 
+    _TIMELINE_DAYS = 90
+
     def _timeline(self, case: dict[str, Any]) -> list[dict[str, Any]]:
-        """Every recorded event on the client's accounts, then the client's own report, oldest first."""
+        """Recorded events on the client's accounts in the weeks before the report (and any
+        security alert, whenever it was), then the client's own report, oldest first."""
+        reported = case["created_at"][:10]
+        since = (date.fromisoformat(reported) - timedelta(days=self._TIMELINE_DAYS)).isoformat()
         entries = []
         for account in self.store.accounts_for_client(case["client_id"]):
             name = f"{account.get('label') or 'Account'} {account.get('masked_identifier') or ''}".strip()
             for e in self.store.events_for_account(account["account_id"]):
+                if e["date"] < since and e["type"] != "security_alert":
+                    continue
                 entries.append({"date": e["date"], "type": e["type"], "label": e["type"].replace("_", " ").capitalize(),
                                 "detail": e.get("summary") or e.get("description") or "", "account": name,
                                 "source_id": e["source_id"], "highlight": e["type"] == "security_alert"})
-        entries.append({"date": case["created_at"][:10], "type": "client_report", "label": "Client reported a concern",
+        entries.append({"date": reported, "type": "client_report", "label": "Client reported a concern",
                         "detail": case.get("original_words") or case["confirmed_plain_language_request"], "account": None,
                         "source_id": case["case_id"], "highlight": True})
         return sorted(entries, key=lambda t: t["date"])
