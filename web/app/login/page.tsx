@@ -5,7 +5,6 @@ import Link from "next/link";
 import { motion, useReducedMotion } from "motion/react";
 import { ArrowRight } from "lucide-react";
 import { BrandLogo } from "@/components/brand-logo";
-import { CoherentMark } from "@/components/coherent-logo";
 import { portalApi } from "@/lib/portal";
 import "../workspace/portal.css";
 
@@ -54,23 +53,6 @@ export default function Login() {
 
   return (
     <main className="portal login-page">
-      <section className="login-story">
-        <Link href="/" aria-label="Coherent home">
-          <BrandLogo height={34} />
-        </Link>
-        <motion.div initial={reduce ? false : "hidden"} animate="visible" variants={container}>
-          <motion.h1 variants={rise}>
-            A clearer view.
-            <br />A better conversation.
-          </motion.h1>
-          <motion.p variants={rise}>
-            Say what you need in your own words. Coherent checks it against your accounts and gets it to the right
-            person.
-          </motion.p>
-        </motion.div>
-        <small>Coherent · LPL hackathon · Fictional records only</small>
-      </section>
-
       <section className="login-form-area">
         <motion.form
           initial={reduce ? false : "hidden"}
@@ -81,8 +63,10 @@ export default function Login() {
             signIn(email, password);
           }}
         >
-          <motion.div variants={rise} className="login-mark" aria-hidden>
-            <CoherentMark size={36} />
+          <motion.div variants={rise} className="login-mark">
+            <Link href="/" aria-label="Coherent home">
+              <BrandLogo height={30} />
+            </Link>
           </motion.div>
           <motion.h2 variants={rise}>Welcome back.</motion.h2>
           <motion.p variants={rise}>Sign in to your Coherent workspace.</motion.p>

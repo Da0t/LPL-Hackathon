@@ -12,7 +12,7 @@ export default function LogoStrip() {
             Built with
           </p>
           <div className="relative w-full py-2">
-            <InfiniteSlider speedOnHover={18} speed={36} gap={88}>
+            <InfiniteSlider speedOnHover={45} speed={90} gap={88}>
               <LPLLogo height={30} className="opacity-90 transition-opacity hover:opacity-100" />
               <AWSLogo height={32} className="opacity-90 transition-opacity hover:opacity-100" />
               <BedrockLogo height={32} className="opacity-90 transition-opacity hover:opacity-100" />
