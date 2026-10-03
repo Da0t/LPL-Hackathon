@@ -1,0 +1,62 @@
+[
+  {
+    "key": "roth_ira",
+    "term": "Roth IRA",
+    "aliases": ["roth", "roth ira", "roth account", "the roth"],
+    "plain": "A retirement account you pay into with money you have already paid taxes on. Later, qualified withdrawals are generally tax-free. It is not tied to an employer."
+  },
+  {
+    "key": "rollover_ira",
+    "term": "Rollover IRA",
+    "aliases": ["rollover", "rollover ira", "rolled over", "roll over", "old 401k", "401k", "401(k)"],
+    "plain": "A retirement account that holds money moved out of a former employer's retirement plan, such as a 401(k). Moving the money this way is called a rollover. The account is yours, not your old employer's."
+  },
+  {
+    "key": "brokerage_account",
+    "term": "Brokerage account",
+    "aliases": ["brokerage", "investment account", "stock account"],
+    "plain": "An investment account where you can hold investments like stocks, bonds, and funds. It is not a retirement account, so there are usually no age-based rules for taking money out."
+  },
+  {
+    "key": "beneficiary",
+    "term": "Beneficiary",
+    "aliases": ["beneficiaries", "who gets", "inherit"],
+    "plain": "The person or organization you name to receive the money in an account if you pass away. You can usually change it with a form."
+  },
+  {
+    "key": "transfer",
+    "term": "Transfer",
+    "aliases": ["transfers", "move money", "moving money"],
+    "plain": "Moving money or investments from one account to another. A transfer by itself is not a withdrawal."
+  },
+  {
+    "key": "withdrawal",
+    "term": "Withdrawal",
+    "aliases": ["withdraw", "withdrawals", "take money out", "take out"],
+    "plain": "Taking money out of an account so you can use it. From a retirement account, a withdrawal may have tax effects, which an advisor can walk through with you."
+  },
+  {
+    "key": "distribution",
+    "term": "Distribution",
+    "aliases": ["distributions"],
+    "plain": "The formal word for money paid out to you from a retirement account. 'Distribution' and 'withdrawal' are often used to mean the same thing."
+  },
+  {
+    "key": "required_minimum_distribution",
+    "term": "Required minimum distribution",
+    "aliases": ["rmd", "rmds", "required minimum", "minimum distribution"],
+    "plain": "After a certain age, the government requires you to take a minimum amount out of some retirement accounts each year. The exact rules depend on your situation."
+  },
+  {
+    "key": "advisor",
+    "term": "Financial advisor",
+    "aliases": ["advisor", "adviser", "financial advisor"],
+    "plain": "A professional who helps you plan and make decisions about your money and accounts. Your advisor can explain choices; you make the final decisions."
+  },
+  {
+    "key": "trusted_contact",
+    "term": "Trusted contact",
+    "aliases": ["trusted contact person"],
+    "plain": "A person you choose whom the firm may contact if there are concerns about your account or they cannot reach you. A trusted contact cannot make transactions for you."
+  }
+]

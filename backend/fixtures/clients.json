@@ -1,0 +1,26 @@
+[
+  {
+    "client_id": "CLIENT-017",
+    "display_name": "Margaret Ellison",
+    "preferred_contact_channel": "phone",
+    "existing_advisor_id": "ADV-01",
+    "state": "NC",
+    "demo_scenario": "Ambiguous former-employer retirement account ('the Roth thing from my old job')"
+  },
+  {
+    "client_id": "CLIENT-022",
+    "display_name": "Daniel Okafor",
+    "preferred_contact_channel": "video",
+    "existing_advisor_id": "ADV-02",
+    "state": "TX",
+    "demo_scenario": "Clear Roth IRA question"
+  },
+  {
+    "client_id": "CLIENT-031",
+    "display_name": "Rosa Delgado",
+    "preferred_contact_channel": "phone",
+    "existing_advisor_id": "ADV-04",
+    "state": "FL",
+    "demo_scenario": "Beneficiary change request; possible unauthorized-access concern"
+  }
+]
