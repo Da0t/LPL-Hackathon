@@ -10,11 +10,12 @@ import {
   Inbox, UserPlus, Flag, ShieldAlert, CheckCircle2, Search, RefreshCw,
   ArrowLeft, MessageSquareQuote, Home, Clock, Hash, Sparkles, Columns3,
   Hand, StickyNote, Send, CalendarCheck, CheckCheck, ShieldCheck,
+  Brain, Layers, ClipboardList, PenLine, Loader2, Copy, Check, AlertTriangle, Workflow,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  getCases, getCase, getCandidates, assignCase, getBrief, caseAction, health,
-  ApiError, prettyCategory, type CaseRow, type Candidate, type Brief, type AdvisorAction,
+  getCases, getCase, getCandidates, assignCase, getBrief, getPlan, caseAction, health,
+  ApiError, prettyCategory, type CaseRow, type Candidate, type Brief, type ActionPlan, type AdvisorAction,
 } from "@/lib/api";
 
 const BLUE = "#1677ff";
@@ -83,6 +84,9 @@ export default function DashboardPage() {
   const [brief, setBrief] = useState<Brief | null>(null);
   const [briefLoading, setBriefLoading] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
+  const [plan, setPlan] = useState<ActionPlan | null>(null);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [planStage, setPlanStage] = useState(0);
   const [hc, setHc] = useState<any>(null);
   const [overrides, setOverrides] = useState<Record<string, Lifecycle>>({});
 
@@ -100,9 +104,24 @@ export default function DashboardPage() {
     try { setBrief(await getBrief(id)); } catch { setBrief(null); } finally { setBriefLoading(false); }
   }, []);
 
+  const loadPlan = useCallback(async (id: string) => {
+    setPlan(null); setPlanLoading(true); setPlanStage(0);
+    const timers = [1, 2, 3, 4].map((i) => setTimeout(() => setPlanStage((s) => Math.max(s, i)), i * 650));
+    try { setPlan(await getPlan(id)); } catch { setPlan(null); }
+    finally { timers.forEach(clearTimeout); setPlanStage(5); setPlanLoading(false); }
+  }, []);
+
+  const refreshDetail = useCallback(async (id: string) => {
+    try {
+      const [c, cand] = await Promise.all([getCase(id), getCandidates(id).catch(() => ({ candidates: [] }))]);
+      setDetail(c); setCandidates((cand as any).candidates || []);
+      setCandMeta({ destination: (cand as any).destination, reason: (cand as any).reason });
+    } catch { /* keep current detail */ }
+  }, []);
+
   const openCase = useCallback(async (id: string) => {
     setSelectedId(id); setDetailLoading(true); setDetail(null); setCandidates([]); setCandMeta({});
-    loadBrief(id);
+    setBrief(null); loadPlan(id);
     try {
       const [c, cand] = await Promise.all([getCase(id), getCandidates(id).catch(() => ({ candidates: [] }))]);
       setDetail(c);
@@ -111,12 +130,12 @@ export default function DashboardPage() {
     } catch (e) {
       setDetail({ _error: e instanceof ApiError ? e.message : "Could not load this case." });
     } finally { setDetailLoading(false); }
-  }, [loadBrief]);
+  }, [loadPlan]);
 
   const doAssign = async (advisor_id: string, reason: string) => {
     if (!selectedId) return;
     setAssigning(advisor_id);
-    try { await assignCase(selectedId, advisor_id, reason || "Assigned by staff."); await Promise.all([load(), openCase(selectedId)]); }
+    try { await assignCase(selectedId, advisor_id, reason || "Assigned by staff."); await Promise.all([load(), refreshDetail(selectedId)]); }
     catch (e) { alert(e instanceof ApiError ? e.message : "Assignment failed."); }
     finally { setAssigning(null); }
   };
@@ -128,7 +147,7 @@ export default function DashboardPage() {
       await caseAction(selectedId, action, text);
       if (action === "schedule") setOverrides((o) => ({ ...o, [selectedId]: "Scheduled" }));
       if (action === "resolve") setOverrides((o) => ({ ...o, [selectedId]: "Resolved" }));
-      await Promise.all([load(), openCase(selectedId)]);
+      await Promise.all([load(), refreshDetail(selectedId)]);
     } catch (e) { alert(e instanceof ApiError ? e.message : "Action failed."); }
     finally { setActionBusy(false); }
   };
@@ -276,7 +295,12 @@ export default function DashboardPage() {
               {selectedId && detail && !detailLoading && (
                 <CaseDetail
                   detail={detail} candidates={candidates} candMeta={candMeta} assigning={assigning} onAssign={doAssign}
-                  brief={brief} briefLoading={briefLoading} onRegenerateBrief={() => selectedId && loadBrief(selectedId)}
+                  brief={brief} briefLoading={briefLoading}
+                  onLoadBrief={() => selectedId && loadBrief(selectedId)}
+                  onRegenerateBrief={() => selectedId && loadBrief(selectedId)}
+                  plan={plan} planLoading={planLoading} planStage={planStage}
+                  onRegeneratePlan={() => selectedId && loadPlan(selectedId)}
+                  onApprove={async () => { await doAction("approve"); }}
                   onAction={doAction} actionBusy={actionBusy} hc={hc}
                 />
               )}
@@ -448,7 +472,141 @@ function Compliance({ detail, hc }: { detail: any; hc: any }) {
   );
 }
 
-function CaseDetail({ detail, candidates, candMeta, assigning, onAssign, brief, briefLoading, onRegenerateBrief, onAction, actionBusy, hc }: any) {
+const PIPELINE_STEPS = [
+  { label: "Understand", icon: Brain },
+  { label: "Classify", icon: Layers },
+  { label: "Prepare action", icon: ClipboardList },
+  { label: "Compliance check", icon: ShieldCheck },
+  { label: "Draft response", icon: PenLine },
+];
+
+function AgentPipeline({ stage, done }: { stage: number; done: boolean }) {
+  const completed = done ? PIPELINE_STEPS.length : stage;
+  return (
+    <div className="flex items-center justify-between gap-1 rounded-2xl border border-border bg-muted/20 p-3">
+      {PIPELINE_STEPS.map((s, i) => {
+        const isDone = i < completed;
+        const isRunning = !done && i === completed;
+        return (
+          <React.Fragment key={s.label}>
+            <div className="flex flex-1 flex-col items-center gap-1.5 text-center">
+              <div className={`flex h-9 w-9 items-center justify-center rounded-full border transition-all duration-300 ${
+                isDone ? "border-primary bg-primary text-white shadow-[0_0_14px_rgba(22,119,255,0.4)]"
+                : isRunning ? "border-primary bg-primary/10 text-primary shadow-[0_0_14px_rgba(22,119,255,0.3)]"
+                : "border-border bg-background text-muted-foreground"}`}>
+                {isDone ? <Check className="h-4 w-4" /> : isRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <s.icon className="h-4 w-4" />}
+              </div>
+              <span className={`text-[10px] leading-tight ${isDone || isRunning ? "text-foreground" : "text-muted-foreground"}`}>{s.label}</span>
+            </div>
+            {i < PIPELINE_STEPS.length - 1 && <div className={`mb-4 h-px flex-1 transition-colors duration-300 ${i < completed ? "bg-primary" : "bg-border"}`} />}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+function CopyCard({ title, text }: { title: string; text: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => { try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* clipboard blocked */ } };
+  return (
+    <div className="rounded-xl border border-border bg-card p-4">
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">{title}</p>
+        <button onClick={copy} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+          {copied ? <Check className="h-3 w-3 text-primary" /> : <Copy className="h-3 w-3" />}{copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+      <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">{text}</p>
+    </div>
+  );
+}
+
+function ComplianceBadge({ status }: { status: string }) {
+  const map: Record<string, { cls: string; icon: any; label: string }> = {
+    pass: { cls: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: CheckCircle2, label: "Pass" },
+    review: { cls: "bg-amber-50 text-amber-700 border-amber-200", icon: Clock, label: "Review" },
+    flag: { cls: "bg-red-50 text-red-600 border-red-200", icon: AlertTriangle, label: "Flag" },
+  };
+  const m = map[status] || map.review;
+  return <span className={`inline-flex flex-none items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${m.cls}`}><m.icon className="h-3 w-3" />{m.label}</span>;
+}
+
+function ActionPacket({ plan, loading, stage, onRegenerate, onApprove }: { plan: ActionPlan | null; loading: boolean; stage: number; onRegenerate: () => void; onApprove: () => Promise<void> }) {
+  const [approving, setApproving] = useState(false);
+  const [approved, setApproved] = useState(false);
+  useEffect(() => { setApproved(false); }, [plan]);
+  const approve = async () => { setApproving(true); try { await onApprove(); setApproved(true); } finally { setApproving(false); } };
+  const actionTitle = (plan?.action_type || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  return (
+    <div className="mt-5 overflow-hidden rounded-2xl border border-primary/30 bg-primary/[0.03]">
+      <div className="flex items-center justify-between border-b border-primary/15 px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <Workflow className="h-4 w-4 text-primary" />
+          <span className="text-sm font-semibold">Agent prepared this action</span>
+          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">Prepared by Amazon Bedrock</span>
+        </div>
+        <button onClick={onRegenerate} disabled={loading} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50">
+          <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} /> {loading ? "Working…" : "Regenerate"}
+        </button>
+      </div>
+      <div className="space-y-4 p-4">
+        <AgentPipeline stage={stage} done={!loading && !!plan} />
+        {loading && <p className="text-center text-sm text-muted-foreground">Agents are gathering facts, running compliance checks, and drafting the next step…</p>}
+        {!loading && !plan && <p className="text-sm text-muted-foreground">Couldn't prepare this action right now. Try Regenerate.</p>}
+        {!loading && plan && (
+          <>
+            <div className="rounded-xl border border-border bg-card p-4">
+              <span className="rounded-md bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">{actionTitle}</span>
+              <p className="mt-2 text-sm font-medium">{plan.headline}</p>
+              {plan.prepared_fields?.length > 0 && (
+                <dl className="mt-3 grid grid-cols-1 gap-x-8 gap-y-2.5 sm:grid-cols-2">
+                  {plan.prepared_fields.map((f, i) => (
+                    <div key={i} className="flex flex-col">
+                      <dt className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">{f.label}</dt>
+                      <dd className="text-sm">{f.value ? f.value : <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">— to confirm</span>}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+            </div>
+            {plan.compliance_checks?.length > 0 && (
+              <div className="rounded-xl border border-border bg-card p-4">
+                <div className="flex items-center gap-2 text-sm font-medium"><ShieldCheck className="h-4 w-4 text-primary" /> Compliance checks , auto-run</div>
+                <ul className="mt-3 space-y-2.5">
+                  {plan.compliance_checks.map((c, i) => (
+                    <li key={i} className="flex items-start gap-2">
+                      <ComplianceBadge status={c.status} />
+                      <div><span className="text-sm font-medium">{c.item}</span>{c.note && <p className="text-xs text-muted-foreground">{c.note}</p>}</div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <div className="grid gap-3">
+              {plan.draft_client_message && <CopyCard title="Draft message to client" text={plan.draft_client_message} />}
+              {plan.draft_advisor_followup && <CopyCard title="Advisor follow-up" text={plan.draft_advisor_followup} />}
+            </div>
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              {approved ? (
+                <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
+                  <CheckCircle2 className="h-4 w-4" /> Approved. Nothing was actually sent , synthetic demo.
+                </div>
+              ) : (
+                <Button onClick={approve} disabled={approving} className="px-5">{approving ? "Approving…" : "Approve & send"}</Button>
+              )}
+              <span className="text-xs text-muted-foreground">You approve; the agent did the prep. Nothing is executed.</span>
+            </div>
+            {plan.note && <p className="text-xs text-muted-foreground">{plan.note}</p>}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CaseDetail({ detail, candidates, candMeta, assigning, onAssign, brief, briefLoading, onLoadBrief, onRegenerateBrief, plan, planLoading, planStage, onRegeneratePlan, onApprove, onAction, actionBusy, hc }: any) {
+  const [tab, setTab] = useState<"action" | "brief">("action");
   if (detail._error) return <p className="p-8 text-sm text-red-600">{detail._error}</p>;
   const security = detail.categories?.includes("fraud_or_security");
   const assigned = !!detail.routing?.assigned_advisor_id;
@@ -463,10 +621,23 @@ function CaseDetail({ detail, candidates, candMeta, assigning, onAssign, brief, 
         <StatusBadge status={detail.status} />
       </div>
 
-      {/* 1 , AI Prep Brief (hero) */}
-      <PrepBrief brief={brief} loading={briefLoading} onRegenerate={onRegenerateBrief} />
+      {/* Tabs , agentic prepared action (default) | AI prep brief */}
+      <div className="mt-5 inline-flex rounded-xl border border-border bg-muted/40 p-1 text-sm">
+        <button onClick={() => setTab("action")}
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium transition-colors ${tab === "action" ? "bg-background text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+          <Workflow className="h-4 w-4" /> Prepared action
+        </button>
+        <button onClick={() => { setTab("brief"); if (!brief && !briefLoading) onLoadBrief?.(); }}
+          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium transition-colors ${tab === "brief" ? "bg-background text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+          <Sparkles className="h-4 w-4" /> Prep brief
+        </button>
+      </div>
 
-      {/* 2 , Advisor actions */}
+      {tab === "action"
+        ? <ActionPacket plan={plan} loading={planLoading} stage={planStage} onRegenerate={onRegeneratePlan} onApprove={onApprove} />
+        : <PrepBrief brief={brief} loading={briefLoading} onRegenerate={onRegenerateBrief} />}
+
+      {/* Advisor actions */}
       <ActionBar onAction={onAction} busy={actionBusy} assigned={assigned} />
 
       <Section title="Client's original words">
