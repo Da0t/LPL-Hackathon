@@ -18,7 +18,7 @@ def test_fallback_fixtures_load_when_data_dir_missing(tmp_path):
     store = Store(":memory:", settings.data_dir, settings.fallback_data_dir)
     assert "fallback" in store.load_seed()
     counts = store.counts()
-    assert (counts["clients"], counts["accounts"], counts["events"], counts["advisors"], counts["glossary"], counts["seed_cases"]) == (3, 8, 10, 8, 10, 4)
+    assert (counts["clients"], counts["accounts"], counts["events"], counts["advisors"], counts["glossary"], counts["seed_cases"]) == (3, 8, 10, 8, 19, 4)
     account = store.get_account("ACCT-201")
     assert account["masked_identifier"] == "****4821" and account["label"] == "Rollover IRA" and account["balance"] == 84000
     assert store.get_client("CLIENT-022")["meeting_preference"] == "video"
@@ -116,9 +116,26 @@ def test_frontend_placeholders_then_real_files(tmp_path):
         assert client.get("/").status_code == 200
 
 
-def test_bedrock_and_stub_modes_fail_fast_without_agent1_module(tmp_path):
+def test_bedrock_and_stub_modes_load_agent1_adapter(tmp_path):
+    # Agent 1's adapter is integrated, so these modes construct the real adapter
+    # (no AWS call happens until a request is served).
+    for mode in ("bedrock", "stub"):
+        assert create_app(make_settings(tmp_path, ai_mode=mode)) is not None
+
+
+def test_bedrock_mode_fails_fast_when_agent1_module_missing(tmp_path, monkeypatch):
+    import importlib
+
     from backend.services.agent_adapter import AdapterUnavailable
 
+    real_import = importlib.import_module
+
+    def fake_import(name, *args, **kwargs):
+        if name == "backend.aws.bedrock_agent":
+            raise ImportError("simulated missing Agent 1 module")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib, "import_module", fake_import)
     for mode in ("bedrock", "stub"):
         with pytest.raises(AdapterUnavailable):
             create_app(make_settings(tmp_path, ai_mode=mode))

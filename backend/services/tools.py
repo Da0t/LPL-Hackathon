@@ -24,6 +24,7 @@ Callback shapes (keyword or positional arguments both work):
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Callable
 
 from backend.services import routing
@@ -126,6 +127,46 @@ def build_tools(store: Store, client_id: str, session_context: Callable[[], dict
             out["source_id"] = entry["source_id"]
         return out
 
+    def suggest_terms(fragment: str = "", limit: int = 5, **kwargs: Any) -> list[dict[str, Any]]:
+        """Grounded term normalization: map shorthand/acronyms/phonetic fragments to
+        approved glossary terms (e.g. 'R O I' -> return on investment, 'the tax form'
+        -> 1099-R). Candidates come only from the approved glossary; nothing invented.
+        """
+        frag = normalize_text(kwargs.get("fragment", fragment) or "")
+        if not frag:
+            return []
+        compact = re.sub(r"[^a-z0-9]", "", frag)
+        frag_words = set(re.findall(r"[a-z0-9]+", frag))
+        scored: list[tuple[int, dict[str, Any]]] = []
+        for entry in store.list_glossary():
+            term = entry["term"]
+            names_l = [normalize_text(n) for n in [term, *entry.get("aliases", [])]]
+            initials = "".join(w[0] for w in re.findall(r"[a-z0-9]+", normalize_text(term)))
+            score = 0
+            if frag in names_l:
+                score = 100
+            if compact and compact == initials:
+                score = max(score, 92)
+            for name in names_l:
+                name_compact = re.sub(r"[^a-z0-9]", "", name)
+                if compact and compact == name_compact:
+                    score = max(score, 96)
+                elif compact and len(compact) >= 3 and (compact in name_compact or name_compact in compact):
+                    score = max(score, 70)
+                if frag and (frag in name or name in frag):
+                    score = max(score, 66)
+                if frag_words & set(re.findall(r"[a-z0-9]+", name)):
+                    score = max(score, 42)
+            if frag in normalize_text(term) or normalize_text(term) in frag:
+                score = max(score, 62)
+            if score:
+                out = {"term": term, "plain": entry["plain"]}
+                if entry.get("source_id"):
+                    out["source_id"] = entry["source_id"]
+                scored.append((score, out))
+        scored.sort(key=lambda pair: -pair[0])
+        return [candidate for _, candidate in scored[:limit]]
+
     def get_relevant_account_history(account_id: str = "", **kwargs: Any) -> list[dict[str, Any]]:
         account_id = kwargs.get("account_id", account_id)
         if account_id not in owned_accounts:
@@ -158,6 +199,7 @@ def build_tools(store: Store, client_id: str, session_context: Callable[[], dict
     tools = ToolBox(
         get_relevant_accounts=get_relevant_accounts,
         get_approved_definition=get_approved_definition,
+        suggest_terms=suggest_terms,
         get_session_context=get_session_context,
         list_glossary_terms=list_glossary_terms,
     )
