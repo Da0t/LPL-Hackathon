@@ -194,15 +194,17 @@ synthetic case and writes screenshots under `/tmp`.
 
 ### Client
 
-- `/login`: email and password sign-in.
+- `/`: animated Coherent logo, a replayable example showing a client's words become a confirmed
+  request record, and the technology logo strip.
+- `/login`: email and password sign-in with a simplified typographic welcome panel.
 - `/workspace`: overview with asset and cash snapshots, accounts, and recent activity.
 - `/workspace/profile`: editable identity, contact, employment, household finances, goals, and
   trusted contact. Contact email and sign-in email are intentionally separate.
 - `/workspace/finances`: accounts, holdings, editable account details, searchable history, account
   creation, and past-activity entry. Facts a client enters are marked as self-reported; entering a
   transfer never moves money or changes a balance.
-- `/workspace/requests/new`: three columns for the client's words, the clarification, and an
-  A4-proportioned request document. The document carries the client's name, the description, the
+- `/workspace/requests/new`: a step-by-step editor for the client's words, account clarification,
+  and review of an A4-proportioned request document. The document carries the client's name, the description, the
   original words, the chosen account's dated balances and holdings, and account history with source
   ids. No SSN appears in it. Print or Save PDF uses A4 print CSS. `/intake` redirects here.
 - `/workspace/requests`: request status, advisor clarification messages, the client's replies, and

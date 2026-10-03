@@ -31,7 +31,7 @@ PORT=3200 pnpm dev          # NOT 3000 , a stale service worker from another
 
 Open **http://127.0.0.1:3200/login**. Private demo sign-ins are in ignored `../var/demo-access.json`.
 
-- `/` , landing
+- `/` , animated Coherent logo and replayable request-confirmation demo
 - `/login` , Cognito email/password sign-in
 - `/workspace` , client overview, with `/profile`, `/finances`, and `/requests` subpages
 - `/workspace/requests/new` , step-by-step request editor and printable A4 document
