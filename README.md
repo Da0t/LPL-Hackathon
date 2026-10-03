@@ -106,6 +106,42 @@ application code, so a confident but wrong model answer can never become a false
 
 Bedrock setup, model verification, and the live smoke test: [`AWS_SETUP.md`](AWS_SETUP.md).
 
+### AWS hosted demo
+
+`python -m scripts.deploy_aws` deploys the **pushed main commit** to a dedicated Amazon Linux 2023
+EC2 instance in `us-east-1`. It reuses the existing Cognito pool, DynamoDB table, and indexed Bedrock
+Knowledge Base. It creates a scoped EC2 role, encrypted 30 GB EBS root disk, static public address,
+security group accepting only the CloudFront origin-facing prefix list, and a CloudFront distribution
+with an HTTPS demo URL. The web and API servers run as systemd services and are updated through AWS
+Systems Manager. No long-lived AWS key is copied to the host; the role supplies credentials. The
+origin also requires a private header set by this CloudFront distribution. Login cookies are `Secure`
+on the hosted URL. CloudFront forwards cookies, headers, query strings, and all request methods with
+caching disabled, so authenticated responses are not shared.
+
+First complete the existing portal and Knowledge Base provisioning below, then run this from a clean,
+pushed `main` checkout with your authorized AWS session available to boto3:
+
+```bash
+AWS_SHARED_CREDENTIALS_FILE=/path/to/your/private-aws-session \
+AWS_DEFAULT_REGION=us-east-1 .venv/bin/python -m scripts.deploy_aws
+```
+
+The resumable script records resource IDs in ignored `var/deployment-aws.json` and prints the HTTPS
+URL after the host and CloudFront are ready. Re-run it after pushing a new main commit to rebuild the
+host. Check the public `/login` and `/api/health` paths, then sign in with the private demo identities
+in `var/demo-access.json`. The deployment uses the same fictional accounts and cloud portal records as
+the local app. The case SQLite file is separate on the instance's EBS disk; it survives reboot and
+restart. Do not terminate the instance if you need its case history.
+
+This is a **single-instance hackathon deployment** with synthetic data. It has no automatic failover
+or database backup. CloudFront provides HTTPS to the browser; its connection to the CloudFront-only
+origin currently uses HTTP. Set up a domain, origin TLS, backups, monitoring, and a shared transactional
+case store before treating this as a production financial application. EC2, EBS, the public IPv4
+address, CloudFront, Bedrock, Knowledge Base, DynamoDB, and Polly can incur ongoing charges. The
+AWS [CloudFront origin prefix list](https://docs.aws.amazon.com/vpc/latest/userguide/working-with-aws-managed-prefix-lists.html)
+and [cache/origin request policies](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/controlling-origin-requests.html)
+are described in AWS documentation.
+
 ---
 
 ## Run it
