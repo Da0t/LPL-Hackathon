@@ -205,12 +205,18 @@ def health(request: Request):
         live_model=bool(adapter.live),
         data_source=store.data_source,
         counts=store.counts(),
+        simulated_access_control=not bool(getattr(request.app.state, "portal", None)),
     )
 
 
 @router.get("/demo/clients", response_model=DemoClientsResponse, tags=["demo"])
 def demo_clients(request: Request):
     clients = request.app.state.store.list_clients()
+    portal = getattr(request.app.state, "portal", None)
+    if portal:
+        actor = portal.actor(request)
+        if actor["role"] == "client":
+            clients = [c for c in clients if c["client_id"] == actor["client_id"]]
     return DemoClientsResponse(
         clients=[{"client_id": c["client_id"], "display_name": c["display_name"], "demo_scenario": c.get("demo_scenario")} for c in clients]
     )

@@ -169,4 +169,3 @@ export function ActionPacket({ plan, loading, stage, onRegenerate, onApprove, al
     </div>
   );
 }
-

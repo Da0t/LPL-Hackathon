@@ -24,6 +24,9 @@ ROLE_QUERY = "demo_role"
 
 
 def demo_role(request: Request) -> str:
+    portal = getattr(request.app.state, "portal", None)
+    if portal:
+        return portal.actor(request)["role"]
     raw = request.headers.get(ROLE_HEADER) or request.query_params.get(ROLE_QUERY)
     if raw is None or not raw.strip():
         settings = getattr(request.app.state, "settings", None)
@@ -56,6 +59,9 @@ def require_client(role: str = Depends(demo_role)) -> str:
 
 def demo_client_id(request: Request) -> str | None:
     """The simulated signed-in client, if the page sent one."""
+    portal = getattr(request.app.state, "portal", None)
+    if portal:
+        return portal.actor(request)["client_id"]
     raw = request.headers.get(CLIENT_HEADER)
     return raw.strip() if raw and raw.strip() else None
 

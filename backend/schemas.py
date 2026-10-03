@@ -268,6 +268,9 @@ class TriageInfo(BaseModel):
 class CaseRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    # Internal submission snapshot: accepted for stored records, never serialized by the API.
+    portal_document_snapshot: dict[str, Any] | None = Field(default=None, validation_alias="_portal_document", exclude=True)
+
     # contract (contracts/API_V1.md required fields)
     case_id: str
     client_id: str
