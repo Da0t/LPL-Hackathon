@@ -1,5 +1,6 @@
 import {type ClassValue, clsx} from 'clsx'
 import {twMerge} from 'tailwind-merge'
+import type { Variants } from 'motion/react'
 
 export function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs))
@@ -66,7 +67,7 @@ export function decryptLanyardData(encrypted: string): LanyardData | null {
   }
 }
 
-export const transitionVariants = {
+export const transitionVariants: { item: Variants } = {
     item: {
         hidden: {
             opacity: 0,

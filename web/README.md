@@ -14,12 +14,11 @@ cd ..                      # repo root
 pip install -r requirements.txt
 AWS_PROFILE=lpl-hackathon AWS_REGION=us-east-1 \
   BEDROCK_MODEL_ID=us.anthropic.claude-haiku-4-5-20251001-v1:0 \
-  SAMEPAGE_AI_MODE=bedrock \
+  COHERENT_PORTAL_CONFIG=var/portal-aws.json SAMEPAGE_AI_MODE=bedrock \
   python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-(Use `SAMEPAGE_AI_MODE=mock` for offline UI work , the app still runs, with
-deterministic responses.)
+Provision Cognito and DynamoDB first using the root README. `SAMEPAGE_AI_MODE=mock` makes AI responses deterministic; authenticated portal access still needs AWS credentials.
 
 **2. Start this app:**
 
@@ -30,15 +29,17 @@ PORT=3200 pnpm dev          # NOT 3000 , a stale service worker from another
                             # project hijacks localhost:3000. Use 3200.
 ```
 
-Open **http://localhost:3200**.
+Open **http://127.0.0.1:3200/login**. Private demo sign-ins are in ignored `../var/demo-access.json`.
 
 - `/` , landing
-- `/intake` , client intake (live Bedrock describe -> review -> send + routing graph)
+- `/login` , Cognito email/password sign-in
+- `/workspace` , client overview, with `/profile`, `/finances`, and `/requests` subpages
+- `/workspace/requests/new` , three-column request editor and printable A4 document
+- `/intake` , redirect to the authenticated request editor
 - `/dashboard` , advisor workspace (queue, case detail, **AI prep brief**, actions,
   My pipeline board, compliance panel, impact charts)
 
-It calls the backend at `http://127.0.0.1:8000` (override with
-`NEXT_PUBLIC_SAMEPAGE_API`). CORS allows any localhost port.
+Browser API calls use the same-origin `/api` proxy to `http://127.0.0.1:8000`. HttpOnly Cognito cookies authorize requests. Client requests include current status and advisor clarification/reply threads alongside archived submission documents.
 
 ## Design system
 
@@ -46,12 +47,10 @@ It calls the backend at `http://127.0.0.1:8000` (override with
 - Logo: `public/coherent-logo.png` (lockup) and `public/coherent-icon.png` (mark);
   brand tokens in `app/globals.css`.
 - API client: `lib/api.ts`. Everything is synthetic data; the role switcher is
-  simulated access control, not production auth.
+  accepted only by the legacy unconfigured backend; configured portal access uses Cognito.
 
 ## Notes
 
-- `components/agenda.tsx`, `call-to-action.tsx`, `features-3.tsx` are leftover v0
-  template files (unused) , safe to delete; they're the only `tsc --noEmit`
-  warnings.
+- `npx tsc --noEmit` and `npm run build` validate the frontend with type checking enabled.
 - The `/lanyard` route and the 3D card components are from the template and are not
   part of the product flow.

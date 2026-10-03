@@ -1,8 +1,9 @@
 // Coherent API client , talks to the live FastAPI + Amazon Bedrock backend.
-// The backend enforces the frozen v1 contract; roles are simulated via headers.
+// The backend enforces the frozen v1 contract. Cognito cookies authorize portal calls;
+// demo headers are supported only by the explicitly unconfigured legacy server.
 
 export const API_BASE =
-  process.env.NEXT_PUBLIC_SAMEPAGE_API || "http://127.0.0.1:8000";
+  process.env.NEXT_PUBLIC_SAMEPAGE_API || "/api";
 
 export type Suggestion = { id: string; label: string; account_id?: string };
 export type Definition = { term: string; plain: string };
@@ -69,6 +70,7 @@ async function call<T>(
   let res: Response;
   try {
     res = await fetch(API_BASE + path, {
+      credentials: "include",
       method: opts.method || "GET",
       headers,
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
