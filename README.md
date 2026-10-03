@@ -32,6 +32,13 @@ Tomorrow* and *Biggest Business Impact*, plus the automatic *Best Use of AWS*.
    in advisor terms, talking points, facts to confirm, compliance cautions, generated live by
    Bedrock), then acts on it , **Claim / Note / Request clarification / Mark scheduled / Resolve** ,
    and watches it move across the **My pipeline** board, with a **compliance** panel alongside.
+4. **Advisor agents** , four more agents work the case: a **reply drafter** and a **compliance
+   reviewer** in a loop (draft, review, one revision, review), a **next-steps planner** with an owner
+   for each step, and a **security investigator** for fraud cases. The queue ranks itself and says why
+   in plain words ("Waiting 2 days for an advisor").
+5. **Impact** (`/dashboard`, Impact in the sidebar) , turns and seconds to a confirmed request,
+   measured from intakes run in the workspace, next to an advisor capacity model whose inputs are
+   editable assumptions.
 
 ---
 
@@ -49,9 +56,12 @@ Tomorrow* and *Biggest Business Impact*, plus the automatic *Best Use of AWS*.
                               │
               ┌───────────────┴────────────────┐
      backend/aws , Amazon Bedrock         data/ , synthetic records
-   TWO live Bedrock surfaces:             clients · accounts · events
+   Live Bedrock surfaces:                 clients · accounts · events
    (1) intake_turn / triage_case         advisors · glossary · cases
    (2) advisor prep brief
+   (3) advisor agents: reply drafter,
+       compliance reviewer, next-steps
+       planner, security investigator
    (+ Transcribe custom vocabulary, Guardrails hook)
 ```
 
@@ -63,13 +73,18 @@ confident-but-wrong model answer can never become a false account fact.
 
 ## How we use AWS
 
-- **Amazon Bedrock (Converse API + native tool use), two surfaces.** (1) Intake + triage interpret the
+- **Amazon Bedrock (Converse API + native tool use), three surfaces.** (1) Intake + triage interpret the
   client's words and classify the request through narrow, client-scoped tools with schema-forced
   output. (2) A read-only **advisor prep brief** turns a confirmed case into talking points, facts to
-  confirm, and compliance cautions. Right-sized model: **Claude Haiku 4.5** (`us.anthropic.claude-
+  confirm, and compliance cautions. (3) Four **advisor agents** (reply drafter, compliance reviewer,
+  next-steps planner, security investigator). Each is a single Bedrock call that must answer through
+  one tool with a fixed schema, and each has a deterministic offline fallback. There is no
+  orchestration framework: the only loop is draft, review, one revision, review, run by plain code
+  in `backend/services/reply_workflow.py`. Right-sized model: **Claude Haiku 4.5** (`us.anthropic.claude-
   haiku-4-5-20251001-v1:0`), swappable via `BEDROCK_MODEL_ID`.
 - **Safety by construction** , the adapter injects authorized ids (never the model's), drops invented
-  accounts, forces fraud cases to specialist review, and never asserts balances/history. Optional
+  accounts, forces fraud cases to specialist review, and never asserts balances/history. The
+  compliance verdict is computed in code from what the reviewer quoted, never taken from the model. Optional
   **Bedrock Guardrails** block investment/tax advice.
 - **Amazon Transcribe** , a financial **custom vocabulary** (`samepage-financial-terms`, created +
   READY) biases speech-to-text toward financial terms.
@@ -119,10 +134,12 @@ LPL-Hackathon/
 │   ├── lib/api.ts           typed client for the backend
 │   └── public/              coherent-logo.png, coherent-icon.png
 ├── backend/                 FastAPI app
-│   ├── main.py api.py       app + routes (v1 contract + /brief and /action advisor endpoints)
-│   ├── services/            intake, triage, staff (brief + actions), routing, tools, validation
+│   ├── main.py api.py       app + routes (v1 contract + additive advisor endpoints: /brief, /action,
+│   │                        /reply-draft, /compliance-review, /next-steps, /investigation, /client)
+│   ├── services/            intake, triage, staff (brief + actions), routing, tools, validation,
+│   │                        priority (queue ranking + intake metrics), reply_workflow (drafter/reviewer loop)
 │   ├── store.py             SQLite repository + seed loader
-│   └── aws/                 Amazon Bedrock adapter (intake_turn, triage_case, advisor_brief), config, transcribe
+│   └── aws/                 Amazon Bedrock adapter (intake_turn, triage_case, advisor_brief), advisor_agents, config, transcribe
 ├── data/                    synthetic seed data + shared store
 ├── contracts/               frozen v1 HTTP contract, fixture, standalone mock
 ├── infra/                   least-privilege IAM + Bedrock Guardrail config
@@ -137,14 +154,19 @@ LPL-Hackathon/
 ## What is live and what is simulated
 
 - **Live (with `SAMEPAGE_AI_MODE=bedrock`):** language interpretation, clarifying questions, term
-  normalization, triage, and the advisor prep brief , Amazon Bedrock.
+  normalization, triage, the advisor prep brief, and the four advisor agents , Amazon Bedrock.
 - **Always deterministic:** authorization scope, account facts and sources, security routing, advisor
-  ranking, case state, assignment, and the workflow/lifecycle actions.
-- **Simulated:** the demo role switcher, and every client, account, balance, event, and advisor.
+  ranking, queue priority, the compliance verdict, case state, assignment, and the workflow/lifecycle
+  actions.
+- **Simulated:** the demo role switcher, and every client, account, balance, event, and advisor. No
+  message is really sent to a client.
+- **Measured:** client turns and seconds from first message to confirmation, for intakes run in the
+  workspace. **Not measured:** advisor time saved. The capacity model on the Impact view is a formula
+  with assumed inputs.
 
 ## Documentation
 
 - [`web/README.md`](web/README.md) , frontend run + structure
 - [`AWS_SETUP.md`](AWS_SETUP.md) , AWS setup, model verification, smoke test
-- [`contracts/API_V1.md`](contracts/API_V1.md) , frozen HTTP contract (advisor `/brief` and `/action` are additive)
+- [`contracts/API_V1.md`](contracts/API_V1.md) , frozen HTTP contract (all advisor endpoints are additive)
 - [`SAMEPAGE_PRODUCT_SPEC.md`](SAMEPAGE_PRODUCT_SPEC.md) · [`HACKATHON_PROJECT_BRIEF.md`](HACKATHON_PROJECT_BRIEF.md) · [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md)

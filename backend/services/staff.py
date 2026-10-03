@@ -8,7 +8,7 @@ from typing import Any, Callable
 from backend.errors import ApiError
 from backend.schemas import CaseRecord, SECURITY_DESTINATION
 from backend.services import routing
-from backend.services.priority import lifecycle_of, priority_for
+from backend.services.priority import intake_metrics, lifecycle_of, priority_for
 from backend.services.common import now_iso
 from backend.services.reply_workflow import run_reply_workflow
 from backend.store import Store
@@ -51,6 +51,7 @@ class StaffService:
             "routing": {"destination": case["routing"]["destination"], "assigned_advisor_id": case["routing"].get("assigned_advisor_id")},
             "priority": priority_for(case),
             "lifecycle": lifecycle_of(case),
+            "intake": intake_metrics(case),
         }
 
     def get_case(self, case_id: str, mark_reviewed: bool = True) -> dict[str, Any]:

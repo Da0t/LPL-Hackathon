@@ -174,7 +174,7 @@ def build_case(
             "selected_option_id": t.get("selected_option_id"), "selected_option_label": t.get("selected_option_label"),
             "suggestions": t.get("suggestions", []), "question": t.get("question"), "uncertainty": t.get("uncertainty"),
             "candidate_intent": t.get("candidate_intent"), "candidate_account_id": t.get("candidate_account_id"),
-            "degraded": bool(t.get("degraded")), "at": t["at"],
+            "degraded": bool(t.get("degraded")), "received_at": t.get("received_at"), "at": t["at"],
         }
         for t in session.get("turns", [])
     ]

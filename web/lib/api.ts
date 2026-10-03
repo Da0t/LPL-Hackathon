@@ -33,6 +33,7 @@ export type CaseRow = {
   urgency?: { level?: string };
   priority?: Priority;
   lifecycle?: Lifecycle;
+  intake?: { turns: number; seconds_to_confirm: number } | null;
 };
 export type Priority = { level: "urgent" | "high" | "normal" | "low" | "done"; rank: number; reason: string };
 export type Lifecycle = "new" | "awaiting_client" | "assigned" | "scheduled" | "resolved";

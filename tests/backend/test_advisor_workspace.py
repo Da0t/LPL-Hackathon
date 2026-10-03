@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from backend.services.priority import lifecycle_of, priority_for
-from tests.backend.conftest import STAFF
+from backend.services.priority import intake_metrics, lifecycle_of, priority_for
+from tests.backend.conftest import STAFF, submit_roth_thing_case
 
 NOW = datetime(2026, 10, 3, 12, 0, tzinfo=timezone.utc)
 
@@ -56,7 +56,29 @@ def test_lifecycle_follows_assignment_scheduling_and_resolution():
     assert lifecycle_of(case(history=[event("meeting_scheduled"), event("request_resolved")])) == "resolved"
 
 
+# ------------------------------------------------------- intake metrics (pure)
+
+
+def test_intake_metrics_count_turns_and_time_to_confirmation():
+    c = case(client_confirmed_at="2026-10-03T09:01:30Z", conversation=[
+        {"turn_number": 1, "received_at": "2026-10-03T09:00:00Z", "at": "2026-10-03T09:00:04Z"},
+        {"turn_number": 2, "received_at": "2026-10-03T09:00:40Z", "at": "2026-10-03T09:00:43Z"},
+    ])
+    assert intake_metrics(c) == {"turns": 2, "seconds_to_confirm": 90}
+
+
+def test_intake_metrics_are_absent_for_a_seeded_case():
+    assert intake_metrics(case(conversation=[], client_confirmed_at=None)) is None
+
+
 # ------------------------------------------------------------- queue summary
+
+
+def test_queue_row_for_a_live_intake_carries_its_measured_metrics(client):
+    case_id = submit_roth_thing_case(client)
+    rows = {c["case_id"]: c for c in client.get("/staff/cases", headers=STAFF).json()["cases"]}
+    assert rows[case_id]["intake"]["turns"] >= 1 and rows[case_id]["intake"]["seconds_to_confirm"] >= 0
+    assert rows["CASE-1042"]["intake"] is None
 
 
 def test_queue_rows_carry_priority_and_lifecycle(client):

@@ -26,14 +26,28 @@ def lifecycle_of(case: dict[str, Any]) -> str:
     return "new"
 
 
-def _hours_waiting(case: dict[str, Any], now: datetime) -> int:
+def _parse(stamp: Any) -> datetime | None:
     try:
-        created = datetime.fromisoformat(str(case.get("created_at")).replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
     except ValueError:
-        return 0
-    if created.tzinfo is None:
-        created = created.replace(tzinfo=timezone.utc)
-    return max(0, int((now - created).total_seconds() // 3600))
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _hours_waiting(case: dict[str, Any], now: datetime) -> int:
+    created = _parse(case.get("created_at"))
+    return max(0, int((now - created).total_seconds() // 3600)) if created else 0
+
+
+def intake_metrics(case: dict[str, Any]) -> dict[str, int] | None:
+    """What the intake actually took: client turns, and seconds from the first
+    message arriving to the client confirming. None for seeded cases, which had no intake."""
+    turns = case.get("conversation") or []
+    confirmed = _parse(case.get("client_confirmed_at"))
+    started = _parse(turns[0].get("received_at") or turns[0].get("at")) if turns else None
+    if not started or not confirmed:
+        return None
+    return {"turns": len(turns), "seconds_to_confirm": max(0, int((confirmed - started).total_seconds()))}
 
 
 def _plural(n: int, unit: str) -> str:

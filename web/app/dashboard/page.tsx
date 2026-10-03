@@ -163,6 +163,7 @@ export default function DashboardPage() {
     return {
       total: cases.length, clarifyPct: Math.round((clarify / total) * 100),
       security: cases.filter(isSecurity).length, assigned: cases.filter(isAssigned).length,
+      intakes: cases.flatMap((c) => (c.intake ? [c.intake] : [])),
       categories: Object.entries(catCount).map(([k, v]) => ({ name: prettyCategory(k), value: v })).sort((a, b) => b.value - a.value),
       destinations: Object.entries(destCount).map(([k, v]) => ({ name: sentence(k), value: v })).sort((a, b) => b.value - a.value),
     };
@@ -341,11 +342,51 @@ function Tile({ big, label, tone }: { big: string; label: string; tone?: string 
   );
 }
 
+function median(values: number[]) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+}
+
+const CAPACITY_INPUTS = [
+  { key: "requests", label: "Unclear requests per advisor per week" },
+  { key: "minutes", label: "Minutes saved per request" },
+  { key: "advisors", label: "Advisors" },
+  { key: "weeks", label: "Working weeks per year" },
+] as const;
+
+// A formula, not a result: every input is editable so nobody has to take our word for the total.
+function CapacityModel() {
+  const [inputs, setInputs] = useState({ requests: 5, minutes: 10, advisors: 32500, weeks: 50 });
+  const hours = Math.round((inputs.requests * inputs.minutes * inputs.advisors * inputs.weeks) / 60);
+  return (
+    <div className="mt-4 rounded-2xl border border-border bg-card p-5">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {CAPACITY_INPUTS.map((f) => (
+          <label key={f.key} className="block text-sm text-muted-foreground">
+            {f.label}
+            <input type="number" min={0} value={inputs[f.key]}
+              onChange={(e) => setInputs((v) => ({ ...v, [f.key]: Math.max(0, Number(e.target.value) || 0) }))}
+              className="mt-1.5 w-full rounded-lg border border-border bg-background px-3 py-2 text-lg font-medium tabular-nums text-foreground outline-none focus:ring-2 focus:ring-primary/30" />
+          </label>
+        ))}
+      </div>
+      <div className="mt-5 border-t border-border pt-4">
+        <div className="text-3xl font-semibold tracking-tight tabular-nums text-primary">{hours.toLocaleString()} advisor hours a year</div>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Requests × minutes × advisors × weeks ÷ 60. The first two inputs are assumptions, not measurements. A pilot would measure them.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function ImpactView({ impact }: { impact: any }) {
+  const intakes: { turns: number; seconds_to_confirm: number }[] = impact.intakes;
   return (
     <div className="h-screen overflow-y-auto p-8">
       <h1 className="text-2xl font-semibold">Impact</h1>
-      <p className="mt-1 text-sm text-muted-foreground">Live from the request queue · plus illustrative scale figures.</p>
+      <p className="mt-1 text-sm text-muted-foreground">Live from the request queue, plus a capacity model you can change.</p>
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Tile big={String(impact.total)} label="Total requests in queue" tone="text-primary" />
         <Tile big={`${impact.clarifyPct}%`} label="Needed clarification before routing" />
@@ -381,12 +422,25 @@ function ImpactView({ impact }: { impact: any }) {
           </div>
         </div>
       </div>
+      <h2 className="mt-10 text-sm font-mono uppercase tracking-wider text-muted-foreground">Measured in this workspace</h2>
+      {intakes.length === 0 ? (
+        <p className="mt-4 rounded-2xl border border-border bg-card p-5 text-sm text-muted-foreground">
+          No live intakes yet. Send a request from client intake and its turns and time to confirmation appear here.
+        </p>
+      ) : (
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Tile big={String(median(intakes.map((i) => i.turns)))} label="Median client turns to a confirmed request" tone="text-primary" />
+          <Tile big={`${median(intakes.map((i) => i.seconds_to_confirm))}s`} label="Median time from first message to confirmation" tone="text-primary" />
+          <Tile big={String(intakes.length)} label={`Live intake${intakes.length === 1 ? "" : "s"} measured. Seeded demo cases are excluded.`} />
+        </div>
+      )}
+      <h2 className="mt-10 text-sm font-mono uppercase tracking-wider text-muted-foreground">Advisor capacity model</h2>
+      <CapacityModel />
       <h2 className="mt-10 text-sm font-mono uppercase tracking-wider text-muted-foreground">Why it matters , at scale</h2>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Tile big="61.2M" label="Americans are 65+ , the clients who struggle most with financial terms." />
         <Tile big="<50%" label="of an advisor's time goes to direct client work today (Kitces)." />
-        <Tile big="$2.6T" label="assets & 32,000+ advisors at LPL Financial alone." />
-        <Tile big="~$80M/yr" label="illustrative recovered advisor capacity at LPL scale (model, not measured)." tone="text-primary" />
+        <Tile big="$2.6T" label="assets & about 32,500 advisors at LPL Financial alone." />
       </div>
     </div>
   );
