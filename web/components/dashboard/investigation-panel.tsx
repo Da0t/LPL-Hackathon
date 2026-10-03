@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { getInvestigation, ApiError, type Investigation } from "@/lib/api";
 import { AgentCard, Subheading } from "./section";
+import { AgentEvidence } from "./agent-evidence";
 import { agentNote, prettyDate } from "./labels";
 
 const RISK: Record<Investigation["risk_level"], { label: string; cls: string }> = {
@@ -26,6 +27,7 @@ export function InvestigationPanel({ caseId }: { caseId: string }) {
 
   return (
     <AgentCard title="Security review" agent="Investigation agent" loading={loading} onRefresh={() => load(true)} refreshLabel="Re-run">
+      <AgentEvidence caseId={caseId} operation="investigation" />
       {loading && <p className="text-sm text-muted-foreground">Checking the account records…</p>}
       {error && <p className="text-sm text-red-600">{error}</p>}
       {!loading && inv && (

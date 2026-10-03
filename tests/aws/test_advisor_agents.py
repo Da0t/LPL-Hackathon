@@ -94,7 +94,7 @@ def test_bedrock_review_is_normalized_to_all_four_checks_and_a_computed_verdict(
     review = aa.compliance_review(CASE, "The Roth is your best option.", cfg=CFG, client=client)
     assert [c["id"] for c in review["checks"]] == ["identity_confirmed", "no_advice", "suitability", "account_confirmed"]
     assert review["checks"][1] == {"id": "no_advice", "label": "No investment / tax advice given",
-                                   "status": "attention", "evidence": "Draft recommends a product."}
+                                   "status": "attention", "evidence": "Draft recommends a product.", "citation_ids": [], "source_quote": ""}
     assert review["checks"][0]["status"] == "attention", "a check the model skipped is never reported as passed"
     assert review["verdict"] == "needs_changes"
     assert "The Roth is your best option." in client.calls[0]["messages"][0]["content"][0]["text"]

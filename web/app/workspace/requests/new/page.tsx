@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import {useAccessibility, ReadAloudButton} from "@/components/portal/accessibility";
 import {
   ArrowLeft,
   ArrowRight,
@@ -23,6 +24,9 @@ import {
 } from "@/lib/api";
 export default function NewRequest() {
   const { client } = useClient();
+  const accessibility = useAccessibility();
+  const [humanHelp, setHumanHelp] = useState(false);
+  useEffect(()=>{setHumanHelp(new URLSearchParams(window.location.search).get("help")==="person");},[]);
   const [words, setWords] = useState(""),
     [turn, setTurn] = useState<any>(null),
     [summary, setSummary] = useState(""),
@@ -140,6 +144,7 @@ export default function NewRequest() {
     }
   }
   function microphone() {
+    accessibility.stop();
     if (listening) {
       stopMic();
       return;
@@ -183,6 +188,8 @@ export default function NewRequest() {
       setSpeechHint("Microphone could not start. Continue by typing.");
     }
   }
+  const questionText = turn ? [turn.question || "Does this capture what you mean?", ...(turn.suggestions || []).map((s:any,i:number)=>`Option ${i+1}: ${s.label}`)].filter(Boolean).join(". ") : "";
+  useEffect(()=>{if(accessibility.prefs.autoRead && questionText && !listening) accessibility.speak(questionText); return ()=>accessibility.stop();},[questionText, accessibility.prefs.autoRead]);
   const account =
     client.accounts.find((a) => a.account_id === selected) || null;
   const amountNumber = amount.trim() ? Number(amount.replace(/,/g, "")) : null;
@@ -286,6 +293,7 @@ export default function NewRequest() {
         }
         description="Describe what you need, clarify the details, and review the document your team will receive."
       />
+      {humanHelp && <div className="portal-success" role="status">A person can help. Describe what you need below, choose Talk to a person after clarification, then review and send. This does not place a call or submit anything automatically.</div>}
       {error && (
         <p className="portal-error" role="alert">
           {error}
@@ -300,8 +308,7 @@ export default function NewRequest() {
         <div className="portal-success" role="status">
           <FileCheck2 size={20} />
           <span>
-            Request {sent} was sent for staff review. No money has moved and no
-            appointment has been booked.
+            Your request is saved. A member of your team can review it next. No money has moved. You can check progress and answer any questions in My requests.
           </span>
           {!saved && (
             <button onClick={() => archive(sent)} className="portal-secondary">
@@ -404,6 +411,7 @@ export default function NewRequest() {
           </div>
           {turn ? (
             <>
+              <ReadAloudButton text={questionText} label="Read question and options" />
               <div className="clarifying-question" aria-live="polite">
                 <Sparkles size={19} />
                 <h3>{turn.question || "Does this capture what you mean?"}</h3>

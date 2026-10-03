@@ -9,6 +9,7 @@ import {
   prettyCategory, type ActionPlan, type AdvisorAction, type Brief, type Candidate, type CaseRow, type ClientSnapshot, type SentCompliance,
 } from "@/lib/api";
 import { AgentCard, Chip, Section, Subheading } from "./section";
+import { AgentEvidence } from "./agent-evidence";
 import { ActionPacket } from "./action-packet";
 import { ReplyPanel } from "./reply-panel";
 import { CompliancePanel } from "./compliance-panel";
@@ -151,8 +152,8 @@ function Overview({ detail, brief, briefLoading, onLoadBrief, onRegenerateBrief,
         </button>
       </div>
       {lead === "action"
-        ? <ActionPacket plan={plan} loading={planLoading} stage={planStage} onRegenerate={onRegeneratePlan} onApprove={onApprove} />
-        : <div className="mt-5"><PrepBrief brief={brief} loading={briefLoading} onRegenerate={onRegenerateBrief} /></div>}
+        ? <ActionPacket caseId={detail.case_id} plan={plan} loading={planLoading} stage={planStage} onRegenerate={onRegeneratePlan} onApprove={onApprove} />
+        : <div className="mt-5"><AgentEvidence caseId={detail.case_id} operation="brief" /><PrepBrief brief={brief} loading={briefLoading} onRegenerate={onRegenerateBrief} /></div>}
 
       <Section title="What the client asked">
         <blockquote className="rounded-lg border-l-2 border-primary bg-muted/40 p-3 text-sm italic">“{detail.original_words}”</blockquote>

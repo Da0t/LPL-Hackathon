@@ -31,7 +31,7 @@ CHECKS: list[tuple[str, str]] = [
 _CASE_FACTS = (
     "client_display_name", "confirmed_plain_language_request", "original_words", "staff_summary",
     "categories", "amount_requested", "currency", "account_context", "unresolved_questions",
-    "flags", "conflicts", "glossary", "client_meeting_preference",
+    "flags", "conflicts", "glossary", "client_meeting_preference", "policy_sources",
 )
 _ADVISOR_EVENTS = ("advisor_note", "clarification_requested", "request_resolved")
 
@@ -149,6 +149,7 @@ Assess each of these checks as "pass" or "attention", with one sentence of evide
 
 Hard rules:
 - Use only the facts provided. If the record does not show something, the check is "attention"; never assume.
+- Regulatory statements may use ONLY policy_sources retrieved for this request. Include citation_ids and an exact source_quote from the cited excerpt on the suitability check and any rule-based check. Sources are limited public guidance, not a legal opinion. If sources are missing, do not make regulatory claims from memory; report attention. Distinguish observed record facts from your interpretation of retrieved guidance.
 - For the draft, list a finding for every phrase that gives advice, recommends, promises, predicts, or states a fact the record does not support. Quote the exact words. No findings if the draft is clean or absent.
 
 Report the review by calling submit_review exactly once."""
@@ -166,8 +167,10 @@ _REVIEW_TOOL = {
                         "id": {"type": "string", "enum": [c[0] for c in CHECKS]},
                         "status": {"type": "string", "enum": ["pass", "attention"]},
                         "evidence": {"type": "string"},
+                        "citation_ids": {"type":"array","items":{"type":"string"}},
+                        "source_quote": {"type":"string"},
                     },
-                    "required": ["id", "status", "evidence"],
+                    "required": ["id", "status", "evidence", "citation_ids", "source_quote"],
                 }},
                 "findings": {"type": "array", "items": {
                     "type": "object",
@@ -218,7 +221,9 @@ def _normalize_review(result: dict, has_draft: bool) -> dict:
         evidence = str(got.get("evidence") or "").strip()
         status = got.get("status") if got.get("status") in ("pass", "attention") and evidence else "attention"
         checks.append({"id": check_id, "label": label, "status": status,
-                       "evidence": evidence or "Not assessed by the reviewer."})
+                       "evidence": evidence or "Not assessed by the reviewer.",
+                       "citation_ids": [str(x) for x in (got.get("citation_ids") or []) if isinstance(x,str)],
+                       "source_quote": str(got.get("source_quote", ""))})
     raw_findings = result.get("findings")
     findings = []
     for f in raw_findings if has_draft and isinstance(raw_findings, list) else []:

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer,
@@ -11,7 +11,7 @@ import {
   ArrowLeft, MessageSquareQuote, Home, Columns3,
 } from "lucide-react";
 import {
-  getCases, getCase, getCandidates, assignCase, getBrief, getPlan, caseAction, getClientSnapshot, health,
+  cancelAgentRuns, getCases, getCase, getCandidates, assignCase, getBrief, getPlan, caseAction, getClientSnapshot, health,
   ApiError, prettyCategory, type CaseRow, type Candidate, type Brief, type ActionPlan, type AdvisorAction,
   type ClientSnapshot, type Lifecycle, type SentCompliance,
 } from "@/lib/api";
@@ -71,14 +71,23 @@ export default function DashboardPage() {
 
   const loadBrief = useCallback(async (id: string, refresh = false) => {
     setBrief(null); setBriefLoading(true);
-    try { setBrief(await getBrief(id, refresh)); } catch { setBrief(null); } finally { setBriefLoading(false); }
+    try { const result = await getBrief(id, refresh); if (activeCase.current === id) setBrief(result); } catch { if (activeCase.current === id) setBrief(null); } finally { if (activeCase.current === id) setBriefLoading(false); }
   }, []);
+
+  const activeCase = useRef<string | null>(null);
+  const planRun = useRef(0);
+  useEffect(() => () => { if (activeCase.current) cancelAgentRuns(activeCase.current); }, []);
 
   const loadPlan = useCallback(async (id: string) => {
     setPlan(null); setPlanLoading(true); setPlanStage(0);
-    const timers = [1, 2, 3, 4].map((i) => setTimeout(() => setPlanStage((s) => Math.max(s, i)), i * 650));
-    try { setPlan(await getPlan(id)); } catch { setPlan(null); }
-    finally { timers.forEach(clearTimeout); setPlanStage(5); setPlanLoading(false); }
+    const sequence = ++planRun.current;
+    try {
+      const result = await getPlan(id, (event) => {
+        if (sequence === planRun.current && activeCase.current === id && event.type === "stage") setPlanStage(event.agent === "Verifier" ? 1 : 0);
+      });
+      if (sequence === planRun.current && activeCase.current === id) setPlan(result);
+    } catch { if (sequence === planRun.current && activeCase.current === id) setPlan(null); }
+    finally { if (sequence === planRun.current && activeCase.current === id) { setPlanStage(2); setPlanLoading(false); } }
   }, []);
 
   // Reloads the case without touching the brief, so acting on a case does not re-run the briefing agent.
@@ -88,20 +97,25 @@ export default function DashboardPage() {
       const [c, cand, snap] = await Promise.all([
         getCase(id), getCandidates(id).catch(() => ({ candidates: [] })), getClientSnapshot(id).catch(() => null),
       ]);
+      if (activeCase.current !== id) return;
       setDetail(c);
       setCandidates((cand as any).candidates || []);
       setCandMeta({ destination: (cand as any).destination, reason: (cand as any).reason });
       setSnapshot(snap);
     } catch (e) {
+      if (activeCase.current !== id) return;
       setDetail({ _error: e instanceof ApiError ? e.message : "Could not load this request." });
-    } finally { setDetailLoading(false); }
+    } finally { if (activeCase.current === id) setDetailLoading(false); }
   }, []);
 
-  const openCase = useCallback((id: string, tab?: CaseTab) => {
+  const openCase = useCallback(async (id: string, tab?: CaseTab) => {
+    if (activeCase.current) cancelAgentRuns(activeCase.current);
+    activeCase.current = id;
     setSelectedId(id); setInitialTab(tab); setActionError(null); setView("queue");
     window.history.replaceState(null, "", `?case=${encodeURIComponent(id)}`);
-    setBrief(null); loadPlan(id);  // the prepared action leads; the prep brief loads when its tab is opened
-    refreshCase(id, true);
+    setBrief(null); setPlan(null);
+    await refreshCase(id, true);
+    if (activeCase.current === id) loadPlan(id);
   }, [loadPlan, refreshCase]);
 
   // A link to /dashboard?case=CASE-1042&tab=plan opens that request on that tab.
@@ -124,9 +138,9 @@ export default function DashboardPage() {
     if (!selectedId) return;
     setActionBusy(true); setActionError(null);
     try {
-      await caseAction(selectedId, action, text, compliance);
+      await caseAction(selectedId, action, text, compliance, action === "approve" ? plan?.plan_id : undefined);
       await Promise.all([load(true), refreshCase(selectedId, false)]);
-    } catch (e) { setActionError(e instanceof ApiError ? e.message : "That did not go through. Try again."); }
+    } catch (e) { setActionError(e instanceof ApiError ? e.message : "That did not go through. Try again."); if (action === "approve") throw e; }
     finally { setActionBusy(false); }
   };
 

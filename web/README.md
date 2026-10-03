@@ -54,3 +54,16 @@ Browser API calls use the same-origin `/api` proxy to `http://127.0.0.1:8000`. H
 - `npx tsc --noEmit` and `npm run build` validate the frontend with type checking enabled.
 - The `/lanyard` route and the 3D card components are from the template and are not
   part of the product flow.
+
+## Accessible client flow and visible agent evidence
+
+The client workspace includes persistent larger-text, stronger-contrast, and automatic read-aloud
+controls. Audio comes from authenticated Amazon Polly; voice input uses the browser speech service.
+“My requests” shows plain-language status, readable message threads, and answers to advisor questions.
+The reassurance bar links to a contact-request flow; it does not place a call.
+
+Staff calls now use authenticated SSE. Agent evidence displays actual model/tool/source events and
+uncalibrated confidence, with no simulated progress. Forge packets require a passing independent
+record audit before their fields, drafts, copy controls, or approval appear. The backend also rejects
+missing or stale approval receipts. Sentinel displays verified SEC/IRS KB excerpts alongside its
+checklist. See the root README for corpus scope, AWS provisioning, limits, and browser acceptance.

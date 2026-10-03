@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { getNextSteps, ApiError, type NextSteps, type PlanStep } from "@/lib/api";
 import { AgentCard } from "./section";
+import { AgentEvidence } from "./agent-evidence";
 import { agentNote } from "./labels";
 
 const OWNER: Record<PlanStep["owner"], { label: string; cls: string }> = {
@@ -28,6 +29,7 @@ export function NextStepsPanel({ caseId }: { caseId: string }) {
   const finished = plan ? plan.steps.filter((_, i) => done[i]).length : 0;
   return (
     <AgentCard title="Next steps" agent="Planning agent" loading={loading} onRefresh={() => load(true)}>
+      <AgentEvidence caseId={caseId} operation="next-steps" />
       {loading && <p className="text-sm text-muted-foreground">Working out what has to happen next…</p>}
       {error && <p className="text-sm text-red-600">{error}</p>}
       {!loading && plan && (

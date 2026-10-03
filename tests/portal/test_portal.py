@@ -417,3 +417,39 @@ def test_authenticated_advisor_followup_preserves_portal_snapshot(setup):
         ).status_code
         == 403
     )
+
+
+def test_speech_is_authenticated_bounded_and_never_cached(setup, monkeypatch):
+    import io
+    from backend.portal import speech
+    c, p, _ = setup
+    calls = []
+    class Polly:
+        def synthesize_speech(self, **kw):
+            calls.append(kw)
+            return {'AudioStream': io.BytesIO(b'fake-mp3')}
+    monkeypatch.setattr(speech, 'polly', lambda: Polly())
+    monkeypatch.setattr(speech, '_requests', {})
+    assert c.post('/portal/speech', json={'text':'Hello'}).status_code == 401
+    c.cookies.set(COOKIE, token('user-0'))
+    assert c.post('/portal/speech', json={'text':'x'*2501}).status_code == 422
+    assert c.post('/portal/speech', json={'text':'   '}).status_code == 422
+    r = c.post('/portal/speech', json={'text':'What would you like help with?'})
+    assert r.status_code == 200 and r.content == b'fake-mp3'
+    assert r.headers['cache-control'] == 'no-store' and r.headers['content-type'] == 'audio/mpeg'
+    assert calls[0]['Engine'] == 'neural' and calls[0]['TextType'] == 'text'
+    for _ in range(14):c.post('/portal/speech',json={'text':'Hello'})
+    assert c.post('/portal/speech',json={'text':'Hello'}).status_code == 429
+
+
+def test_speech_service_error_keeps_text_fallback(setup, monkeypatch):
+    from backend.portal import speech
+    c, _, _ = setup
+    class Polly:
+        def synthesize_speech(self, **kw):
+            raise ClientError({'Error':{'Code':'ServiceFailure'}},'SynthesizeSpeech')
+    monkeypatch.setattr(speech, 'polly', lambda: Polly())
+    monkeypatch.setattr(speech, '_requests', {})
+    c.cookies.set(COOKIE, token('user-0'))
+    r=c.post('/portal/speech',json={'text':'Hello'})
+    assert r.status_code==503 and 'typing' in r.json()['message']

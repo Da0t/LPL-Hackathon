@@ -8,14 +8,12 @@ import {
   Brain, Layers, ClipboardList, PenLine, Loader2, Copy, Check, AlertTriangle, Workflow,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AgentEvidence, AuditVerdict } from "./agent-evidence";
 import type { ActionPlan } from "@/lib/api";
 
 const PIPELINE_STEPS = [
-  { label: "Understand", icon: Brain },
-  { label: "Classify", icon: Layers },
-  { label: "Prepare action", icon: ClipboardList },
-  { label: "Compliance check", icon: ShieldCheck },
-  { label: "Draft response", icon: PenLine },
+  { label: "Forge prepares", icon: ClipboardList },
+  { label: "Verifier audits", icon: ShieldCheck },
 ];
 
 function AgentPipeline({ stage, done }: { stage: number; done: boolean }) {
@@ -70,11 +68,11 @@ function ComplianceBadge({ status }: { status: string }) {
   return <span className={`inline-flex flex-none items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${m.cls}`}><m.icon className="h-3 w-3" />{m.label}</span>;
 }
 
-export function ActionPacket({ plan, loading, stage, onRegenerate, onApprove }: { plan: ActionPlan | null; loading: boolean; stage: number; onRegenerate: () => void; onApprove: () => Promise<void> }) {
+export function ActionPacket({ caseId, plan, loading, stage, onRegenerate, onApprove }: { caseId: string; plan: ActionPlan | null; loading: boolean; stage: number; onRegenerate: () => void; onApprove: () => Promise<void> }) {
   const [approving, setApproving] = useState(false);
   const [approved, setApproved] = useState(false);
   useEffect(() => { setApproved(false); }, [plan]);
-  const approve = async () => { setApproving(true); try { await onApprove(); setApproved(true); } finally { setApproving(false); } };
+  const approve = async () => { setApproving(true); try { await onApprove(); setApproved(true); } catch { /* Parent displays the approval error. */ } finally { setApproving(false); } };
   const actionTitle = (plan?.action_type || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   return (
     <div className="mt-5 overflow-hidden rounded-2xl border border-primary/30 bg-primary/[0.03]">
@@ -82,17 +80,20 @@ export function ActionPacket({ plan, loading, stage, onRegenerate, onApprove }: 
         <div className="flex items-center gap-2">
           <Workflow className="h-4 w-4 text-primary" />
           <span className="text-sm font-semibold">Agent prepared this action</span>
-          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">Prepared by Amazon Bedrock</span>
+          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">{plan?.note ? "Fallback preparation" : plan?.ai_mode === "bedrock" ? "Amazon Bedrock" : "Offline record checks"}</span>
         </div>
         <button onClick={onRegenerate} disabled={loading} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50">
           <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} /> {loading ? "Working…" : "Regenerate"}
         </button>
       </div>
       <div className="space-y-4 p-4">
+        <AgentEvidence caseId={caseId} operation="plan" />
+        {!loading && plan && <AuditVerdict audit={plan.audit} />}
         <AgentPipeline stage={stage} done={!loading && !!plan} />
-        {loading && <p className="text-center text-sm text-muted-foreground">Agents are gathering facts, running compliance checks, and drafting the next step…</p>}
+        {loading && <p className="text-center text-sm text-muted-foreground">Agents are preparing the packet and independently checking its facts…</p>}
         {!loading && !plan && <p className="text-sm text-muted-foreground">Couldn't prepare this action right now. Try Regenerate.</p>}
-        {!loading && plan && (
+        {!loading && plan && plan.audit?.verdict !== "pass" && <p className="text-sm">The packet is withheld. Review the findings and regenerate after correcting the record.</p>}
+        {!loading && plan && plan.audit?.verdict === "pass" && (
           <>
             <div className="rounded-xl border border-border bg-card p-4">
               <span className="rounded-md bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">{actionTitle}</span>
@@ -110,7 +111,7 @@ export function ActionPacket({ plan, loading, stage, onRegenerate, onApprove }: 
             </div>
             {plan.compliance_checks?.length > 0 && (
               <div className="rounded-xl border border-border bg-card p-4">
-                <div className="flex items-center gap-2 text-sm font-medium"><ShieldCheck className="h-4 w-4 text-primary" /> Compliance checks , auto-run</div>
+                <div className="flex items-center gap-2 text-sm font-medium"><ShieldCheck className="h-4 w-4 text-primary" /> Preparation checks · requires human review</div>
                 <ul className="mt-3 space-y-2.5">
                   {plan.compliance_checks.map((c, i) => (
                     <li key={i} className="flex items-start gap-2">
@@ -128,10 +129,10 @@ export function ActionPacket({ plan, loading, stage, onRegenerate, onApprove }: 
             <div className="flex flex-wrap items-center gap-3 pt-1">
               {approved ? (
                 <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
-                  <CheckCircle2 className="h-4 w-4" /> Approved. Nothing was actually sent , synthetic demo.
+                  <CheckCircle2 className="h-4 w-4" /> Approval recorded. No money moved or message was sent.
                 </div>
               ) : (
-                <Button onClick={approve} disabled={approving} className="px-5">{approving ? "Approving…" : "Approve & send"}</Button>
+                <Button onClick={approve} disabled={approving} className="px-5">{approving ? "Approving…" : "Approve reviewed packet"}</Button>
               )}
               <span className="text-xs text-muted-foreground">You approve; the agent did the prep. Nothing is executed.</span>
             </div>

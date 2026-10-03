@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import { ReadAloudButton } from "@/components/portal/accessibility";
 import { Button } from "@/components/ui/button";
 import { getMyRequests, replyToRequest, ApiError, type MyRequest } from "@/lib/api";
 
@@ -8,7 +9,7 @@ const WHERE: Record<MyRequest["lifecycle"], string> = {
   new: "Received. We're finding the right person for you.",
   awaiting_client: "We need an answer from you.",
   assigned: "With an advisor.",
-  scheduled: "Your conversation is scheduled.",
+  scheduled: "Your team recorded a meeting plan. Check the details with them.",
   resolved: "Done.",
 };
 
@@ -25,9 +26,11 @@ export function MyRequests({ clientId }: { clientId: string }) {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    getMyRequests(clientId).then((r) => setRequests(r.requests)).catch(() => setRequests([]));
+    getMyRequests(clientId).then((r) => {setRequests(r.requests);setError(null);}).catch(()=>setError("We could not update your request status. Choose Refresh to try again."));
   }, [clientId]);
   useEffect(() => { setRequests([]); setError(null); load(); }, [load]);
+
+  useEffect(()=>{const timer=setInterval(()=>{if(document.visibilityState==="visible")load();},15000);return()=>clearInterval(timer);},[load]);
 
   const send = async (caseId: string) => {
     setSending(caseId); setError(null);
@@ -39,10 +42,11 @@ export function MyRequests({ clientId }: { clientId: string }) {
     finally { setSending(null); }
   };
 
-  if (requests.length === 0) return null;
+  if (requests.length === 0 && !error) return null;
   return (
     <section className="pb-12">
-      <h2 className="text-2xl font-semibold tracking-tight">Your requests</h2>
+      <div className="request-followup-heading"><h2 className="text-2xl font-semibold tracking-tight">What happens next</h2><button className="portal-secondary" onClick={load}>Refresh status</button></div>
+      <p>Your request asks for a conversation. No money has moved and no transaction has been approved.</p>
       {error && <p role="alert" className="mt-3 text-sm text-red-400">{error}</p>}
       <ul className="mt-4 space-y-4">
         {requests.map((r) => (
@@ -51,6 +55,7 @@ export function MyRequests({ clientId }: { clientId: string }) {
             <p className={`mt-2 text-sm ${r.awaiting_reply ? "font-medium text-primary" : "text-muted-foreground"}`}>
               {WHERE[r.lifecycle]} <span className="text-muted-foreground">Sent {when(r.created_at)}.</span>
             </p>
+            <ReadAloudButton text={[r.request,WHERE[r.lifecycle],...r.messages.map(m=>`${m.from==="client"?"You said":"Your team asks"}: ${m.text}`)].join(". ")} label="Read request and messages" />
             {r.messages.length > 0 && (
               <ul className="mt-4 space-y-3 border-t border-border pt-4">
                 {r.messages.map((m, i) => (

@@ -130,7 +130,7 @@ def staff_brief(case_id: str, request: Request, body: dict | None = Body(default
 def staff_action(case_id: str, body: dict, request: Request, _role: str = Depends(require_staff)):
     """Record an advisor workflow action (claim/note/clarify/schedule/resolve/approve/escalate) as a history event."""
     return _staff(request).action(case_id, body.get("action", ""), body.get("text"), body.get("compliance"),
-                                  ai_mode=request.app.state.settings.ai_mode)
+                                  ai_mode=request.app.state.settings.ai_mode, plan_id=body.get("plan_id"))
 
 
 @router.post("/staff/cases/{case_id}/plan", responses=_ERRORS, tags=["staff"])
