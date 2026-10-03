@@ -7,6 +7,8 @@ set -euo pipefail
 : "${COHERENT_ORIGIN_TOKEN:?}"
 : "${COHERENT_PORTAL_CONFIG_B64:?}"
 : "${COHERENT_KB_ID:?}"
+COHERENT_GUARDRAIL_ID="${COHERENT_GUARDRAIL_ID:-}"
+COHERENT_GUARDRAIL_VERSION="${COHERENT_GUARDRAIL_VERSION:-}"
 
 dnf install -y git nginx python3.12 python3.12-pip nodejs22 nodejs22-npm
 alternatives --set node /usr/bin/node-22
@@ -42,6 +44,9 @@ COHERENT_PORTAL_CONFIG=/etc/coherent/portal-aws.json
 COHERENT_ALLOWED_ORIGINS=$COHERENT_PUBLIC_ORIGIN
 COHERENT_SECURE_COOKIES=1
 EOF
+if [ -n "$COHERENT_GUARDRAIL_ID" ] && [ -n "$COHERENT_GUARDRAIL_VERSION" ]; then
+  printf 'BEDROCK_GUARDRAIL_ID=%s\nBEDROCK_GUARDRAIL_VERSION=%s\n' "$COHERENT_GUARDRAIL_ID" "$COHERENT_GUARDRAIL_VERSION" >> /etc/coherent/backend.env
+fi
 chmod 640 /etc/coherent/backend.env
 chgrp ec2-user /etc/coherent /etc/coherent/portal-aws.json /etc/coherent/backend.env
 

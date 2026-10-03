@@ -22,6 +22,8 @@ ROOT = Path(__file__).resolve().parents[1]
 STATE_PATH = ROOT / "var/deployment-aws.json"
 PORTAL = json.loads((ROOT / "var/portal-aws.json").read_text())
 KB = json.loads((ROOT / "var/knowledge-base.json").read_text())
+GUARDRAIL_PATH = ROOT / "var/guardrail-aws.json"
+GUARDRAIL = json.loads(GUARDRAIL_PATH.read_text()) if GUARDRAIL_PATH.exists() else None
 REGION = "us-east-1"
 MODEL = "anthropic.claude-haiku-4-5-20251001-v1:0"
 PROFILE = "CoherentDemoWebProfile"
@@ -61,6 +63,10 @@ def check_existing():
     kb = session.client("bedrock-agent").get_knowledge_base(knowledgeBaseId=KB["knowledge_base_id"])["knowledgeBase"]
     if kb["status"] != "ACTIVE":
         raise RuntimeError("Compliance knowledge base is not active")
+    if GUARDRAIL:
+        guardrail = session.client("bedrock").get_guardrail(guardrailIdentifier=GUARDRAIL["guardrail_id"], guardrailVersion=GUARDRAIL["version"])
+        if guardrail["status"] != "READY":
+            raise RuntimeError("Configured Bedrock Guardrail is not ready")
     sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     status = subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT, text=True)
     if status:
@@ -88,6 +94,7 @@ def ensure_instance_role():
             ]},
             {"Effect": "Allow", "Action": "bedrock:Retrieve", "Resource": f"arn:aws:bedrock:{REGION}:{account}:knowledge-base/{KB['knowledge_base_id']}"},
             {"Effect": "Allow", "Action": "polly:SynthesizeSpeech", "Resource": "*"},
+            *([{"Effect": "Allow", "Action": "bedrock:ApplyGuardrail", "Resource": f"arn:aws:bedrock:{REGION}:{account}:guardrail/{GUARDRAIL['guardrail_id']}"}] if GUARDRAIL else []),
         ],
     }
     iam.put_role_policy(RoleName=ROLE, PolicyName="CoherentDemoRuntime", PolicyDocument=json.dumps(policy))
@@ -206,7 +213,7 @@ def install(sha):
         command = f"""set -e
 curl --fail --silent --show-error --location 'https://raw.githubusercontent.com/Da0t/LPL-Hackathon/{sha}/scripts/install_aws_host.sh' -o /tmp/install-coherent.sh
 echo '{digest}  /tmp/install-coherent.sh' | sha256sum -c -
-COHERENT_GIT_SHA='{sha}' COHERENT_PUBLIC_ORIGIN='https://{state['distribution_domain']}' COHERENT_ORIGIN_TOKEN='{state['origin_token']}' COHERENT_PORTAL_CONFIG_B64='{config_b64}' COHERENT_KB_ID='{KB['knowledge_base_id']}' bash /tmp/install-coherent.sh
+COHERENT_GIT_SHA='{sha}' COHERENT_PUBLIC_ORIGIN='https://{state['distribution_domain']}' COHERENT_ORIGIN_TOKEN='{state['origin_token']}' COHERENT_PORTAL_CONFIG_B64='{config_b64}' COHERENT_KB_ID='{KB['knowledge_base_id']}' COHERENT_GUARDRAIL_ID='{GUARDRAIL['guardrail_id'] if GUARDRAIL else ''}' COHERENT_GUARDRAIL_VERSION='{GUARDRAIL['version'] if GUARDRAIL else ''}' bash /tmp/install-coherent.sh
 """
         result = ssm.send_command(InstanceIds=[state["instance_id"]], DocumentName="AWS-RunShellScript", Parameters={"commands": [command], "executionTimeout": ["3600"]}, TimeoutSeconds=3600, Comment="Install pinned Coherent demo release")
         state["ssm_command_id"] = result["Command"]["CommandId"]

@@ -1,28 +1,12 @@
 {
-  "comment": "Example Bedrock Guardrail config for SamePage. Create it once with the AWS CLI (see AWS_SETUP.md), then set BEDROCK_GUARDRAIL_ID and BEDROCK_GUARDRAIL_VERSION. This enforces the product's compliance boundary: the assistant must not give investment/tax advice, and client PII is masked in model I/O.",
-  "name": "samepage-intake-guardrail",
-  "description": "Blocks investment/tax/legal advice and masks PII for the SamePage intake and triage agent.",
-  "topicPolicyConfig": {
-    "topicsConfig": [
-      {
-        "name": "InvestmentOrTaxAdvice",
-        "definition": "Specific recommendations to buy, sell, or hold investments, or definitive statements about tax treatment or legal outcomes for the client's situation.",
-        "examples": [
-          "Should I sell my index funds now?",
-          "How much tax will I owe if I withdraw this?",
-          "Is a Roth conversion right for me?"
-        ],
-        "type": "DENY"
-      }
-    ]
-  },
+  "name": "coherent-demo-pii-guardrail",
+  "description": "Blocks full SSNs and payment card numbers during Coherent intake without blocking ordinary retirement questions or masked account identifiers.",
   "sensitiveInformationPolicyConfig": {
     "piiEntitiesConfig": [
       {"type": "US_SOCIAL_SECURITY_NUMBER", "action": "BLOCK"},
-      {"type": "CREDIT_DEBIT_CARD_NUMBER", "action": "BLOCK"},
-      {"type": "US_BANK_ACCOUNT_NUMBER", "action": "ANONYMIZE"}
+      {"type": "CREDIT_DEBIT_CARD_NUMBER", "action": "BLOCK"}
     ]
   },
   "blockedInputMessaging": "I can't help with that here, but a person can. Would you like to talk to someone?",
-  "blockedOutputsMessaging": "I can't advise on that. I can help you describe your request so an advisor can follow up."
+  "blockedOutputsMessaging": "I can't share that sensitive information. An advisor can help."
 }

@@ -96,7 +96,7 @@ application code, so a confident but wrong model answer can never become a false
 - **Safety by construction.** The adapter injects authorized ids (never the model's), drops invented
   accounts, forces fraud cases to specialist review, and never asserts balances or history. The
   compliance verdict is computed in code from what the reviewer quoted, never taken from the model.
-  Optional **Bedrock Guardrails** block investment and tax advice.
+  An optional **Bedrock Guardrail** blocks full SSNs and payment card numbers during intake.
 - **Amazon Transcribe.** A financial custom vocabulary (`samepage-financial-terms`) is created and
   the streaming adapter is built in `backend/aws/transcribe.py`, but no page calls it yet. Voice
   input in the demo uses the browser's speech service.
@@ -118,7 +118,8 @@ origin also requires a private header set by this CloudFront distribution. Login
 on the hosted URL. CloudFront forwards cookies, headers, query strings, and all request methods with
 caching disabled, so authenticated responses are not shared.
 
-First complete the existing portal and Knowledge Base provisioning below, then run this from a clean,
+First complete the existing portal and Knowledge Base provisioning below. Run
+`python -m scripts.provision_guardrail` to enable the tested PII Guardrail, then run this from a clean,
 pushed `main` checkout with your authorized AWS session available to boto3:
 
 ```bash
@@ -130,7 +131,8 @@ The resumable script records resource IDs in ignored `var/deployment-aws.json` a
 URL after the host and CloudFront are ready. Re-run it after pushing a new main commit to rebuild the
 host. Check the public `/login` and `/api/health` paths, then sign in with the private demo identities
 in `var/demo-access.json`. The deployment uses the same fictional accounts and cloud portal records as
-the local app. The case SQLite file is separate on the instance's EBS disk; it survives reboot and
+the local app. If `var/guardrail-aws.json` exists, deployment grants the instance access to that one
+Guardrail and configures its version for Bedrock intake. The case SQLite file is separate on the instance's EBS disk; it survives reboot and
 restart. Do not terminate the instance if you need its case history.
 
 This is a **single-instance hackathon deployment** with synthetic data. It has no automatic failover
