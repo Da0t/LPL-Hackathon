@@ -216,7 +216,7 @@ At each milestone, every agent reports four facts to the team: branch and commit
 | Synthetic data only | **Design meets:** seed all clients, accounts, balances, advisors, and events with fictional data. Audit the final demo and code ZIP. |
 | Private S3 and safe credentials | **Design meets:** no S3 in the core; if added, bucket must remain private. Use IAM and no hard-coded secrets. |
 | Startup acquisition story | **Met by concept:** an accessible intake and routing layer could plug into LPL investor and advisor experiences; claim it as a proposed acquisition opportunity, not an existing LPL gap proven by this prototype. |
-| Two main awards | Select **Startup We'd Buy Tomorrow** and **Biggest Business Impact** as the team specified. Best Use of AWS is automatic. |
+| Two main awards | Select **Best Technical Execution** and **Best Customer Experience** as the team specified. Best Use of AWS is automatic. |
 | Working prototype, LPL template deck, code ZIP, submission form, deadline | **Open deliverables:** build, validate, package, and submit by **October 3, 2026, 9:00 AM PT**. Remain available for judging. |
 
 The largest product risk is an AI guess becoming a false account fact. Make uncertainty visible, require client confirmation for account and amount, retain the client's original wording, and require staff approval for routing. The largest build risk is live speech; keep the text path complete and working before adding streaming.

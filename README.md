@@ -6,8 +6,8 @@ Roth thing from my old job"*; Coherent notices there is no Roth account, surface
 IRA, confirms what the client meant, and routes a structured request to the right advisor, who opens
 it to a prepared action packet instead of a cold transcript.
 
-Built for the **2026 LPL Financial University Hackathon**. Awards targeted: *Startup We'd Buy
-Tomorrow* and *Biggest Business Impact*, plus the automatic *Best Use of AWS*.
+Built for the **2026 LPL Financial University Hackathon**. Awards targeted: *Best Technical
+Execution* and *Best Customer Experience*, plus the automatic *Best Use of AWS*.
 
 > All people and financial records are fictional. No real financial transaction, appointment, email,
 > or SMS is ever sent.
