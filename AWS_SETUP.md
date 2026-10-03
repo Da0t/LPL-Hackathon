@@ -55,6 +55,12 @@ Haiku-class model on the allowlist) and the same or a slightly stronger model fo
 triage. Set the chosen ID as `BEDROCK_MODEL_ID` and tell the team the **model
 name and ID** (never credentials).
 
+**Verified choice:** `BEDROCK_MODEL_ID=us.anthropic.claude-haiku-4-5-20251001-v1:0`
+(Claude Haiku 4.5, via its US inference profile). Confirmed enabled in the event
+account and passing the live smoke test below. Haiku 4.5 is fast, cheap, and
+strong at tool use, so it is a good fit for both intake and triage. Nova Lite
+(`us.amazon.nova-2-lite-v1:0`) is a drop-in alternative if ever needed.
+
 ## 4. Least-privilege IAM
 
 Use `infra/iam_policy.json`. Replace `ACCOUNT_ID`, the model ID / inference
@@ -95,6 +101,17 @@ python -m tests.aws.smoke_live
 Expected: intake notices there is no Roth IRA for CLIENT-017 and asks about the
 rollover IRA; triage of the sign-in case returns `fraud_or_security` and
 `routing_hint: security_specialist_review`. Prints `SMOKE RESULT: PASS`.
+
+**Status: verified PASS** against the event account with
+`us.anthropic.claude-haiku-4-5-20251001-v1:0`. Credentials come from the Workshop
+Studio participant role under AWS profile `lpl-hackathon` (temporary; re-paste
+when they expire). Exact command used:
+
+```bash
+AWS_PROFILE=lpl-hackathon AWS_REGION=us-east-1 \
+  BEDROCK_MODEL_ID=us.anthropic.claude-haiku-4-5-20251001-v1:0 \
+  SAMEPAGE_AI_MODE=bedrock python3 -m tests.aws.smoke_live
+```
 
 ## 7. Offline unit tests (no credentials needed)
 
