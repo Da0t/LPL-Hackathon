@@ -1,0 +1,113 @@
+{
+  "meta": {
+    "version": "1",
+    "synthetic_only": true,
+    "description": "Fictional accounts. Balances are snapshots as of balance_as_of, not amounts available to withdraw. ownership and opened_date are optional additions."
+  },
+  "accounts": [
+    {
+      "account_id": "ACCT-201",
+      "client_id": "CLIENT-017",
+      "account_type": "rollover_ira",
+      "familiar_label": "Retirement account from former employer",
+      "masked_identifier": "****4821",
+      "balance": 84000,
+      "currency": "USD",
+      "balance_as_of": "2026-10-01",
+      "source_id": "ACCOUNT-RECORD-201",
+      "ownership": "individual",
+      "opened_date": "2023-05-30"
+    },
+    {
+      "account_id": "ACCT-202",
+      "client_id": "CLIENT-017",
+      "account_type": "brokerage",
+      "familiar_label": "Everyday investments",
+      "masked_identifier": "****7314",
+      "balance": 23100,
+      "currency": "USD",
+      "balance_as_of": "2026-10-01",
+      "source_id": "ACCOUNT-RECORD-202",
+      "ownership": "individual",
+      "opened_date": "2024-01-16"
+    },
+    {
+      "account_id": "ACCT-301",
+      "client_id": "CLIENT-022",
+      "account_type": "roth_ira",
+      "familiar_label": "Roth retirement account",
+      "masked_identifier": "****6205",
+      "balance": 51750,
+      "currency": "USD",
+      "balance_as_of": "2026-10-01",
+      "source_id": "ACCOUNT-RECORD-301",
+      "ownership": "individual",
+      "opened_date": "2019-03-04"
+    },
+    {
+      "account_id": "ACCT-302",
+      "client_id": "CLIENT-022",
+      "account_type": "brokerage",
+      "familiar_label": "Long-term investment account",
+      "masked_identifier": "****1187",
+      "balance": 38400,
+      "currency": "USD",
+      "balance_as_of": "2026-10-01",
+      "source_id": "ACCOUNT-RECORD-302",
+      "ownership": "individual",
+      "opened_date": "2020-08-10"
+    },
+    {
+      "account_id": "ACCT-303",
+      "client_id": "CLIENT-022",
+      "account_type": "traditional_ira",
+      "familiar_label": "Older retirement account",
+      "masked_identifier": "****9052",
+      "balance": 17300,
+      "currency": "USD",
+      "balance_as_of": "2026-10-01",
+      "source_id": "ACCOUNT-RECORD-303",
+      "ownership": "individual",
+      "opened_date": "2019-02-21"
+    },
+    {
+      "account_id": "ACCT-401",
+      "client_id": "CLIENT-031",
+      "account_type": "traditional_ira",
+      "familiar_label": "Retirement account",
+      "masked_identifier": "****3390",
+      "balance": 142500,
+      "currency": "USD",
+      "balance_as_of": "2026-10-01",
+      "source_id": "ACCOUNT-RECORD-401",
+      "ownership": "individual",
+      "opened_date": "2015-04-27"
+    },
+    {
+      "account_id": "ACCT-402",
+      "client_id": "CLIENT-031",
+      "account_type": "joint_brokerage",
+      "familiar_label": "Joint investments with spouse",
+      "masked_identifier": "****5568",
+      "balance": 61250,
+      "currency": "USD",
+      "balance_as_of": "2026-10-01",
+      "source_id": "ACCOUNT-RECORD-402",
+      "ownership": "joint",
+      "opened_date": "2015-05-11"
+    },
+    {
+      "account_id": "ACCT-403",
+      "client_id": "CLIENT-031",
+      "account_type": "cash_management",
+      "familiar_label": "Cash account",
+      "masked_identifier": "****2046",
+      "balance": 9800,
+      "currency": "USD",
+      "balance_as_of": "2026-10-01",
+      "source_id": "ACCOUNT-RECORD-403",
+      "ownership": "individual",
+      "opened_date": "2021-11-02"
+    }
+  ]
+}

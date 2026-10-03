@@ -1,0 +1,8 @@
+# Agent 1 (AWS) dependencies. Agent 2 includes these from the app requirements.txt.
+# boto3/botocore must be recent enough for the Bedrock Converse API + tool use.
+boto3>=1.35.0
+botocore>=1.35.0
+
+# Amazon Transcribe Streaming (voice input with the financial custom vocabulary).
+# Vocabulary management uses boto3 alone; this is only needed for live streaming.
+amazon-transcribe>=0.6.2

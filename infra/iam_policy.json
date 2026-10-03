@@ -1,0 +1,32 @@
+{
+  "Version": "2012-10-17",
+  "Comment": "Least-privilege policy for the SamePage AWS adapter (Agent 1). Replace ACCOUNT_ID, REGION (us-east-1), the model ID, and the optional guardrail ID with values verified in the event account. Scope to the single model you actually use; do not use wildcards.",
+  "Statement": [
+    {
+      "Sid": "InvokeOneBedrockModel",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
+      ],
+      "Resource": [
+        "arn:aws:bedrock:us-east-1::foundation-model/REPLACE_WITH_MODEL_ID",
+        "arn:aws:bedrock:us-east-1:ACCOUNT_ID:inference-profile/REPLACE_WITH_INFERENCE_PROFILE_ID"
+      ]
+    },
+    {
+      "Sid": "OptionalGuardrail",
+      "Effect": "Allow",
+      "Action": ["bedrock:ApplyGuardrail"],
+      "Resource": [
+        "arn:aws:bedrock:us-east-1:ACCOUNT_ID:guardrail/REPLACE_WITH_GUARDRAIL_ID"
+      ]
+    },
+    {
+      "Sid": "OptionalTranscribeStreaming",
+      "Effect": "Allow",
+      "Action": ["transcribe:StartStreamTranscription"],
+      "Resource": "*"
+    }
+  ]
+}

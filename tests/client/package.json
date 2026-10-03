@@ -1,0 +1,10 @@
+{
+  "name": "samepage-client-checks",
+  "private": true,
+  "scripts": {
+    "test": "node --test client.test.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}
