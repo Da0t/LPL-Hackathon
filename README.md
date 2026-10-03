@@ -1,273 +1,269 @@
 # SamePage
 
-SamePage helps a client describe a financial service need in everyday words, verify which account they
-mean, and send a confirmed request to the right person. A client can say "the retirement money from my
-old job" and reach the right advisor without guessing which account they meant.
+**SamePage turns everyday language into a confirmed, correctly routed wealth-management request.**
+A client can say *"I need six thousand dollars from the Roth thing from my old job"* and SamePage
+notices there is no Roth account, surfaces the real rollover IRA, explains the term in plain words,
+confirms what the client meant, and hands an advisor a structured request they can trust, instead of
+guessing.
 
-This repository is the LPL hackathon prototype built by four parallel agents. This README covers the
-**backend (Agent 2)**: the FastAPI app that implements the frozen version-one contract, local SQLite
-storage, the authorized tool callbacks given to the language model, deterministic routing, and tests.
+Built for the **2026 LPL Financial University Hackathon** by four parallel AI agents against a frozen
+version-one API contract. Awards targeted: *Startup We'd Buy Tomorrow* and *Biggest Business Impact*,
+plus the automatic *Best Use of AWS*.
 
-- Frozen contract: [`contracts/API_V1.md`](contracts/API_V1.md) with the fixture
-  [`contracts/demo_fixture_v1.json`](contracts/demo_fixture_v1.json)
-- Launch and acceptance steps: [`INTEGRATION_RUNBOOK.md`](INTEGRATION_RUNBOOK.md)
-- Generated request/response examples from a real run: [`docs/API_EXAMPLES.md`](docs/API_EXAMPLES.md)
-- Product spec: [`SAMEPAGE_PRODUCT_SPEC.md`](SAMEPAGE_PRODUCT_SPEC.md); briefs: [`agent-briefs/`](agent-briefs/)
+> All data is synthetic. The demo role switcher is **simulated** access control, not production
+> authentication. No real LPL system, transaction, appointment, or message ever occurs.
 
-All data is synthetic. The demo role switcher is **simulated access control**, not production
-authentication. No message, transaction, appointment, or real LPL system call ever occurs.
+---
+
+## The demo in 60 seconds
+
+1. **Client intake** (`/client`): a client speaks or types a loose request. The agent proposes at
+   most three plain-language interpretations grounded in the client's real accounts, explains terms
+   from an approved glossary, and asks one question at a time, never inventing an account or amount.
+2. **Financial-term normalization:** shorthand, acronyms, and phonetic fragments resolve to the
+   right approved term, "R O I" -> *return on investment*, "the tax form" -> *1099-R*, "RMD",
+   "401k", then the client confirms.
+3. **Client confirms** -> a structured **case** is created (original words, confirmed wording,
+   account snapshot with source ids, category tags, unresolved questions).
+4. **Staff triage** (`/staff`): the advisor queue updates. Staff open the case, see the two-page
+   record and ranked advisor candidates with reasons, and assign one. A possible-fraud case routes to
+   **security specialist review**, never to a general advisor.
+
+The **"Advisor dashboard ->"** button on the client header jumps straight to the staff view for the
+demo.
+
+---
+
+## Architecture
+
+```
+          Client (older investor, plain language)          Staff / advisor
+                        │                                        │
+                 /client page (Agent 3)                   /staff page (Agent 4)
+                        │   browser speech + text               │
+                        └───────────────┬───────────────────────┘
+                                        │  frozen v1 HTTP contract
+                             FastAPI backend (Agent 2)
+                     intake state machine · triage · routing
+                     authorized tool callbacks · SQLite cases
+                                        │
+                     ┌──────────────────┴───────────────────┐
+             Agent 1 AWS adapter                      Synthetic data (Agent 4)
+        Amazon Bedrock (Converse + tools)         clients · accounts · events
+        intake_turn() / triage_case()             advisors · glossary · cases
+        + Transcribe custom vocabulary            (data/ or backend/fixtures/)
+```
+
+The language model only ever **interprets and classifies**. Every fact, authorization check,
+account snapshot, security route, and advisor ranking is produced by deterministic application code,
+so a confident but wrong model answer can never become a false account fact.
+
+### The four agents (how the work was split)
+
+| Agent | Owns | Key paths |
+| --- | --- | --- |
+| **Agent 1 , AWS** | Amazon Bedrock intake/triage adapter, model config, pacing/retry, Guardrails hook, Transcribe voice | `backend/aws/`, `infra/`, `AWS_SETUP.md` |
+| **Agent 2 , Backend** | FastAPI app, the frozen v1 contract, SQLite storage, authorized tools, routing, validation | `backend/`, `tests/backend/` |
+| **Agent 3 , Client UI** | The client intake page: text + browser speech, suggestions, clarification, review/confirm | `frontend/client/`, `tests/client/` |
+| **Agent 4 , Staff + Data** | The staff dashboard, synthetic data, the shared data store, demo script | `frontend/staff/`, `data/`, `DEMO_SCRIPT.md` |
+
+Each agent worked on its own branch against `contracts/API_V1.md`; all five pull requests are merged
+to `main`.
+
+---
+
+## How we use AWS
+
+SamePage is deliberately a **small agent that works and can be explained** rather than a pile of
+services. Every AWS choice earns its place.
+
+### Amazon Bedrock , the language brain (required, live)
+- **Converse API with native tool use.** The intake and triage agents call narrow, **client-scoped**
+  tools (list the client's real accounts, look up an approved definition, suggest approved terms,
+  read account history, search the advisor directory) and return their answer by calling a
+  schema-constrained `submit_*` tool, so parsing is deterministic and the model cannot emit an
+  invalid shape. Works uniformly across the allowlist (Claude, Nova, Llama).
+- **Right-sized model.** `us.anthropic.claude-haiku-4-5-20251001-v1:0` (Claude Haiku 4.5) , fast,
+  cheap, strong at tool use, verified enabled in the event account and passing the live smoke test.
+  Swappable via `BEDROCK_MODEL_ID` with no code change.
+- **Safety by construction.** The adapter injects the authorized client/account id itself (never the
+  model's), drops any suggested account the client does not own, discards any model-asserted balance
+  or history, and forces `fraud_or_security` cases to specialist review. An optional **Bedrock
+  Guardrail** blocks investment/tax advice and masks PII (`infra/guardrail.json`).
+- **Reliability.** Calls are paced to roughly one per second and retried with bounded exponential
+  backoff on throttling; a hard failure raises a typed error that preserves the client's draft and
+  offers a person, rather than crashing the demo.
+
+### Financial-term normalization (grounded in the approved glossary)
+Spoken/typed shorthand maps to approved terms before anything is shown. "R O I" -> *return on
+investment*, "the tax form" -> *1099-R*, "RMD", "401k", "the Roth thing". The candidates come only
+from the glossary (`Store.suggest_terms`), so the agent can suggest and confirm, never invent.
+
+### Amazon Transcribe , voice (custom vocabulary live)
+A **custom vocabulary** of financial terms (`samepage-financial-terms`, created and `READY` in the
+account) biases speech-to-text toward the right words. `backend/aws/transcribe.py` uses it for live
+streaming and file transcription. The client page ships browser speech as the default (labeled as a
+browser feature); Transcribe is the AWS-native upgrade. No S3 is required for the core flow.
+
+### Secure and cost-aware by default
+- **No credentials in code.** Region and model come from the environment; boto3 uses the event
+  account's credential chain. Nothing secret is committed (`.gitignore` blocks `.env`, `.aws/`,
+  `*.pem`, local databases).
+- **Least privilege.** `infra/iam_policy.json` grants only `bedrock:InvokeModel` on the single model
+  (plus optional `ApplyGuardrail` / `StartStreamTranscription`), no wildcards.
+- **`us-east-1`**, synthetic data only, S3 avoided in the core (and private if ever added).
+
+Full setup, the model-verification helper, and the live smoke test are in **[`AWS_SETUP.md`](AWS_SETUP.md)**.
+
+---
+
+## Repository structure
+
+```
+LPL-Hackathon/
+├── backend/                     Agent 2 , FastAPI application
+│   ├── main.py                  app factory + `app` entrypoint, error envelope, static pages, CLI
+│   ├── api.py                   the seven contract routes + /health, /demo helpers
+│   ├── schemas.py               pydantic models, taxonomy, statuses, destinations
+│   ├── store.py                 SQLite repository + tolerant seed loader
+│   ├── settings.py              environment configuration
+│   ├── reset_demo.py            demo reset CLI (reset.py is an alias)
+│   ├── fixtures/                fallback copy of Agent 4's data (clients, accounts, …, glossary)
+│   ├── services/
+│   │   ├── intake.py            session state machine (start / turn / confirm)
+│   │   ├── triage.py            case builder: record-backed facts, flags, routing
+│   │   ├── case_facts.py        account context, relevant events, sourced conflicts
+│   │   ├── staff.py             queue, case document, candidates, assignment
+│   │   ├── routing.py           deterministic destination + advisor ranking
+│   │   ├── tools.py             authorized tool callbacks (incl. suggest_terms)
+│   │   ├── validation.py        sanitizes adapter output
+│   │   ├── mock_agent.py        offline adapter with Agent 1's signatures
+│   │   ├── agent_adapter.py     loads mock / stub / bedrock, timeout, sync-or-async
+│   │   ├── auth.py              demo role switcher (simulated access control)
+│   │   └── text_rules.py        security keywords, account-term mentions, amounts
+│   └── aws/                     Agent 1 , AWS integration
+│       ├── bedrock_agent.py     Bedrock Converse tool-use loop: intake_turn / triage_case
+│       ├── config.py            region/model/guardrail/pacing from env (no creds in code)
+│       └── transcribe.py        Transcribe streaming + financial custom vocabulary
+├── frontend/
+│   ├── client/                  Agent 3 , client intake page (served at /client)
+│   └── staff/                   Agent 4 , staff dashboard (served at /staff) + dev_server.py
+├── data/                        Agent 4 , synthetic seed data + shared store
+│   ├── clients.json accounts.json events.json advisors.json glossary.json cases.json
+│   ├── store.py                 read-only data layer + the four tool callbacks + suggest_terms
+│   └── CONTRACT_V2_PROPOSAL.md  optional additive fields the staff page already reads
+├── contracts/
+│   ├── API_V1.md                the frozen version-one HTTP contract
+│   ├── demo_fixture_v1.json     fixed integration fixture (CLIENT-017, ACCT-201, ADV-03, CASE-1042)
+│   └── mock_api.py              standalone mock (port 8001) for isolated UI work
+├── infra/
+│   ├── iam_policy.json          least-privilege IAM for the adapter
+│   └── guardrail.json           optional Bedrock Guardrail definition
+├── tests/
+│   ├── aws/                     Agent 1 adapter: tool loop, no invented accounts, Transcribe vocab
+│   ├── data/                    term-normalization matching
+│   ├── backend/                 contract, scenarios, rules, store, app
+│   └── client/                  client-page JS tests (Node) + demo screenshots
+├── docs/API_EXAMPLES.md         request/response examples from a real run
+├── scripts/generate_api_examples.py
+├── AWS_SETUP.md                 Agent 1: AWS setup, model verification, smoke test, the seam
+├── INTEGRATION_RUNBOOK.md       launch + acceptance steps
+├── HACKATHON_PROJECT_BRIEF.md   rules, constraints, judging, schedule
+├── SAMEPAGE_PRODUCT_SPEC.md     the product, journeys, data contracts
+├── DEMO_SCRIPT.md               the presentation walk-through
+├── requirements.txt             app + tests + Agent 1 pins (one install covers everything)
+└── requirements-aws.txt         Agent 1 AWS dependencies (mirrored into requirements.txt)
+```
+
+---
 
 ## Run it
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt          # FastAPI, Uvicorn, tests, and Agent 1's boto3 pins
-python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+pip install -r requirements.txt            # FastAPI, Uvicorn, pydantic, boto3, amazon-transcribe, tests
 ```
 
-`python -m backend.main` is equivalent. Open <http://127.0.0.1:8000/> for links to the client page
-(`/client`, Agent 3), the staff page (`/staff`, Agent 4), interactive API docs (`/docs`), and
-`/health`. If a page's files are not on disk yet the route shows a placeholder; the real files are
-served as soon as they exist, no restart needed.
-
-### The judged path: live Amazon Bedrock
+### Live Amazon Bedrock (the judged path)
 
 ```bash
 export AWS_REGION=us-east-1
-export BEDROCK_MODEL_ID=<verified allowlisted model id>   # see AWS_SETUP.md (Agent 1)
+export BEDROCK_MODEL_ID=us.anthropic.claude-haiku-4-5-20251001-v1:0   # verify in the event account
 export SAMEPAGE_AI_MODE=bedrock
+# credentials: event-account profile (e.g. AWS_PROFILE=lpl-hackathon) or standard boto3 chain
 python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
 
-`SAMEPAGE_AI_MODE=bedrock` imports Agent 1's `backend/aws/bedrock_agent.py` and **fails fast at
-startup** if it cannot, so the judged demo never silently runs on a mock. The landing page and
-`/health` (`live_model: true/false`) show which adapter is active. A model or AWS error at runtime
-preserves the client's draft and returns the adapter's own message instead of a stack trace.
+Open **<http://127.0.0.1:8000/client>** and **<http://127.0.0.1:8000/staff>**. `/health` reports
+`live_model: true` when Bedrock is active. `SAMEPAGE_AI_MODE=bedrock` imports Agent 1's adapter and
+**fails fast** if it cannot, so the judged demo never silently falls back to a mock.
 
 | `SAMEPAGE_AI_MODE` | Adapter | Use |
 | --- | --- | --- |
 | `bedrock` | Agent 1, live Bedrock | the judged demo |
-| `stub` | Agent 1's module in its offline stub mode | checking the seam without AWS |
-| `mock` (default) | Agent 2's deterministic mock | UI development and the test suite |
+| `stub` | Agent 1's module, offline stub | checking the seam without AWS |
+| `mock` (default) | Agent 2's deterministic mock | UI work and the test suite |
 
-### Demo reset
+### Integrated preview server (alternative, stdlib only)
 
-```bash
-python -m backend.reset_demo            # clears sessions, live cases, assignments; reloads seed data
-# or, while the server runs:
-curl -X POST -H 'X-Demo-Role: staff' http://127.0.0.1:8000/demo/reset
-```
-
-The server does **not** need to restart; it reads SQLite on every request. After a reset the staff
-queue shows Agent 4's four seed cases (`CASE-1040`, `CASE-1041`, `CASE-1042`, `CASE-SEC-1`) and the
-next live case is `CASE-1043`, as in the contract example.
-
-### Tests and examples
+Agent 4's `frontend/staff/dev_server.py` serves both pages and the whole v1 API on one origin and can
+route intake/triage through the live adapter, handy when you want a single file with no FastAPI:
 
 ```bash
-python -m pytest                            # 50 offline tests: mock adapter, in-memory SQLite
-python scripts/generate_api_examples.py     # regenerate docs/API_EXAMPLES.md from a real run
+AWS_REGION=us-east-1 BEDROCK_MODEL_ID=us.anthropic.claude-haiku-4-5-20251001-v1:0 \
+SAMEPAGE_AI_MODE=bedrock python3 frontend/staff/dev_server.py --ai adapter --v2 --port 8001
 ```
 
-## Configuration (environment only; no credentials in code)
+### Demo reset and the Transcribe vocabulary
 
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `SAMEPAGE_AI_MODE` | `mock` | `bedrock`, `stub`, or `mock` (see above). `SAMEPAGE_AGENT_MODE` is a legacy alias. |
-| `AWS_REGION`, `BEDROCK_MODEL_ID` | | Read by Agent 1's adapter in `bedrock` mode (AWS_SETUP.md) |
-| `SAMEPAGE_DB_PATH` | `var/samepage.db` | SQLite file; `:memory:` for ephemeral runs |
-| `SAMEPAGE_DATA_DIR` | `data/` | Agent 4's seed files; falls back to `backend/fixtures/` when missing or incomplete |
-| `SAMEPAGE_DEFAULT_DEMO_ROLE` | `client` | Role assumed when `X-Demo-Role` is absent (set `staff` while building the staff page) |
-| `SAMEPAGE_ADAPTER_TIMEOUT_S` | `90` | Seconds before a model call is treated as failed and the draft is preserved |
-| `SAMEPAGE_RESET_ON_START` | `false` | Reset state on every start (handy for rehearsals) |
-| `SAMEPAGE_HOST` / `SAMEPAGE_PORT` | `127.0.0.1` / `8000` | Bind address for `python -m backend.main` |
-| `SAMEPAGE_CLIENT_DIR` / `SAMEPAGE_STAFF_DIR` | `frontend/client`, `frontend/staff` | Static page directories |
-| `SAMEPAGE_LOG_LEVEL` | `INFO` | Log verbosity for the app and Uvicorn |
+```bash
+python -m backend.reset_demo                 # clears live cases/sessions, reloads seed data
+python -m backend.aws.transcribe             # create/refresh the financial custom vocabulary
+```
 
-## HTTP contract (version one, frozen in contracts/API_V1.md)
+### Tests
 
-Exact paths and field names from the contract. Fields beyond it are additive and safe to ignore;
-several are the optional version-two fields the staff page already reads
-(`data/CONTRACT_V2_PROPOSAL.md`).
+```bash
+python -m pytest        # 87 Python tests (adapter, term matching, backend contract/rules/store/app)
+cd tests/client && npm test   # client-page JS tests (Node)
+```
+
+---
+
+## HTTP contract (version one, frozen)
+
+Paths and field names are fixed in [`contracts/API_V1.md`](contracts/API_V1.md); fields beyond it are
+additive.
 
 | Endpoint | Role | Request | Response |
 | --- | --- | --- | --- |
-| `POST /intake/start` | client | `{client_id}` | `{session_id, client_display_name, status}` + `client_id, ai_mode` |
-| `POST /intake/{session_id}/turn` | client | `{text, input_mode, selected_option_id?}` | `{session_id, transcript, suggestions, question, definitions, candidate_intent, selected_account_id, uncertainty, status}` + `candidate_account_id, proposed_plain_language_request, message, degraded, turn_number` |
-| `POST /intake/{session_id}/confirm` | client | `{confirmed_plain_language_request, selected_account_id?, amount_requested?}` | `{case_id, status, client_summary}` + `next_step` |
-| `GET /staff/cases` | staff | optional `?status=`, `?category=` | `{cases: [{case_id, client_display_name, created_at, status, categories, flags, confirmed_plain_language_request}]}` + `client_id, urgency, clarification_needed, existing_advisor_id, routing{destination, assigned_advisor_id}` per row |
-| `GET /staff/cases/{case_id}` | staff | | the fixture's case object (below) |
-| `GET /staff/cases/{case_id}/candidates` | staff | | `{candidates: [{advisor_id, display_name, specialties, available, reason}]}` + per candidate `existing_client_relationship, meeting_mode, capacity, rank, eligibility_check`; top level `case_id, destination, reason` |
-| `POST /staff/cases/{case_id}/assign` | staff | `{advisor_id, staff_reason}` | `{case_id, status, assigned_advisor_id}` + `flags` |
+| `POST /intake/start` | client | `{client_id}` | `{session_id, client_display_name, status}` |
+| `POST /intake/{session_id}/turn` | client | `{text, input_mode, selected_option_id?}` | `{suggestions(≤3), question, definitions, candidate_intent, selected_account_id, uncertainty, status, …}` |
+| `POST /intake/{session_id}/confirm` | client | `{confirmed_plain_language_request, selected_account_id?, amount_requested?}` | `{case_id, status, client_summary}` |
+| `GET /staff/cases` | staff | `?status= ?category=` | `{cases: [...]}` |
+| `GET /staff/cases/{case_id}` | staff | | full case record |
+| `GET /staff/cases/{case_id}/candidates` | staff | | `{candidates: [...]}` |
+| `POST /staff/cases/{case_id}/assign` | staff | `{advisor_id, staff_reason}` | `{case_id, status, assigned_advisor_id}` |
 
-Helper endpoints (additive): `GET /health`, `GET /demo/clients` (for the role switcher),
-`POST /demo/reset` (staff).
+Role is simulated via `X-Demo-Role` (+ `X-Demo-Client-Id` for client calls). Errors are
+`{error_code, message}`. Deeper semantics (statuses, flags, the case record, the deterministic rules,
+and the Agent 1 tool seam) are documented inline in the code and in `AWS_SETUP.md` §8.
 
-Errors are `{error_code, message}` plus `details` when useful, with the same codes as the
-contract's mock where one exists: `WRONG_DEMO_ROLE` (403), `WRONG_DEMO_CLIENT` (403),
-`INVALID_ROLE` (400), `CLIENT_NOT_FOUND` (404), `SESSION_NOT_FOUND` (404), `CASE_NOT_FOUND`
-(404), `INVALID_TURN` (400), `INVALID_OPTION` (400, with `details.valid_option_ids`),
-`ACCOUNT_MISMATCH` (403), `MISSING_CONFIRMATION` (400), `NOTHING_TO_CONFIRM` (409),
-`SESSION_ALREADY_SUBMITTED` (409, with `details.case_id`), `INVALID_ASSIGNMENT` (400),
-`ADVISOR_NOT_FOUND` (404), `ADVISOR_NOT_ACTIVE` (409), `INVALID_JSON` (400), `VALIDATION_ERROR`
-(422), `PATH_NOT_FOUND` (404).
-
-### Semantics the pages rely on
-
-- **Demo role switcher.** `X-Demo-Role: client` plus `X-Demo-Client-Id` on `/intake/*`;
-  `X-Demo-Role: staff` on `/staff/*` and `/demo/reset`. A `?demo_role=staff` query parameter also
-  works for browser checks. A missing role header means `client`; a missing client header is allowed
-  for curl, but a mismatched one is refused. Label it as simulated access control in the UI.
-- **`text` is the whole edited transcript**, not just the newest phrase. Send `""` with a
-  `selected_option_id` for a selection-only turn.
-- **Suggestions are proposals.** `selected_account_id` becomes non-null only when the client picks a
-  card that carries an `account_id` or chooses an account on the review screen (via `confirm`). The
-  model's own guess is exposed separately as `candidate_account_id`. Suggestion ids are whatever the
-  adapter returns (Agent 1 uses the account id); any id must be one shown on the previous turn.
-- **Reserved option ids** (optional for the UI): `none_of_these` clears the proposed account and asks
-  for other interpretations; `talk_to_person` stops questions and flags the case
-  `client_requested_human_help`.
-- **Statuses.** Session: `draft` -> `needs_clarification` | `ready_for_client_review` -> `submitted`.
-  Case: `submitted` -> `staff_review` (set when staff opens the case) -> `assigned`. Confirming is
-  allowed from either session state; unresolved questions travel to staff. The spec's
-  `needs_client_followup` status is accepted in the vocabulary but version one has no endpoint that
-  sets it (Agent 4's `CONTRACT_V2_PROPOSAL.md` lists this as a version-two need).
-- **Confirmation.** Only the values sent in `confirm` are confirmed. An amount the client *said* but
-  did not confirm is never inferred into the case; a confirmed amount that does not appear in the
-  words is flagged `amount_not_in_transcript`. `client_summary` is the triage model's plain-language
-  summary, or "Your request has been sent for staff review." when it gave none.
-- **Degraded turns.** When the model or AWS fails, `/turn` returns `degraded: true`,
-  `status: "needs_clarification"`, a `message` to display (Agent 1's own wording when it raised
-  `BedrockAdapterError`), the preserved `transcript`, and the previous `suggestions`/`question`.
-- **Security cases.** Possible fraud, unauthorized access, or account takeover (model category **or**
-  deterministic keyword detection) gives `routing.destination: security_specialist_review`,
-  `urgency.level: elevated`, `account_match_status: not_needed` when no account was chosen, and an
-  empty `/candidates` list unless the directory has a `fraud_or_security` specialist. Staff may still
-  assign anyone; overrides are recorded as flags.
-
-### Case record (`GET /staff/cases/{case_id}`)
-
-The fixture's case object with these conventions:
-
-- `original_words` is the transcript exactly as the client left it; `confirmed_plain_language_request`
-  is the wording the client approved; `staff_summary` is the triage model's financial-terminology
-  description of the question, not advice. `currency` is `"USD"` when an amount was confirmed and
-  `null` otherwise.
-- `account_match_status`: `client_confirmed`, `client_selected` (an owned account the agent had not
-  proposed), `unresolved`, or `not_needed` (security concern without a single account).
-- `account_context` holds **only record-backed facts**: `account_type`, `masked_identifier`,
-  `balance` with `balance_as_of` and `account_source_id`, and `relevant_events` (`type`, `date`,
-  `source_id`, `summary`) filtered to the event types that explain the case's categories, plus
-  `familiar_label`, `currency`, `cautions`, and `sources`. Anything the model returns about balances
-  or history is discarded and noted in `triage.validation_notes`.
-- `conflicts` is a list of sourced statements such as "Client said 'Roth IRA'; no Roth IRA appears in
-  the authorized account list." with the account record as `source_id`.
-- `routing`: `destination` (`security_specialist_review`, `retirement_advisor_review`,
-  `estate_and_beneficiary_review`, or `advisor_review`), `reason`, `recommended_advisor_ids` (the
-  deterministic ranking), `assigned_advisor_id`, `staff_decision` (the staff member's reason, a
-  string), `staff_decision_detail`, and the model's own `model_recommended_advisor_ids` and
-  `model_routing_hint` for comparison.
-- Flags you may see: `client_term_did_not_match_account_type`, `security_keywords_detected`,
-  `possible_unauthorized_access`, `amount_not_in_transcript`, `account_unresolved`,
-  `account_selected_outside_suggestions`, `client_requested_human_help`, `triage_unavailable`,
-  `staff_overrode_recommendation`, `staff_overrode_specialist_recommendation`.
-- Also present: `preferred_contact_channel`, `client_confirmed_at`, `urgency`, `existing_advisor_id`,
-  `conversation` (every turn), `history` (every state change), `triage` (adapter, status, notes).
-
-## Deterministic rules (application code, not the model)
-
-1. A session binds one synthetic client. Every lookup, suggestion, and confirmation is scoped to that
-   client's accounts; another client's account id is refused (`ACCOUNT_MISMATCH`).
-2. The model proposes; the client chooses. Accounts and amounts are confirmed only by explicit client
-   action on the review screen.
-3. A confirmed case retains the original words, the client-approved wording, the selected account or an
-   unresolved marker, the staff summary, categories, flags, and source references.
-4. Possible fraud, unauthorized access, or account takeover routes to the security specialist review
-   queue, never directly to a general advisor. Staff decide.
-5. Advisor ranking uses only the fictional directory, in the spec's order: the client's existing active
-   advisor first, then availability, specialty match, meeting preference, and capacity. Inactive
-   advisors never appear. License and state eligibility are never inferred; every candidate carries
-   `eligibility_check: "manual_verification_required"`.
-6. Model failures preserve the draft. `assign` records the staff member's advisor and reason and changes
-   nothing outside this database.
-
-## The seam to Agent 1 (language-model adapter)
-
-The backend imports `backend.aws.bedrock_agent` in `bedrock`/`stub` mode and calls, under a timeout:
-
-```python
-intake_turn(client_id, transcript, selected_option_id, tools) -> dict
-triage_case(confirmed_request, tools) -> dict
-```
-
-`tools` is a dict that also supports attribute access; callbacks accept keyword or positional
-arguments and match AWS_SETUP.md §8:
-
-| Callback | Returns |
-| --- | --- |
-| `get_relevant_accounts(client_id, phrase)` | `list[{account_id, account_type, familiar_label, masked_identifier, label, ownership, former_employer, matched_terms, relevance}]`, most relevant first, **no balances**; `[]` for another client |
-| `get_approved_definition(term)` | `{term, plain, source_id?}` or `None` |
-| `get_relevant_account_history(account_id)` | `list[{type, date, source_id, summary, description}]`; `[]` unless the account is the client's |
-| `search_advisor_directory(categories, preferences)` | ranked `list[{advisor_id, display_name, specialties, available, reason, meeting_mode, capacity, existing_client_relationship, ...}]`; `[]` for security cases |
-| `get_session_context()` (extra) | prior turns, questions asked, suggestions offered, selections made |
-
-`confirmed_request` contains `case_id, client_id, client_display_name, original_words,
-confirmed_plain_language_request, input_mode, selected_account_id, selected_account (public fields,
-no balance), account_match_status, amount_requested, currency, candidate_intent,
-conversation_notes, client_requested_person, authorized_account_types, mentioned_account_types,
-missing_account_types`.
-
-The backend validates every adapter result: suggestions are capped at three, unauthorized account
-ids are stripped, definitions must be in the approved glossary (the approved text wins), categories
-must be in the taxonomy, `routing_hint`/`recommended_destination` must be a known destination, and
-any account facts are dropped. `BedrockAdapterError(code, message)` becomes a preserved draft with
-that message. The seam was exercised against Agent 1's real module in stub mode (see
-`tests/backend/test_rules.py::test_tools_match_agent1_seam_and_hide_balances`).
-
-## Seed data (Agent 4)
-
-The store loads `data/clients.json`, `accounts.json`, `events.json`, `advisors.json`, and
-`glossary.json` when all five exist and parse, plus the optional `data/cases.json` queue seed and
-`meta.specialist_queues` from the advisor file. Otherwise it uses `backend/fixtures/`, a verbatim
-copy of Agent 4's files, and says so in `/health`. Files may be lists or `{meta, <name>: [...]}`
-objects; common alternative field names (`id`, `name`, `type`, `last4`, `as_of`, `specialty_tags`,
-`meeting_mode`, `definition`, `also_heard_as`, `summary`) are accepted. Fixed fixture ids
-(`CLIENT-017`, `ACCT-201`, `ADV-03`, `CASE-1042`) are preserved.
-
-## Layout
-
-```
-backend/
-  main.py           app factory, error envelope, static pages, CLI entry (exposes `app`)
-  api.py            the seven contract routes + health/demo helpers
-  schemas.py        pydantic models, taxonomy, statuses, destinations
-  store.py          SQLite repository + tolerant seed loader (clients, accounts, events, advisors, glossary, seed cases)
-  settings.py       environment configuration
-  reset_demo.py     demo reset CLI (reset.py is an alias)
-  fixtures/         fallback copy of Agent 4's data/
-  services/
-    intake.py       session state machine (start / turn / confirm)
-    triage.py       case builder: facts from records, flags, routing
-    case_facts.py   account context, relevant events, sourced conflicts, seed-case normalization
-    staff.py        queue, case document, candidates, assignment
-    routing.py      deterministic destination + advisor ranking
-    tools.py        authorized tool callbacks for the model
-    validation.py   sanitizes adapter output
-    mock_agent.py   offline adapter with Agent 1's signatures
-    agent_adapter.py  loads mock / stub / bedrock, timeout, sync or async
-    auth.py         demo role switcher (simulated access control)
-    text_rules.py   security keywords, account-term mentions, amounts
-  aws/              Agent 1 (Bedrock adapter, config, Transcribe)
-frontend/client/    Agent 3     frontend/staff/   Agent 4     data/   Agent 4
-contracts/          frozen contract, fixture, standalone mock (port 8001)
-tests/backend/      contract, scenario, rule, store, and app tests
-scripts/generate_api_examples.py
-```
+---
 
 ## What is live and what is simulated
 
-- Live when `SAMEPAGE_AI_MODE=bedrock`: language interpretation, clarifying questions, triage summaries
-  and categories (Amazon Bedrock through Agent 1's adapter).
-- Always deterministic application code: authorization scope, account facts and sources, contradiction
-  statements, security routing, advisor ranking, state transitions, assignment.
-- Simulated: the demo role switcher, and every client, account, balance, event, and advisor.
+- **Live (with `SAMEPAGE_AI_MODE=bedrock`):** language interpretation, clarifying questions, term
+  normalization, triage summaries and categories , Amazon Bedrock via Agent 1's adapter.
+- **Always deterministic application code:** authorization scope, account facts and sources,
+  contradiction statements, security routing, advisor ranking, state transitions, assignment.
+- **Simulated:** the demo role switcher, and every client, account, balance, event, and advisor.
+
+## Documentation
+
+- [`AWS_SETUP.md`](AWS_SETUP.md) , AWS setup, model verification, live smoke test, the Agent 1 seam
+- [`INTEGRATION_RUNBOOK.md`](INTEGRATION_RUNBOOK.md) , launch + acceptance checklist
+- [`SAMEPAGE_PRODUCT_SPEC.md`](SAMEPAGE_PRODUCT_SPEC.md) , product, journeys, data contracts
+- [`HACKATHON_PROJECT_BRIEF.md`](HACKATHON_PROJECT_BRIEF.md) , rules, constraints, judging
+- [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md) , the 5-minute presentation walk-through
+- [`contracts/API_V1.md`](contracts/API_V1.md) , the frozen HTTP contract
