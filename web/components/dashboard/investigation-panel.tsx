@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { getInvestigation, ApiError, type Investigation } from "@/lib/api";
 import { AgentCard, Subheading } from "./section";
-import { prettyDate } from "./labels";
+import { agentNote, prettyDate } from "./labels";
 
 const RISK: Record<Investigation["risk_level"], { label: string; cls: string }> = {
   high: { label: "High risk", cls: "border-red-200 bg-red-50 text-red-700" },
@@ -62,7 +62,7 @@ export function InvestigationPanel({ caseId }: { caseId: string }) {
           </div>
 
           <p className="border-t border-primary/15 pt-3 text-xs text-muted-foreground">
-            Suggestions for the specialist team. Nothing has been frozen, reversed, or sent.{inv.note ? ` ${inv.note}` : ""}
+            Suggestions for the specialist team. Nothing has been frozen, reversed, or sent.{inv.note ? ` ${agentNote(inv.ai_mode, inv.note)}` : ""}
           </p>
         </div>
       )}

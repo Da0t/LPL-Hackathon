@@ -7,6 +7,7 @@ import {
   draftReply, complianceReview, ApiError,
   type AgentTraceStep, type ComplianceReview, type SentCompliance,
 } from "@/lib/api";
+import { agentNote } from "./labels";
 
 const AGENT_LABELS: Record<AgentTraceStep["agent"], string> = { drafter: "Drafter", compliance: "Compliance reviewer" };
 
@@ -31,7 +32,7 @@ export function ReplyPanel({ caseId, busy, onSend, onClose }: {
     setWorking("draft"); setError(null); setOverride(false);
     try {
       const r = await draftReply(caseId, instruction.trim() || undefined);
-      setText(r.draft); setReviewedText(r.draft); setReview(r.review); setTrace(r.trace); setNote(r.note);
+      setText(r.draft); setReviewedText(r.draft); setReview(r.review); setTrace(r.trace); setNote(agentNote(r.ai_mode, r.note));
     } catch (e) { setError(e instanceof ApiError ? e.message : "Could not draft a reply."); }
     finally { setWorking(null); }
   };

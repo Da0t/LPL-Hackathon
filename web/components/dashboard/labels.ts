@@ -51,4 +51,8 @@ export const PRIORITY_TEXT: Record<Priority["level"], string> = {
   urgent: "text-red-600", high: "text-amber-700", normal: "text-foreground", low: "text-muted-foreground", done: "text-emerald-700",
 };
 
+/** What to tell the advisor when an agent's output did not come from the live model. */
+export const agentNote = (aiMode?: string, note?: string | null) =>
+  !note ? "" : aiMode === "bedrock" ? "Prepared offline because the AI model was unavailable." : "Sample output: the live AI model is not connected.";
+
 export const money = (n: number) => `$${n.toLocaleString()}`;

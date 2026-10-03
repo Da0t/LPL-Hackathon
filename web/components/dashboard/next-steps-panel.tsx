@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { getNextSteps, ApiError, type NextSteps, type PlanStep } from "@/lib/api";
 import { AgentCard } from "./section";
+import { agentNote } from "./labels";
 
 const OWNER: Record<PlanStep["owner"], { label: string; cls: string }> = {
   advisor: { label: "You", cls: "bg-primary/10 text-primary" },
@@ -51,7 +52,7 @@ export function NextStepsPanel({ caseId }: { caseId: string }) {
           </ol>
           <p className="mt-4 border-t border-primary/15 pt-3 text-xs text-muted-foreground">
             {finished} of {plan.steps.length} ticked off. Ticks are a working aid for this session and are not saved.
-            {plan.note ? ` ${plan.note}` : ""}
+            {plan.note ? ` ${agentNote(plan.ai_mode, plan.note)}` : ""}
           </p>
         </div>
       )}

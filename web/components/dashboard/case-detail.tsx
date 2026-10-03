@@ -15,7 +15,7 @@ import { NextStepsPanel } from "./next-steps-panel";
 import { InvestigationPanel } from "./investigation-panel";
 import { ClientSnapshotPanel } from "./client-snapshot";
 import {
-  HISTORY_LABELS, PRIORITY_DOT, PRIORITY_TEXT, flagLabel, money, prettyDate, sentence, statusLabel, timeAgo,
+  HISTORY_LABELS, PRIORITY_DOT, agentNote, PRIORITY_TEXT, flagLabel, money, prettyDate, sentence, statusLabel, timeAgo,
 } from "./labels";
 
 export type CaseTab = "overview" | "client" | "plan" | "assign" | "compliance";
@@ -63,7 +63,7 @@ function PrepBrief({ brief, loading, onRegenerate }: { brief: Brief | null; load
               </ul>
             </div>
           )}
-          {brief.note && <p className="text-xs text-muted-foreground">{brief.note}</p>}
+          {brief.note && <p className="text-xs text-muted-foreground">{agentNote(brief.ai_mode, brief.note)}</p>}
         </div>
       )}
     </AgentCard>
@@ -199,7 +199,8 @@ function Overview({ detail, brief, briefLoading, onRegenerateBrief }: any) {
 
 function Assign({ detail, candidates, candMeta, assigning, onAssign, security, assignedName }: any) {
   const assigned = !!detail.routing?.assigned_advisor_id;
-  const reason = detail.routing?.reason || candMeta.reason;
+  // Routing reasons arrive with raw category codes in quotes; show the category's name instead.
+  const reason = (detail.routing?.reason || candMeta.reason || "").replace(/'([a-z_]+)'/g, (_: string, c: string) => `“${prettyCategory(c)}”`);
   return (
     <>
       <Section title="Where this request is routed">
@@ -271,6 +272,7 @@ export function CaseDetail({
             <span>{statusLabel(detail.status)}</span>
             {assignedId && <span>· {assignedName}</span>}
             <span>· Received {timeAgo(detail.created_at)}</span>
+            {row?.intake && <span>· Intake took {row.intake.turns} turn{row.intake.turns === 1 ? "" : "s"}, {row.intake.seconds_to_confirm}s</span>}
             <span className="text-xs">· {detail.case_id}</span>
           </p>
         </div>

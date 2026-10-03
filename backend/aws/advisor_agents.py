@@ -394,7 +394,7 @@ def stub_plan_next_steps(case: dict) -> dict:
     preference = case.get("client_meeting_preference")
     steps.append(_step("Schedule the conversation", f"The client prefers {preference} meetings." if preference else "Agree a time with the client."))
     waiting = sum(1 for s in steps if s["owner"] == "client")
-    summary = f"{len(steps)} steps to move this request forward" + (f"; {waiting} need an answer from the client." if waiting else ".")
+    summary = f"{len(steps)} steps to move this request forward" + (f"; {waiting} need{'s' if waiting == 1 else ''} an answer from the client." if waiting else ".")
     return {"summary": summary, "steps": steps}
 
 

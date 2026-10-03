@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { ShieldCheck, RefreshCw } from "lucide-react";
 import { complianceReview, ApiError, type ComplianceReview } from "@/lib/api";
 import { Section } from "./section";
-import { flagLabel } from "./labels";
+import { agentNote, flagLabel } from "./labels";
 
 const ITEMS = [
   { id: "identity_confirmed", label: "Client identity confirmed" },
@@ -61,7 +61,7 @@ export function CompliancePanel({ detail, hc }: { detail: any; hc: any }) {
           })}
         </ul>
         {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
-        {review?.note && <p className="mt-3 text-xs text-muted-foreground">{review.note}</p>}
+        {review?.note && <p className="mt-3 text-xs text-muted-foreground">{agentNote(review.ai_mode, review.note)}</p>}
         {complianceFlags.length > 0 && (
           <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
             To resolve: {complianceFlags.map(flagLabel).join("; ")}.
@@ -70,7 +70,7 @@ export function CompliancePanel({ detail, hc }: { detail: any; hc: any }) {
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border pt-3 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
             <span className={`h-1.5 w-1.5 rounded-full ${hc?.live_model ? "bg-emerald-500" : "bg-muted-foreground"}`} />
-            Language model: {hc ? (hc.live_model ? "Amazon Bedrock (live)" : `simulated (${hc.ai_mode})`) : "…"}
+            AI model: {hc ? (hc.live_model ? "Amazon Bedrock (live)" : "sample mode, not connected") : "…"}
           </span>
           <span>Fictional data</span>
         </div>
