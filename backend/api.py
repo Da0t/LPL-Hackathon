@@ -121,8 +121,14 @@ def staff_brief(case_id: str, request: Request, _role: str = Depends(require_sta
 
 @router.post("/staff/cases/{case_id}/action", responses=_ERRORS, tags=["staff"])
 def staff_action(case_id: str, body: dict, request: Request, _role: str = Depends(require_staff)):
-    """Record an advisor workflow action (claim/note/clarify/schedule/resolve) as a history event."""
+    """Record an advisor workflow action (claim/note/clarify/schedule/resolve/approve) as a history event."""
     return _staff(request).action(case_id, body.get("action", ""), body.get("text"))
+
+
+@router.post("/staff/cases/{case_id}/plan", responses=_ERRORS, tags=["staff"])
+def staff_plan(case_id: str, request: Request, _role: str = Depends(require_staff)):
+    """Read-only Bedrock-prepared action packet (fields + compliance checks + drafts) for approval."""
+    return _staff(request).plan(case_id, request.app.state.settings.ai_mode)
 
 
 # --------------------------------------------------------- additive helpers

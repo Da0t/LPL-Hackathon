@@ -125,10 +125,20 @@ export type Brief = {
 export const getBrief = (id: string) =>
   call<Brief>(`/staff/cases/${encodeURIComponent(id)}/brief`, { method: "POST", role: "staff" });
 
-export type AdvisorAction = "claim" | "note" | "clarify" | "schedule" | "resolve";
+export type AdvisorAction = "claim" | "note" | "clarify" | "schedule" | "resolve" | "approve";
 export const caseAction = (id: string, action: AdvisorAction, text?: string) =>
   call<{ case_id: string; status: string; event: { event: string; at: string; details: Record<string, unknown> } }>(
     `/staff/cases/${encodeURIComponent(id)}/action`, { method: "POST", role: "staff", body: { action, text } });
+
+export type ActionPlan = {
+  case_id: string; ai_mode: string; note: string | null;
+  headline: string; action_type: string;
+  prepared_fields: { label: string; value: string }[];
+  compliance_checks: { item: string; status: "pass" | "review" | "flag"; note?: string }[];
+  draft_client_message: string; draft_advisor_followup: string;
+};
+export const getPlan = (id: string) =>
+  call<ActionPlan>(`/staff/cases/${encodeURIComponent(id)}/plan`, { method: "POST", role: "staff" });
 
 export const health = () => call<any>("/health", { role: "client" });
 
