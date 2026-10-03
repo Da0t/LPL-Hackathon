@@ -143,25 +143,27 @@ The application runs in **us-east-1**, as required by the hackathon brief.
 
 | Component | Hackathon choice | Job and reason |
 | --- | --- | --- |
-| Interface | Simple web UI or Streamlit with client and staff views | Build the two visible flows quickly. This can run locally for the demo. |
+| Interface | FastAPI serving two small HTML/CSS/JavaScript pages | Give the client and staff developers separate files while keeping one local origin and a simple backend. Browser speech recognition may provide prototype microphone input; label it accurately if used. |
 | Language agent | **Amazon Bedrock**, with one generation-capable model from the brief's allowlist | Interpret plain language, ask clarifying questions, draft the two summaries, and classify the confirmed request. Verify the actual model ID and access in the event account before coding against it. |
 | Speech | **Amazon Transcribe Streaming**, if the team can complete it reliably | Produce live speech-to-text for the microphone experience. AWS documents real-time transcription through SDKs, HTTP/2, and WebSockets. A typed path remains fully functional. [AWS documentation](https://docs.aws.amazon.com/en_en/transcribe/latest/dg/streaming.html) |
-| Case data | **Amazon DynamoDB**, if the team has account setup time; otherwise local synthetic JSON/SQLite with an adapter | Share submitted cases and staff assignments between views. It is useful for durable queue state, but Bedrock alone already meets the at-least-one-AWS-service requirement. |
+| Case data | Local SQLite for the first working demo; **Amazon DynamoDB** only if the team has account setup time | Share submitted cases and staff assignments between views. DynamoDB is a valid later adapter, but Bedrock alone already meets the at-least-one-AWS-service requirement. |
 | Optional storage | No S3 needed for the core demo | Avoid an unnecessary service. If audio or exports are stored in S3 later, keep the bucket private. |
 
 For the fastest reliable demo, implement typed intake first, then microphone input. A short push-to-talk utterance followed by suggestions is an acceptable first prototype if continuous streaming proves unstable; describe that behavior accurately in the presentation. The final product vision can support uninterrupted streaming. Do not hard-code keys. Use the event account's supported credential mechanism, least-privilege IAM, and synthetic data only.
 
 ## API contracts for parallel development
 
-The frontend and backend teams should agree on these contracts before building screens independently:
+The four development agents should use **FastAPI on port 8000** with separate static client and staff pages. Agent 2 owns the following version-one HTTP contract. Other agents should build against these exact paths and field names; any change requires notifying the team before merging.
 
-- `POST /intake/start` → session ID and minimal client context for display.
-- `POST /intake/{session_id}/turn` with `{text, input_mode, selected_option_id?}` → edited transcript, at most three suggestions, one clarifying question, glossary entries, and current status.
-- `POST /intake/{session_id}/confirm` with client edits/selected account → validated submitted case ID and client summary.
-- `GET /staff/cases` → queue rows with statuses, tags, and flags.
-- `GET /staff/cases/{case_id}` → full case document with source references.
-- `GET /staff/cases/{case_id}/candidates` → ranked fictional advisors and reasons.
-- `POST /staff/cases/{case_id}/assign` with `{advisor_id, staff_reason}` → assignment receipt and updated status.
+- `POST /intake/start` with `{client_id}` → `{session_id, client_display_name, status}`.
+- `POST /intake/{session_id}/turn` with `{text, input_mode, selected_option_id?}` → `{session_id, transcript, suggestions, question, definitions, candidate_intent, selected_account_id, uncertainty, status}`. A suggestion is `{id, label, account_id?}`; a definition is `{term, plain}`. `suggestions` has no more than three items.
+- `POST /intake/{session_id}/confirm` with `{confirmed_plain_language_request, selected_account_id?, amount_requested?}` → `{case_id, status, client_summary}`. The backend validates any account and amount against the conversation and client selection.
+- `GET /staff/cases` → `{cases: [{case_id, client_display_name, created_at, status, categories, flags, confirmed_plain_language_request}]}`.
+- `GET /staff/cases/{case_id}` → the complete case record in the example schema above, including original words, source references, and only relevant account context.
+- `GET /staff/cases/{case_id}/candidates` → `{candidates: [{advisor_id, display_name, specialties, available, reason}]}`.
+- `POST /staff/cases/{case_id}/assign` with `{advisor_id, staff_reason}` → `{case_id, status, assigned_advisor_id}`.
+
+On model errors, `/turn` returns the preserved draft with `status: "needs_clarification"`, an explanation, and a way to continue typing or contact a person. Error responses use `{error_code, message}`. Agent 1's AWS adapter exposes `intake_turn(client_id, transcript, selected_option_id, tools) -> dict` and `triage_case(confirmed_request, tools) -> dict`. Agent 2 supplies `tools` and validates the returned dictionaries. The Bedrock adapter never reads storage directly; the backend supplies authorized tool callbacks.
 
 Every request is scoped to a role and client/case ID. For the hackathon, use a visible **demo role switcher** over synthetic records and label it as simulated access control. Do not present this as production authentication.
 
@@ -186,12 +188,20 @@ The presentation must identify what is live and what is simulated. The demo does
 
 | Work package | Owns | Deliverable |
 | --- | --- | --- |
-| Client interface | Microphone/text input, suggestions, clarification, glossary, review and confirmation | A client can complete the entire intake flow using text even if speech fails. |
-| Agent and API | Bedrock calls, tool functions, state machine, schema validation, rate limiting, errors | Stable JSON responses and a submitted case from the core scenario. |
-| Data and AWS | Synthetic profiles, accounts, history, advisor directory, IAM/configuration, optional Transcribe and DynamoDB adapters | Reproducible seed data and a working event-account setup with no embedded credentials. |
-| Staff interface and demo | Queue, case document, candidate reasons, manual assignment, demo script | Staff can review, override, and assign a submitted case. |
+| Agent 1 AWS | Bedrock agent adapter, allowed-model verification, IAM/configuration, call pacing, optional Transcribe | Live Bedrock interpretation and triage with no embedded credentials. |
+| Agent 2 backend | FastAPI contract, authorized tools, state machine, local case storage, validation and assignment | Stable endpoints and a submitted case from the core scenario. |
+| Agent 3 client interface | Microphone/text input, suggestions, clarification, glossary, review and confirmation | A client can complete the entire intake flow using text even if speech fails. |
+| Agent 4 staff and data | Synthetic profiles/accounts/history/advisors, queue, case document, assignment screen, demo script | Staff can review, override, and assign a submitted case using coherent fictional records. |
 
 Integrate against the API contracts early. Keep one known-good synthetic client and request unchanged for the final demo. Verify the microphone, model access, and region on the machine that will present.
+
+## Four agent coordination protocol
+
+Each teammate gives one file from `agent-briefs/` to their development agent and works in a **separate clone or worktree** on the named branch. Agents do not share chat memory, so the brief, this specification, and merged Git commits are the shared context. No agent should rely on a decision made only in its own conversation.
+
+Agent 2 owns the version-one HTTP contract in this document. Agent 1 owns the AWS adapter interface, Agent 3 the client page, and Agent 4 the staff page plus seed data. Publish endpoint stubs and fixture IDs early so UI work does not wait for Bedrock. When a field or endpoint must change, Agent 2 updates the contract, tells the other three agents, and waits for acknowledgment before they implement against the new shape. Each agent pushes a branch and opens a pull request; a teammate acting as integrator merges them into `main` after checking that owned paths do not conflict.
+
+At each milestone, every agent reports four facts to the team: branch and commit, what works, contract or fixture changes, and blockers. After each merge, the other agents pull `main` and rerun their own flow. Before the deadline, run one integrated rehearsal from client speech or text through staff assignment, then reset and repeat on the presentation machine.
 
 ## Requirement check and remaining gaps
 
