@@ -132,6 +132,19 @@ AWS_PROFILE=lpl-hackathon AWS_REGION=us-east-1 \
 
 `SAMEPAGE_AI_MODE=mock` replaces AI calls with deterministic responses. The authenticated portal still requires AWS credentials for Cognito and DynamoDB; omit `COHERENT_PORTAL_CONFIG` only for legacy offline API tests. Provision the portal first using the instructions below.
 
+**Local click-through sign-in (no AWS, no passwords):** for development, start the backend with
+`COHERENT_DEV_LOGIN=1` and without `COHERENT_PORTAL_CONFIG`:
+
+```bash
+COHERENT_DEV_LOGIN=1 SAMEPAGE_AI_MODE=mock \
+  python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+`/login` then shows one button per seeded user (staff and the three clients). Portal records are
+the synthetic seed profiles held in memory and reset on restart. `COHERENT_PORTAL_CONFIG` takes
+precedence, so this mode is never active alongside Cognito. Localhost only; never enable it on a
+reachable server.
+
 **2. Frontend** (the demo UI):
 
 ```bash

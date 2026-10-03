@@ -417,3 +417,35 @@ def test_authenticated_advisor_followup_preserves_portal_snapshot(setup):
         ).status_code
         == 403
     )
+
+
+def test_dev_login_is_opt_in_and_clicks_through(tmp_path, monkeypatch):
+    settings = Settings(db_path=str(tmp_path / "app.db"), ai_mode="mock")
+    monkeypatch.delenv("COHERENT_PORTAL_CONFIG", raising=False)
+    monkeypatch.delenv("COHERENT_DEV_LOGIN", raising=False)
+    with TestClient(create_app(settings)) as c:
+        assert c.get("/auth/dev-users").json() == {"users": []}
+        assert (
+            c.post(
+                "/auth/login", json={"email": "advisor@example.com", "password": "x"}
+            ).status_code
+            == 503
+        )
+    monkeypatch.setenv("COHERENT_DEV_LOGIN", "1")
+    with TestClient(create_app(settings)) as c:
+        users = c.get("/auth/dev-users").json()["users"]
+        assert [u["role"] for u in users] == ["staff", "client", "client", "client"]
+        assert c.get("/staff/cases", headers={"X-Demo-Role": "staff"}).status_code == 401
+        c.cookies.set(COOKIE, "dev-nobody")
+        assert c.get("/auth/me").status_code == 401
+        c.cookies.clear()
+        login = {"email": "mara.ellis@example.com", "password": "dev"}
+        assert c.post("/auth/login", json=login).status_code == 200
+        assert c.get("/portal/me").json()["client_id"] == "CLIENT-017"
+        assert c.get("/staff/cases").status_code == 403
+        assert c.get("/portal/requests").json() == {"requests": []}
+        assert c.post("/auth/logout").status_code == 200
+        login["email"] = "advisor@example.com"
+        assert c.post("/auth/login", json=login).status_code == 200
+        assert c.get("/auth/me").json()["role"] == "staff"
+        assert c.get("/staff/cases").status_code == 200

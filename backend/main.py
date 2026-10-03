@@ -108,6 +108,11 @@ def create_app(settings: Settings | None = None, *, store: Store | None = None, 
         from backend.portal.service import Portal
         app.state.portal = Portal(os.environ["COHERENT_PORTAL_CONFIG"], store)
         app.state.intake.portal = app.state.portal
+    elif os.getenv("COHERENT_DEV_LOGIN", "").strip().lower() in {"1", "true", "yes", "on"}:
+        # Local development only: click-through sign-in, in-memory synthetic records.
+        from backend.portal.dev import DevPortal
+        app.state.portal = DevPortal(store)
+        app.state.intake.portal = app.state.portal
 
     @app.middleware("http")
     async def protect_portal(request: Request, call_next):

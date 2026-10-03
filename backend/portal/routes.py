@@ -53,6 +53,13 @@ def login(body: Login, request: Request, response: Response):
     return {"signed_in": True}
 
 
+@router.get("/auth/dev-users")
+def dev_users(request: Request):
+    """One-click sign-ins for the login page; empty unless COHERENT_DEV_LOGIN is on."""
+    service = getattr(request.app.state, "portal", None)
+    return {"users": service.dev_users() if hasattr(service, "dev_users") else []}
+
+
 @router.post("/auth/logout")
 def logout(request: Request, response: Response):
     token = request.cookies.get(COOKIE)
