@@ -155,7 +155,7 @@ export type ActionPlan = {
   case_id: string; ai_mode: string; note: string | null;
   headline: string; action_type: string;
   prepared_fields: { label: string; value: string }[];
-  compliance_checks: { item: string; status: "pass" | "review" | "flag"; note?: string }[];
+  compliance_checks: { item: string; status: "pass" | "review" | "flag"; note?: string; confirm?: string }[];
   draft_client_message: string; draft_advisor_followup: string;
 };
 export const getPlan = (id: string, refresh = false) =>

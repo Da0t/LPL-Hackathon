@@ -221,6 +221,13 @@ def test_prepared_message_asks_the_client_for_what_is_missing(client):
     assert all(f["value"] for f in complete["prepared_fields"]) and "which account" not in complete["draft_client_message"]
 
 
+def test_flagged_checks_carry_the_statement_the_advisor_signs(client):
+    checks = client.post("/staff/cases/CASE-1042/plan", headers=STAFF).json()["compliance_checks"]
+    flagged = [c for c in checks if c["status"] == "flag"]
+    assert flagged and all(c["confirm"].startswith("I ") for c in flagged), "a flag says what ticking it asserts"
+    assert all(c["confirm"] == "" for c in checks if c["status"] != "flag"), "only flags need a sign-off"
+
+
 def test_client_can_answer_an_approved_action(client):
     approve(client, text="Hi Mara, we have prepared your request. When is a good time to talk?")
     assert client.post("/my/requests/CASE-1042/reply", json={"text": "Tomorrow morning."}, headers=MARA).status_code == 200

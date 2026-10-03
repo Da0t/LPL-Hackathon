@@ -755,6 +755,9 @@ Hard rules:
 - compliance_checks: each is {item, status, note} where status is "pass", "review", or "flag". Always
   include identity verification (review), a suitability/advice note, and , if the request involves money
   movement or a distribution , a tax-not-assessed note. Flag any fraud/security or account-mismatch signal.
+  A "review" note is a reminder of what the advisor does before acting on the request. Every "flag" also
+  carries confirm: one first-person sentence the advisor signs before the message is sent, e.g.
+  "I confirmed with the client which account they mean."
 - draft_client_message: a short, plain-language message to the client confirming what happens next (no advice,
   no promises of timing the firm can't keep). If any prepared field is empty, the message must ask the client
   for it in plain words.
@@ -775,7 +778,7 @@ _FULFILL_TOOL = {
                     "label": {"type": "string"}, "value": {"type": "string"}}, "required": ["label", "value"]}},
                 "compliance_checks": {"type": "array", "items": {"type": "object", "properties": {
                     "item": {"type": "string"}, "status": {"type": "string", "enum": ["pass", "review", "flag"]},
-                    "note": {"type": "string"}}, "required": ["item", "status"]}},
+                    "note": {"type": "string"}, "confirm": {"type": "string"}}, "required": ["item", "status"]}},
                 "draft_client_message": {"type": "string"},
                 "draft_advisor_followup": {"type": "string"},
             },
@@ -813,9 +816,12 @@ def _normalize_plan(result: dict) -> dict:
         if not isinstance(c, dict):
             continue
         status = c.get("status") if c.get("status") in ("pass", "review", "flag") else "review"
-        checks.append({"item": str(c.get("item", "")), "status": status, "note": str(c.get("note", ""))})
+        item = str(c.get("item", ""))
+        # Only a flag is signed off; a model that leaves the sentence out still gets a clear one.
+        confirm = (str(c.get("confirm") or "").strip() or f"I have reviewed the flagged item: {item}.") if status == "flag" else ""
+        checks.append({"item": item, "status": status, "note": str(c.get("note", "")), "confirm": confirm})
     if not checks:
-        checks = [{"item": "Client identity", "status": "review", "note": "Confirm identity before actioning."}]
+        checks = [{"item": "Client identity", "status": "review", "note": "Confirm identity before actioning.", "confirm": ""}]
     return {
         "headline": str(result.get("headline") or "").strip(),
         "action_type": str(result.get("action_type") or "account_service"),
@@ -851,9 +857,11 @@ def _stub_plan(case: dict) -> dict:
     if money_movement:
         checks.append({"item": "Tax implications", "status": "review", "note": "Tax effects not assessed; advisor to review."})
     if "client_term_did_not_match_account_type" in (case.get("flags") or []):
-        checks.append({"item": "Account match", "status": "flag", "note": "Client wording did not match records; confirm account."})
+        checks.append({"item": "Account match", "status": "flag", "note": "Client wording did not match records; confirm account.",
+                       "confirm": "I confirmed with the client which account they mean."})
     if security:
-        checks.append({"item": "Security review", "status": "flag", "note": "Possible unauthorized access; route to specialist."})
+        checks.append({"item": "Security review", "status": "flag", "note": "Possible unauthorized access; route to specialist.",
+                       "confirm": "I understand this may be unauthorized access and am routing it to the security specialist team."})
     name = (case.get("client_display_name") or "there").split(" ")[0]
     message = f"Hi {name}, thanks, we've prepared your request and an advisor will review it shortly. Nothing has been moved yet; we'll confirm the next step with you."
     if asks:
@@ -862,7 +870,7 @@ def _stub_plan(case: dict) -> dict:
         "headline": case.get("staff_summary") or "Prepared service request",
         "action_type": (cats[0] if cats else "account_service"),
         "prepared_fields": fields,
-        "compliance_checks": checks,
+        "compliance_checks": [{"confirm": "", **c} for c in checks],
         "draft_client_message": message,
         "draft_advisor_followup": "Review the prepared action and compliance checks, confirm the account and intent with the client, then approve.",
     }

@@ -287,7 +287,7 @@ class StaffService:
             if reviewed:
                 details["compliance"] = reviewed
             if action == "approve" and isinstance(acknowledged_flags, list):
-                # Checks on the packet (review or flag) that the advisor confirmed having reviewed before approving.
+                # Flagged checks on the packet that the advisor signed off before approving.
                 details["acknowledged_flags"] = [f for f in acknowledged_flags if isinstance(f, str) and 0 < len(f) <= 80][:10]
             event = {"event": event_name, "at": now, "details": details}
             case.setdefault("history", []).append(event)

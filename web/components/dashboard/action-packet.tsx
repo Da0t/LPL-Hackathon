@@ -1,7 +1,7 @@
 "use client";
 
 // The fulfillment agent's prepared reply: what it found on the request, what is still missing,
-// the checks the advisor has to make, and the message to the client, ready to edit and send.
+// the flagged items the advisor signs off, and the message to the client, ready to edit and send.
 import React, { useEffect, useState } from "react";
 import { CheckCircle2, RefreshCw, AlertTriangle, Send, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -33,7 +33,7 @@ function SentReceipt({ sent }: { sent: SentEvent }) {
       ) : (
         <p className="text-sm text-muted-foreground">The prepared action was approved without a message to the client.</p>
       )}
-      {reviewed.length > 0 && <p className="text-xs text-muted-foreground">Checks you confirmed before sending: {reviewed.join(", ")}</p>}
+      {reviewed.length > 0 && <p className="text-xs text-muted-foreground">Flagged items you signed off before sending: {reviewed.join(", ")}</p>}
       <p className="flex items-center gap-1.5 text-sm text-emerald-700">
         <CheckCircle2 className="h-4 w-4" /> Their answer will show up on this request. Use Message client to follow up.
       </p>
@@ -62,9 +62,11 @@ export function ActionPacket({ plan, loading, onRegenerate, onSend, sent, resolv
   const known = fields.filter((f) => f.value);
   const missing = fields.filter((f) => !f.value);
   const checks = plan?.compliance_checks || [];
-  const toConfirm = checks.map((c, i) => ({ ...c, i })).filter((c) => c.status !== "pass");
+  // A flag blocks the message until the advisor signs it; a review item is a reminder for acting on the request.
+  const flagged = checks.map((c, i) => ({ ...c, i })).filter((c) => c.status === "flag");
+  const reminders = checks.filter((c) => c.status === "review");
   const passed = checks.filter((c) => c.status === "pass");
-  const open = toConfirm.filter((c) => !ticked.includes(c.i)).length;
+  const open = flagged.filter((c) => !ticked.includes(c.i)).length;
   const message = text.trim();
   const edited = !!plan && message !== (plan.draft_client_message || "").trim();
   const actionTitle = (plan?.action_type || "").replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
@@ -74,7 +76,7 @@ export function ActionPacket({ plan, loading, onRegenerate, onSend, sent, resolv
   const send = async () => {
     if (sending) return;
     setSending(true); setError(null);
-    try { setError(await onSend(message, toConfirm.map((c) => c.item))); }
+    try { setError(await onSend(message, flagged.map((c) => c.item))); }
     finally { setSending(false); }
   };
 
@@ -90,7 +92,7 @@ export function ActionPacket({ plan, loading, onRegenerate, onSend, sent, resolv
         <>
           <p className={`flex items-center gap-2 text-sm font-medium ${open ? "text-amber-700" : "text-emerald-700"}`}>
             {open ? <AlertTriangle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
-            {open ? `${open} ${open === 1 ? "thing" : "things"} to confirm before you can send` : "Ready to send"}
+            {open ? `${open} flagged ${open === 1 ? "item needs" : "items need"} your sign-off before you can send` : "Ready to send"}
           </p>
 
           <div>
@@ -116,37 +118,23 @@ export function ActionPacket({ plan, loading, onRegenerate, onSend, sent, resolv
             </div>
           )}
 
-          {checks.length > 0 && (
+          {flagged.length > 0 && (
             <div>
-              <Subheading>Confirm before sending</Subheading>
+              <Subheading>Your sign-off</Subheading>
+              <p className="mt-1 text-xs text-muted-foreground">Something on this request was flagged. Tick each statement that is true; it is recorded on the request under your name.</p>
               <ul className="mt-2 space-y-2">
-                {toConfirm.map((c) => (
+                {flagged.map((c) => (
                   <li key={c.i}>
-                    <label className={`flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 text-sm ${c.status === "flag" ? "border-red-200 bg-red-50" : "border-border bg-card"}`}>
+                    <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm">
                       <input type="checkbox" checked={ticked.includes(c.i)} onChange={() => toggle(c.i)} className="mt-0.5 h-4 w-4 flex-none" />
                       <span>
-                        <span className="font-medium">{c.item}</span>
-                        {c.status === "flag" && <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-medium text-red-700">Flagged</span>}
-                        {c.note && <span className="block text-xs text-muted-foreground">{c.note}</span>}
+                        <span className="font-medium text-red-800">{c.confirm || `I have reviewed the flagged item: ${c.item}.`}</span>
+                        <span className="block text-xs text-red-700">Why it was flagged: {c.note || c.item}</span>
                       </span>
                     </label>
                   </li>
                 ))}
               </ul>
-              {toConfirm.length > 0 && <p className="mt-2 text-xs text-muted-foreground">Ticking a box records on the request that you confirmed it.</p>}
-              {passed.length > 0 && (
-                <div className="mt-2">
-                  <button onClick={() => setShowPassed((v) => !v)} aria-expanded={showPassed} className="flex items-center gap-1.5 text-xs text-emerald-700 hover:underline">
-                    <CheckCircle2 className="h-3.5 w-3.5" /> {passed.length} {passed.length === 1 ? "check" : "checks"} passed
-                    <ChevronDown className={`h-3 w-3 transition-transform ${showPassed ? "rotate-180" : ""}`} />
-                  </button>
-                  {showPassed && (
-                    <ul className="mt-1.5 space-y-1 pl-5 text-xs text-muted-foreground">
-                      {passed.map((c, i) => <li key={i}><span className="font-medium text-foreground">{c.item}</span>{c.note ? `: ${c.note}` : ""}</li>)}
-                    </ul>
-                  )}
-                </div>
-              )}
             </div>
           )}
 
@@ -160,10 +148,35 @@ export function ActionPacket({ plan, loading, onRegenerate, onSend, sent, resolv
             <p className="mt-1 text-xs text-muted-foreground">Edit it freely. The compliance reviewer checks the final wording when you send.</p>
           </div>
 
-          {plan.draft_advisor_followup && (
+          {(plan.draft_advisor_followup || reminders.length > 0) && (
             <div>
-              <Subheading>After you send</Subheading>
-              <p className="mt-1.5 whitespace-pre-wrap text-sm">{plan.draft_advisor_followup}</p>
+              <Subheading>Before you act on the request</Subheading>
+              {plan.draft_advisor_followup && <p className="mt-1.5 whitespace-pre-wrap text-sm">{plan.draft_advisor_followup}</p>}
+              {reminders.length > 0 && (
+                <ul className="mt-2 space-y-1.5">
+                  {reminders.map((c, i) => (
+                    <li key={i} className="flex gap-2 text-sm">
+                      <span className="mt-2 h-1 w-1 flex-none rounded-full bg-primary" />
+                      <span><span className="font-medium">{c.item}</span>{c.note ? `: ${c.note}` : ""}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="mt-2 text-xs text-muted-foreground">Reminders only. They do not hold up the message.</p>
+            </div>
+          )}
+
+          {passed.length > 0 && (
+            <div>
+              <button onClick={() => setShowPassed((v) => !v)} aria-expanded={showPassed} className="flex items-center gap-1.5 text-xs text-emerald-700 hover:underline">
+                <CheckCircle2 className="h-3.5 w-3.5" /> {passed.length} automatic {passed.length === 1 ? "check" : "checks"} passed
+                <ChevronDown className={`h-3 w-3 transition-transform ${showPassed ? "rotate-180" : ""}`} />
+              </button>
+              {showPassed && (
+                <ul className="mt-1.5 space-y-1 pl-5 text-xs text-muted-foreground">
+                  {passed.map((c, i) => <li key={i}><span className="font-medium text-foreground">{c.item}</span>{c.note ? `: ${c.note}` : ""}</li>)}
+                </ul>
+              )}
             </div>
           )}
 
@@ -174,7 +187,7 @@ export function ActionPacket({ plan, loading, onRegenerate, onSend, sent, resolv
               <Send className="mr-1.5 h-4 w-4" />{sending ? "Sending…" : "Send to client"}
             </Button>
             <span className="text-xs text-muted-foreground">
-              {open > 0 ? "Tick the items above to enable sending."
+              {open > 0 ? "Tick your sign-off above to enable sending."
                 : !message ? "Write a message to send."
                 : "Sends this message only. No money moves and no paperwork is submitted."}
             </span>

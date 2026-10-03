@@ -98,7 +98,7 @@ On live Bedrock it has **not** been run. The drafter is instructed never to give
 
 Pick whichever path worked in rehearsal and use only that one on the day.
 
-A shorter alternative to the whole beat is **Send to client** on the prepared reply card: tick the items to confirm, edit the message if needed, and send. It is faster but does not show the reviewer catching anything.
+A shorter alternative to the whole beat is **Send to client** on the prepared reply card: sign off anything flagged, edit the message if needed, and send. It is faster but does not show the reviewer catching anything.
 
 ## What is live and what is simulated
 

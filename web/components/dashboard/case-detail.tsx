@@ -121,7 +121,7 @@ function Activity({ history }: { history: any[] }) {
             <div className="text-sm font-medium">{HISTORY_LABELS[h.event] || sentence(h.event)}</div>
             {h.details?.text && <div className="text-sm text-muted-foreground">“{h.details.text}”</div>}
             {h.details?.acknowledged_flags?.length > 0 && (
-              <div className="text-xs text-muted-foreground">Checks reviewed: {h.details.acknowledged_flags.join(", ")}</div>
+              <div className="text-xs text-muted-foreground">Flagged items signed off: {h.details.acknowledged_flags.join(", ")}</div>
             )}
             {h.details?.compliance && (
               <div className="text-xs text-muted-foreground">
