@@ -2090,3 +2090,231 @@
 .strong-contrast .portal .field-help{color:#243247!important;}
 .strong-contrast .portal :is(input,textarea)::placeholder{color:#45556e;opacity:1;}
 @media screen and (max-width:800px){.large-text .portal .request-paper{aspect-ratio:auto;min-width:0;width:100%;padding:20px 14px}.large-text .portal .paper-header{flex-wrap:wrap}.large-text .portal .paper-scroll{max-height:none}}
+
+/* Overview, laid out like a brokerage home: one value, one line, hairline lists. */
+.ov {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 64px;
+  max-width: 1120px;
+}
+.ov-main .answer-banner {
+  margin-bottom: 28px;
+}
+.ov-value {
+  font-size: 40px;
+  font-weight: 500;
+  letter-spacing: -1.6px;
+  line-height: 1.05;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.ov-change {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 14px;
+  margin-top: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.ov-change.sm {
+  font-size: 12px;
+  margin-top: 2px;
+  gap: 0;
+}
+.ov-change .period {
+  color: var(--p-muted);
+}
+.ov-chart {
+  position: relative;
+  margin-top: 14px;
+  cursor: crosshair;
+  touch-action: pan-y;
+}
+.ov-chart svg {
+  display: block;
+}
+.ov-ranges {
+  display: flex;
+  gap: 24px;
+  border-bottom: 1px solid var(--p-line);
+  margin-top: 2px;
+}
+.ov-ranges button {
+  background: none;
+  border: 0;
+  padding: 10px 2px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--p-muted);
+  position: relative;
+}
+.ov-ranges button[aria-selected="true"] {
+  color: var(--ov-accent);
+}
+.ov-ranges button[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--ov-accent);
+}
+.ov-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--p-line);
+  font-size: 15px;
+  font-weight: 500;
+}
+.ov-row small {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--p-muted);
+  margin-top: 2px;
+}
+.ov-row b {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ov-section {
+  margin-top: 40px;
+}
+.ov-section.first {
+  margin-top: 0;
+}
+.ov-section h2 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.4px;
+  margin: 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--p-line);
+}
+.ov-section h2 a {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--p-blue);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.ov-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 20px;
+  align-items: center;
+  padding: 15px 0;
+  border-bottom: 1px solid #edf1f6;
+  color: var(--p-ink);
+  text-decoration: none;
+}
+.ov-item.two {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.ov-item strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+.ov-item small {
+  display: block;
+  font-size: 12px;
+  color: var(--p-muted);
+  margin-top: 2px;
+}
+.ov-item .amt {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ov-item .amt b {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+}
+.ov-item .amt > span {
+  display: block;
+  font-size: 12px;
+  color: var(--p-muted);
+  margin-top: 2px;
+}
+a.ov-item:hover strong {
+  color: var(--p-blue);
+}
+.ov-empty {
+  font-size: 13px;
+  color: var(--p-muted);
+  padding: 16px 0;
+  margin: 0;
+}
+.ov-req {
+  display: block;
+  padding: 14px 0;
+  border-bottom: 1px solid #edf1f6;
+  color: var(--p-ink);
+  text-decoration: none;
+}
+.ov-req strong {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.ov-req small {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--p-muted);
+  margin-top: 6px;
+}
+.ov-req em {
+  font-style: normal;
+  color: var(--p-ink);
+}
+.ov-req em.attention {
+  color: #b45309;
+}
+.ov-ask {
+  margin-top: 36px;
+  padding-top: 24px;
+  border-top: 1px solid var(--p-line);
+}
+.ov-ask h3 {
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.3px;
+  margin: 0 0 8px;
+}
+.ov-ask p {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--p-muted);
+  margin: 0 0 16px;
+}
+@media (max-width: 1100px) {
+  .ov {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+  .ov-section.first {
+    margin-top: 8px;
+  }
+}
