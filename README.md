@@ -241,8 +241,11 @@ synthetic case and writes screenshots under `/tmp`.
 
 - `/`: animated Coherent logo, a replayable example showing a client's words become a confirmed
   request record, and the technology logo strip.
-- `/login`: email and password sign-in with a simplified typographic welcome panel.
-- `/workspace`: overview with asset and cash snapshots, accounts, and recent activity.
+- `/login`: email and password sign-in beside a moving board showing a sample request route to
+  an advisor by specialty. Reduced-motion settings skip the moving transition.
+- `/workspace`: client overview with a recorded-value chart that can be scrubbed, 1M/3M/YTD/1Y/ALL
+  ranges, cash, account sparklines, recent activity, and requests. Chart points carry each account's
+  recorded balance forward from its opening value; they are not market forecasts.
 - `/workspace/profile`: editable identity, contact, employment, household finances, goals, and
   trusted contact. Contact email and sign-in email are intentionally separate.
 - `/workspace/finances`: accounts, holdings, editable account details, searchable history, account
