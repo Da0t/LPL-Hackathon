@@ -1,168 +1,195 @@
 "use client";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import {
-  ArrowUpRight,
-  ArrowRight,
-  Wallet,
-  FileText,
-  UserRound,
-  MessageCircleQuestion,
-} from "lucide-react";
-import { useClient, PageHeading } from "@/components/portal/shell";
+import { ArrowRight, MessageCircleQuestion } from "lucide-react";
+import { useClient } from "@/components/portal/shell";
+import PortfolioChart, { Spark } from "@/components/portal/portfolio-chart";
 import { money, accountTypes, title } from "@/lib/portal";
+import { getMyRequests, type MyRequest, type Lifecycle } from "@/lib/api";
+import { accountSeries, clipSeries, totalSeries, RANGES, RANGE_LABEL, shortDate, type Point, type Range } from "@/lib/portfolio";
+
+const UP = "#00C805";
+const DOWN = "#FF5000";
+const UP_TEXT = "#00a650";
+
+const STATUS: Record<Lifecycle, string> = {
+  awaiting_client: "Needs your answer",
+  new: "Received",
+  assigned: "With an advisor",
+  scheduled: "Meeting plan recorded",
+  resolved: "Done",
+};
+
+function Change({ from, to, period, size = "lg" }: { from: number; to: number; period: string; size?: "lg" | "sm" }) {
+  const diff = to - from;
+  const pct = from ? (diff / from) * 100 : 0;
+  const up = diff >= 0;
+  const color = up ? UP_TEXT : DOWN;
+  return (
+    <span className={`ov-change ${size}`}>
+      <span style={{ color }}>
+        {up ? "+" : "−"}
+        {money(Math.abs(diff))} ({up ? "+" : "−"}
+        {Math.abs(pct).toFixed(2)}%)
+      </span>
+      {period && <span className="period">{period}</span>}
+    </span>
+  );
+}
+
 export default function Overview() {
   const { client, awaiting } = useClient();
-  const total = client.accounts.reduce((n, a) => n + a.balance, 0),
-    cash = client.accounts.reduce((n, a) => n + a.cash_balance, 0);
+  const [range, setRange] = useState<Range>("1Y");
+  const [hover, setHover] = useState<Point | null>(null);
+  const [requests, setRequests] = useState<MyRequest[] | null>(null);
+
+  useEffect(() => {
+    getMyRequests(client.client_id)
+      .then((r) => setRequests(r.requests))
+      .catch(() => setRequests([]));
+  }, [client.client_id]);
+
+  const total = client.accounts.reduce((n, a) => n + a.balance, 0);
+  const cash = client.accounts.reduce((n, a) => n + a.cash_balance, 0);
+
+  const series = useMemo(() => clipSeries(totalSeries(client.accounts, client.activity), range, client.as_of), [client, range]);
+  const perAccount = useMemo(
+    () => Object.fromEntries(client.accounts.map((a) => [a.account_id, clipSeries(accountSeries(a, client.activity), range, client.as_of)])),
+    [client, range],
+  );
+
+  const first = series[0]?.value ?? total;
+  const shown = hover ? hover.value : total;
+  const up = shown - first >= 0;
+  const accent = up ? UP : DOWN;
+
+  const recent = [...client.activity].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 6);
+  const label = (id: string) => client.accounts.find((a) => a.account_id === id)?.familiar_label ?? "";
+
   return (
-    <>
-      <PageHeading
-        eyebrow="YOUR OVERVIEW"
-        title="Everything, in perspective."
-        description="A connected view of your accounts and the conversations ahead."
-        action={
-          <Link className="portal-primary" href="/workspace/requests/new">
-            New request <ArrowUpRight size={18} />
+    <div className="ov" style={{ "--ov-accent": accent } as React.CSSProperties}>
+      <div className="ov-main">
+        {awaiting > 0 && (
+          <Link className="answer-banner" href="/workspace/requests">
+            <MessageCircleQuestion size={22} />
+            <span>
+              <strong>
+                {awaiting === 1 ? "Your advisor has a question about your request." : `Your advisor has questions about ${awaiting} of your requests.`}
+              </strong>
+              <small>Your request waits until you answer.</small>
+            </span>
+            <b>
+              Answer now <ArrowRight size={16} />
+            </b>
           </Link>
-        }
-      />
-      {awaiting > 0 && (
-        <Link className="answer-banner" href="/workspace/requests">
-          <MessageCircleQuestion size={22} />
-          <span>
-            <strong>
-              {awaiting === 1
-                ? "Your advisor has a question about your request."
-                : `Your advisor has questions about ${awaiting} of your requests.`}
-            </strong>
-            <small>Your request waits until you answer.</small>
-          </span>
-          <b>
-            Answer now <ArrowRight size={16} />
-          </b>
-        </Link>
-      )}
-      <div className="overview-stats">
-        <div className="stat-card featured">
-          <span>Total recorded assets</span>
-          <strong>{money(total)}</strong>
-          <small>
-            Across {client.accounts.length} accounts · snapshots as of{" "}
-            {client.as_of}
-          </small>
-          <div className="stat-spark">
-            <svg viewBox="0 0 300 60" preserveAspectRatio="none">
-              <path d="M0 58 L24 46 L52 50 L80 37 L104 41 L140 26 L164 33 L199 18 L230 24 L265 8 L300 1" />
-            </svg>
-          </div>
-        </div>
-        <div className="stat-card">
-          <span>Recorded cash balance</span>
-          <strong>{money(cash)}</strong>
-          <small>Included in total assets · not withdrawal approval</small>
-        </div>
-        <div className="stat-card">
-          <span>Accounts in view</span>
-          <strong>{client.accounts.length.toString().padStart(2, "0")}</strong>
-          <small>Retirement, investments, and everyday savings</small>
-        </div>
-      </div>
-      <div className="overview-grid">
-        <section className="portal-card">
-          <div className="card-heading">
-            <div>
-              <h2>Your accounts</h2>
-              <p>The familiar names behind your financial picture.</p>
-            </div>
-            <Link href="/workspace/finances">
-              View all <ArrowRight size={16} />
-            </Link>
-          </div>
-          {client.accounts.slice(0, 5).map((a) => (
-            <Link
-              href={"/workspace/finances?account=" + a.account_id}
-              className="account-row"
-              key={a.account_id}
-            >
-              <span className="account-icon">
-                <Wallet size={20} />
-              </span>
-              <span>
-                <strong>{a.familiar_label}</strong>
-                <small>
-                  {accountTypes[a.account_type] || title(a.account_type)} ·{" "}
-                  {a.masked_identifier}
-                </small>
-              </span>
-              <b>{money(a.balance)}</b>
-              <ArrowUpRight size={17} />
-            </Link>
+        )}
+
+        <h1 className="ov-value" aria-live="polite">
+          {money(shown)}
+        </h1>
+        <Change from={first} to={shown} period={hover ? shortDate(hover.date, true) : RANGE_LABEL[range]} />
+
+        <PortfolioChart points={series} accent={accent} onHover={setHover} />
+
+        <div className="ov-ranges" role="tablist" aria-label="Time range">
+          {RANGES.map((r) => (
+            <button key={r} type="button" role="tab" aria-selected={r === range} onClick={() => setRange(r)}>
+              {r}
+            </button>
           ))}
-        </section>
-        <section className="next-step-card">
-          <div className="blue-icon">
-            <FileText size={27} />
-          </div>
-          <p className="portal-eyebrow">A GOOD NEXT STEP</p>
+        </div>
+
+        <div className="ov-row">
+          <span>
+            Recorded cash balance
+            <small>Included in the total. Not an amount approved to withdraw.</small>
+          </span>
+          <b>{money(cash)}</b>
+        </div>
+
+        <section className="ov-section">
           <h2>
-            Something on
-            <br />
-            your mind?
+            Accounts <Link href="/workspace/finances">See all</Link>
           </h2>
-          <p>
-            Use your own words. We’ll help clarify your request and bring the
-            relevant account details together.
-          </p>
-          <Link className="portal-primary" href="/workspace/requests/new">
-            Start a conversation <ArrowRight size={18} />
-          </Link>
-          <Link className="subtle-link" href="/workspace/profile">
-            <UserRound size={16} />
-            Keep your profile up to date
-          </Link>
+          {client.accounts.map((a) => {
+            const pts = perAccount[a.account_id];
+            const start = pts[0]?.value ?? a.balance;
+            const rowAccent = a.balance - start >= 0 ? UP : DOWN;
+            return (
+              <Link href={"/workspace/finances?account=" + a.account_id} className="ov-item" key={a.account_id}>
+                <span>
+                  <strong>{a.familiar_label}</strong>
+                  <small>
+                    {accountTypes[a.account_type] || title(a.account_type)} · {a.masked_identifier}
+                  </small>
+                </span>
+                <Spark points={pts} accent={rowAccent} />
+                <span className="amt">
+                  <b>{money(a.balance)}</b>
+                  <Change from={start} to={a.balance} period="" size="sm" />
+                </span>
+              </Link>
+            );
+          })}
+        </section>
+
+        <section className="ov-section">
+          <h2>
+            Recent activity <Link href="/workspace/finances">See history</Link>
+          </h2>
+          {recent.map((e) => {
+            const vc = e.value_change ?? 0;
+            return (
+              <div className="ov-item two" key={e.event_id}>
+                <span>
+                  <strong>{e.description}</strong>
+                  <small>
+                    {label(e.account_id)} · {shortDate(e.date, true)}
+                  </small>
+                </span>
+                <span className="amt">
+                  <b style={{ color: vc > 0 ? UP_TEXT : undefined }}>
+                    {vc > 0 ? "+" : vc < 0 ? "−" : ""}
+                    {vc === 0 && e.amount === 0 ? "" : money(Math.abs(e.amount))}
+                  </b>
+                  <span>{title(e.type)}</span>
+                </span>
+              </div>
+            );
+          })}
         </section>
       </div>
-      <section className="portal-card">
-        <div className="card-heading">
-          <div>
-            <h2>Recent activity</h2>
-            <p>A few of the latest entries in your account history.</p>
-          </div>
-          <Link href="/workspace/finances">
-            Explore history <ArrowRight size={16} />
+
+      <aside className="ov-side">
+        <section className="ov-section first">
+          <h2>
+            Requests <Link href="/workspace/requests/new">New request</Link>
+          </h2>
+          {requests === null ? (
+            <p className="ov-empty">Loading…</p>
+          ) : requests.length === 0 ? (
+            <p className="ov-empty">No requests yet.</p>
+          ) : (
+            requests.slice(0, 4).map((r) => (
+              <Link href="/workspace/requests" className="ov-req" key={r.case_id}>
+                <strong>{r.request}</strong>
+                <small>
+                  <em className={r.lifecycle === "awaiting_client" ? "attention" : ""}>{STATUS[r.lifecycle] ?? "Sent"}</em>
+                  {shortDate(r.created_at.slice(0, 10), true)}
+                </small>
+              </Link>
+            ))
+          )}
+        </section>
+
+        <section className="ov-ask">
+          <h3>Something on your mind?</h3>
+          <p>Say it in your own words. We bring the relevant account details together and get it to the right advisor.</p>
+          <Link className="portal-primary" href="/workspace/requests/new">
+            Start a request <ArrowRight size={18} />
           </Link>
-        </div>
-        <div className="table-scroll">
-          <table className="portal-table">
-            <thead>
-              <tr>
-                <th>Activity</th>
-                <th>Account</th>
-                <th>Date</th>
-                <th>Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {client.activity.slice(0, 5).map((e) => (
-                <tr key={e.event_id}>
-                  <td>
-                    <strong>{e.description}</strong>
-                    <small>{title(e.type)}</small>
-                  </td>
-                  <td>
-                    {
-                      client.accounts.find((a) => a.account_id === e.account_id)
-                        ?.familiar_label
-                    }
-                  </td>
-                  <td>{e.date}</td>
-                  <td>{money(e.amount)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    </>
+        </section>
+      </aside>
+    </div>
   );
 }
