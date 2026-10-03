@@ -176,6 +176,18 @@ def run(base: str, shots: Path | None, preview: bool):
         page.wait_for_function("document.getElementById('queue-status').textContent.includes(\"Can't reach\")")
         check("unreachable service explains itself", True)
 
+        if preview:  # the scroll-driven site at /site
+            site = browser.new_page(viewport={"width": 1440, "height": 900})
+            site.on("pageerror", lambda error: page_errors.append("site: " + str(error)))
+            site.goto(base + "/site/")
+            site.wait_for_selector(".stage[data-stage='0']")
+            site.evaluate("s => { const e = document.getElementById('story');"
+                          " scrollTo(0, e.offsetTop + (e.offsetHeight - innerHeight) * 0.9); }")
+            site.wait_for_selector(".stage[data-stage='3']")
+            check("site story advances with scrolling", True)
+            check("site has no sideways scrolling", not site.evaluate("document.documentElement.scrollWidth > innerWidth"))
+            site.close()
+
         check("no script errors", not page_errors, "; ".join(page_errors))
         browser.close()
 

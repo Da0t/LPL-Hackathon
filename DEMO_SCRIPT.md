@@ -119,6 +119,10 @@ Open `http://127.0.0.1:8000/client` and `http://127.0.0.1:8000/staff`. The start
 
 Be accurate in the pitch if you use it: it is a single-process prototype server with in-memory cases, not the FastAPI backend in the architecture slide.
 
+## The SamePage site
+
+`frontend/site/` is a scroll-driven page that tells the same story as the pitch: the client's sentence, the check against her accounts, her confirmation, and the handoff to staff, followed by the four scenarios. It can stand behind the problem and product parts of the talk instead of slides, or serve as the page to leave on screen during questions. It links to `/client` and `/staff`. The preview server serves it at `/site/`; in the integrated app, mount the folder at `/site`.
+
 ## Staff page preview without the backend
 
 `python3 frontend/staff/dev_server.py`, then open `http://127.0.0.1:8001/staff`. This reuses `contracts/mock_api.py` with the expanded `data/` files and returns preset answers. It is for development and backup screenshots only, never the judged demo. `python3 frontend/staff/smoke_test.py` checks the page in a browser; add `--base http://127.0.0.1:8000` to run the same check against the integrated app.
