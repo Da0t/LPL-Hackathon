@@ -1,4 +1,4 @@
-"""Demo reset (INTEGRATION_RUNBOOK.md): restore the fictional seed state.
+"""Demo reset: restore the fictional seed state.
 
     python -m backend.reset_demo
 

@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import logging
+from datetime import date, timedelta
 from typing import Any, Callable
 
 from backend.errors import ApiError
 from backend.schemas import CaseRecord, SECURITY_DESTINATION
 from backend.services import routing
 from backend.services.priority import intake_metrics, lifecycle_of, priority_for
-from backend.services.common import now_iso
+from backend.services.common import clean_text, now_iso
 from backend.services.reply_workflow import run_reply_workflow
 from backend.store import Store
 
@@ -90,7 +91,8 @@ class StaffService:
                 produce: Callable[[], tuple[dict[str, Any], str | None]]) -> tuple[dict[str, Any], str | None]:
         """Reuse an agent's last answer for a case until the case changes or the advisor regenerates.
         A live-mode fallback is never kept, so the model is tried again on the next view."""
-        slot, version = (kind, case["case_id"]), case.get("updated_at")
+        from backend.aws.auditor import fingerprint
+        slot, version = (kind, case["case_id"]), fingerprint(case)
         hit = self._agent_cache.get(slot)
         if hit and hit[0] == version and not refresh:
             return hit[1], hit[2]
@@ -107,7 +109,7 @@ class StaffService:
             ai_mode, lambda: ba.advisor_brief(case), lambda: ba._stub_brief(case), "brief"))
         return {"case_id": case_id, "ai_mode": ai_mode, "note": note, **raw}
 
-    def plan(self, case_id: str, ai_mode: str = "mock") -> dict[str, Any]:
+    def plan(self, case_id: str, ai_mode: str = "mock", refresh: bool = False) -> dict[str, Any]:
         """Read-only agentic action packet: pre-filled fields + compliance checks +
         client/advisor drafts, for human approval. Never mutates the case."""
         case = self._case(case_id)
@@ -115,20 +117,13 @@ class StaffService:
         from backend.aws.auditor import audit_packet, fingerprint
         from backend.aws.telemetry import agent
 
-        note = None
         with agent("Forge"):
-            if ai_mode == "bedrock":
-                try:
-                    raw = ba.fulfillment_plan(case)
-                except Exception:
-                    raw = ba._stub_plan(case)
-                    note = "Prepared offline (model temporarily unavailable)."
-            else:
-                raw = ba._stub_plan(case)
-                note = "Deterministic plan; no live model generation."
-        audit = audit_packet(case, raw, ai_mode)
+            raw, note = self._cached("packet", case, ai_mode, refresh, lambda: self._run_agent(
+                ai_mode, lambda: ba.fulfillment_plan(case), lambda: ba._stub_plan(case), "plan"))
         version = fingerprint(case)
         plan_id = fingerprint({"case_version": version, "packet": raw})
+        previous = self._audited_plans.get(plan_id)
+        audit = previous["audit"] if previous and previous["audit"]["verdict"] == "pass" and not refresh else audit_packet(case, raw, ai_mode)
         self._audited_plans[plan_id] = {
             "case_id": case_id,
             "version": version,
@@ -165,38 +160,32 @@ class StaffService:
             log.warning("%s fell back to offline: %s", what, exc)
             return offline(), "Generated offline (model temporarily unavailable)."
 
-    def next_steps(
-        self, case_id: str, ai_mode: str = "mock", refresh: bool = False
-    ) -> dict[str, Any]:
+    def next_steps(self, case_id: str, ai_mode: str = "mock", refresh: bool = False) -> dict[str, Any]:
         """Next-steps planner agent. Never mutates the case."""
         case = self._case(case_id)
         facts = self._agent_facts(case)
         from backend.aws import advisor_agents as aa
-
-        result, note = self._cached(
-            "plan",
-            case,
-            ai_mode,
-            refresh,
-            lambda: self._run_agent(
-                ai_mode,
-                lambda: aa.plan_next_steps(facts),
-                lambda: aa.stub_plan_next_steps(facts),
-                "plan",
-            ),
-        )
+        result, note = self._cached("plan", case, ai_mode, refresh, lambda: self._run_agent(
+            ai_mode, lambda: aa.plan_next_steps(facts), lambda: aa.stub_plan_next_steps(facts), "plan"))
         return {"case_id": case_id, "ai_mode": ai_mode, "note": note, **result}
 
+    _TIMELINE_DAYS = 90
+
     def _timeline(self, case: dict[str, Any]) -> list[dict[str, Any]]:
-        """Every recorded event on the client's accounts, then the client's own report, oldest first."""
+        """Recorded events on the client's accounts in the weeks before the report (and any
+        security alert, whenever it was), then the client's own report, oldest first."""
+        reported = case["created_at"][:10]
+        since = (date.fromisoformat(reported) - timedelta(days=self._TIMELINE_DAYS)).isoformat()
         entries = []
         for account in self.store.accounts_for_client(case["client_id"]):
             name = f"{account.get('label') or 'Account'} {account.get('masked_identifier') or ''}".strip()
             for e in self.store.events_for_account(account["account_id"]):
+                if e["date"] < since and e["type"] != "security_alert":
+                    continue
                 entries.append({"date": e["date"], "type": e["type"], "label": e["type"].replace("_", " ").capitalize(),
                                 "detail": e.get("summary") or e.get("description") or "", "account": name,
                                 "source_id": e["source_id"], "highlight": e["type"] == "security_alert"})
-        entries.append({"date": case["created_at"][:10], "type": "client_report", "label": "Client reported a concern",
+        entries.append({"date": reported, "type": "client_report", "label": "Client reported a concern",
                         "detail": case.get("original_words") or case["confirmed_plain_language_request"], "account": None,
                         "source_id": case["case_id"], "highlight": True})
         return sorted(entries, key=lambda t: t["date"])
@@ -250,7 +239,7 @@ class StaffService:
         case = self._case(case_id)
         version = fingerprint(case)
         facts = self._agent_facts(case)
-        instruction = (instruction or "").strip() or None
+        instruction = clean_text(instruction, "The instruction")
         from backend.aws import advisor_agents as aa
         from backend.aws.cited_compliance import review as cited_review
 
@@ -286,7 +275,7 @@ class StaffService:
         case = self._case(case_id)
         version = fingerprint(case)
         facts = self._agent_facts(case)
-        draft = (draft or "").strip() or None
+        draft = clean_text(draft, "The draft")
         from backend.aws.cited_compliance import review
         from backend.aws.auditor import fingerprint
 
@@ -325,105 +314,79 @@ class StaffService:
         "escalate": "escalated_to_security",
     }
 
-    def action(
-        self,
-        case_id: str,
-        action: str,
-        text: str | None = None,
-        compliance: dict[str, Any] | None = None,
-        ai_mode: str = "mock",
-        plan_id: str | None = None,
-    ) -> dict[str, Any]:
+    @staticmethod
+    def _refuse_if_closed(case: dict[str, Any], action: str) -> None:
+        """Actions that no longer make sense: anything but a note on a resolved request,
+        and a second approval or escalation (a double click must not repeat the side effect)."""
+        events = {h.get("event") for h in case.get("history") or []}
+        if action != "note" and lifecycle_of(case) == "resolved":
+            raise ApiError(409, "CASE_RESOLVED", "This request is resolved. You can still add a note.")
+        if action == "approve" and "action_approved" in events:
+            raise ApiError(409, "ALREADY_APPROVED", "This prepared action was already approved.")
+        if action == "escalate" and "escalated_to_security" in events:
+            raise ApiError(409, "ALREADY_ESCALATED", "This request is already with the security specialist team.")
+
+    def action(self, case_id: str, action: str, text: str | None = None, compliance: dict[str, Any] | None = None,
+               ai_mode: str = "mock", acknowledged_flags: Any = None, plan_id: str | None = None) -> dict[str, Any]:
         """Record an advisor action as a history event. 'clarify' moves the case to
         needs_client_followup; others keep the status and are derived from history.
-        A 'clarify' message is checked by the compliance reviewer here, whatever the browser
+        'approve' with text is the advisor signing off a prepared action: its message goes to
+        the client the same way, so the case then waits on them too.
+        A message to the client is checked by the compliance reviewer here, whatever the browser
         claims: a flagged message is refused unless ``compliance.override`` is set, and the
         verdict and any override are recorded on the event."""
         event_name = self._ACTIONS.get(action)
         if not event_name:
             raise ApiError(400, "INVALID_ACTION", f"Unknown advisor action {action!r}.")
-        if action in ("note", "clarify", "resolve") and not (text or "").strip():
+        text = clean_text(text)
+        if action in ("note", "clarify", "resolve") and not text:
             raise ApiError(400, "MISSING_TEXT", f"The '{action}' action needs text.")
-        if action == "escalate" and "fraud_or_security" not in self._case(case_id).get(
-            "categories", []
-        ):
-            raise ApiError(
-                400,
-                "NOT_A_SECURITY_CASE",
-                "Only security cases go to the security specialist team.",
-            )
+        current = self._case(case_id)
+        if action == "escalate" and "fraud_or_security" not in current.get("categories", []):
+            raise ApiError(400, "NOT_A_SECURITY_CASE", "Only security cases go to the security specialist team.")
+        self._refuse_if_closed(current, action)  # before the model call; repeated under the lock below
+        from backend.aws.auditor import fingerprint, audit_packet
+        reviewed_version = fingerprint(current)
         if action == "approve":
-            from backend.aws.auditor import fingerprint
-
-            receipt = self._audited_plans.get(plan_id)
-            if (
-                not receipt
-                or receipt["case_id"] != case_id
-                or receipt["audit"]["verdict"] != "pass"
-            ):
-                raise ApiError(
-                    409,
-                    "AUDIT_REQUIRED",
-                    "Generate a packet and pass the independent audit before approving.",
-                )
-            if receipt["version"] != fingerprint(self._case(case_id)):
-                raise ApiError(
-                    409,
-                    "STALE_PACKET",
-                    "This case changed. Regenerate and review the packet before approving.",
-                )
+            receipt = self._audited_plans.get(plan_id) if isinstance(plan_id, str) else None
+            if not receipt or receipt["case_id"] != case_id or receipt["audit"]["verdict"] != "pass":
+                raise ApiError(409, "AUDIT_REQUIRED", "Generate a packet and pass the independent audit before approving.")
+            if receipt["version"] != reviewed_version:
+                raise ApiError(409, "STALE_PACKET", "This case changed. Regenerate and review the packet before approving.")
         reviewed = None
-        if action == "clarify":
-            from backend.aws.auditor import audit_packet, fingerprint
-
-            reviewed_case = self._case(case_id)
-            reviewed_version = fingerprint(reviewed_case)
-            audit = audit_packet(
-                reviewed_case, {"draft_client_message": text.strip()}, ai_mode
-            )
+        to_client = action == "clarify" or (action == "approve" and bool(text))
+        if to_client:
+            audit = audit_packet(current, {"draft_client_message":text}, ai_mode)
             if audit["verdict"] != "pass":
-                raise ApiError(
-                    409,
-                    "DRAFT_AUDIT_FAILED",
-                    "The draft failed its record audit. Correct unsupported details and try again.",
-                )
-            verdict = self._message_verdict(
-                case_id, text.strip(), ai_mode
-            )  # may call the model; outside the lock
-            override = verdict == "needs_changes" and bool(
-                (compliance or {}).get("override")
-            )
+                raise ApiError(409, "DRAFT_AUDIT_FAILED", "The draft failed its record audit. Correct unsupported details and try again.")
+            verdict = self._message_verdict(case_id, text, ai_mode)  # may call the model; outside the lock
+            override = verdict == "needs_changes" and isinstance(compliance, dict) and bool(compliance.get("override"))
             if verdict == "needs_changes" and not override:
-                raise ApiError(
-                    409,
-                    "COMPLIANCE_REVIEW_FAILED",
-                    "The compliance reviewer flagged this message. Revise it, or send it with an override.",
-                )
+                raise ApiError(409, "COMPLIANCE_REVIEW_FAILED", "The compliance reviewer flagged this message. Revise it, or send it with an override.")
             reviewed = {"verdict": verdict, "override": override}
         with self.store.lock:
             case = self._case(case_id)
-            if action == "clarify" and reviewed_version != fingerprint(case):
-                raise ApiError(
-                    409,
-                    "STALE_REVIEW",
-                    "This case changed during review. Review the message again.",
-                )
-            if action == "approve" and receipt["version"] != fingerprint(case):
-                raise ApiError(
-                    409, "STALE_PACKET", "This case changed. Regenerate the packet."
-                )
+            self._refuse_if_closed(case, action)
+            if (to_client or action == "approve") and reviewed_version != fingerprint(case):
+                raise ApiError(409, "STALE_REVIEW", "This case changed during review. Regenerate the packet or review the message again.")
             now = now_iso()
             details: dict[str, Any] = {"by": "advisor-demo"}
             if text:
-                details["text"] = text.strip()
-            if action == "approve":
-                details["plan_id"] = plan_id
-                details["audit"] = receipt["audit"]
+                details["text"] = text
             if reviewed:
                 details["compliance"] = reviewed
+                details["audit"] = audit
+            if action == "approve":
+                details["plan_id"] = plan_id
+                details["packet_audit"] = receipt["audit"]
+                if not to_client:
+                    details["audit"] = receipt["audit"]
+            if action == "approve" and isinstance(acknowledged_flags, list):
+                # Flagged checks on the packet that the advisor signed off before approving.
+                details["acknowledged_flags"] = [f for f in acknowledged_flags if isinstance(f, str) and 0 < len(f) <= 80][:10]
             event = {"event": event_name, "at": now, "details": details}
             case.setdefault("history", []).append(event)
-            if action == "clarify":
+            if to_client:
                 case["status"] = "needs_client_followup"
             case["updated_at"] = now
             self.store.save_case(CaseRecord.model_validate(case).model_dump())

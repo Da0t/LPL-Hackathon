@@ -42,7 +42,7 @@ export const HISTORY_LABELS: Record<string, string> = {
   advisor_claimed: "Claimed by advisor", advisor_note: "Note added", clarification_requested: "Message sent to client",
   meeting_scheduled: "Meeting scheduled", request_resolved: "Resolved", assigned: "Assigned to an advisor",
   reassigned: "Reassigned", staff_review_started: "Opened for review", seeded: "Request received",
-  action_approved: "Prepared action approved", client_replied: "Client replied", escalated_to_security: "Sent to the security specialist team",
+  action_approved: "Prepared reply sent to the client", client_replied: "Client replied", escalated_to_security: "Sent to the security specialist team",
 };
 
 export const PRIORITY_DOT: Record<Priority["level"], string> = {

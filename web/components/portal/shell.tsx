@@ -1,5 +1,11 @@
 "use client";
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -14,18 +20,31 @@ import {
 import { AccessibilityToolbar, ReassuranceBar, useAccessibility } from "./accessibility";
 import { BrandLogo } from "@/components/brand-logo";
 import { Client, portalApi } from "@/lib/portal";
+import { getMyRequests } from "@/lib/api";
 const Context = createContext<{
   client: Client;
   setClient: (c: Client) => void;
+  /** How many of the client's requests have an advisor question waiting on them. */
+  awaiting: number;
+  refreshAwaiting: () => void;
 } | null>(null);
 export const useClient = () => useContext(Context)!;
 export function PortalShell({ children }: { children: React.ReactNode }) {
   const [client, setClient] = useState<Client | null>(null),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [awaiting, setAwaiting] = useState(0);
   const path = usePathname(),
     router = useRouter();
   const {stop} = useAccessibility();
   useEffect(() => { stop(); }, [path, stop]);
+  const clientId = client?.client_id;
+  const refreshAwaiting = useCallback(() => {
+    if (!clientId) return;
+    getMyRequests(clientId)
+      .then((r) => setAwaiting(r.requests.filter((x) => x.awaiting_reply).length))
+      .catch(() => {});
+  }, [clientId]);
+  useEffect(refreshAwaiting, [refreshAwaiting, path]);
   useEffect(() => {
     portalApi("/auth/me")
       .then((actor) => {
@@ -52,7 +71,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
     ["/workspace/requests", "My requests", FileText],
   ] as const;
   return (
-    <Context.Provider value={{ client, setClient }}>
+    <Context.Provider value={{ client, setClient, awaiting, refreshAwaiting }}>
       <div className="portal portal-shell">
         <aside className="portal-sidebar">
           <Link href="/" className="portal-brand">
@@ -72,6 +91,14 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
               >
                 <Icon size={19} />
                 {label}
+                {url === "/workspace/requests" && awaiting > 0 && (
+                  <span
+                    className="nav-badge"
+                    aria-label={`${awaiting} waiting for your answer`}
+                  >
+                    {awaiting}
+                  </span>
+                )}
               </Link>
             ))}
           </nav>

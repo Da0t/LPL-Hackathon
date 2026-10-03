@@ -100,7 +100,7 @@ async function login(browser, role) {
       .getByLabel("Account to discuss", { exact: true })
       .selectOption("ACCT-201");
     await page
-      .getByLabel("Amount to discuss (USD, optional)", { exact: true })
+      .getByLabel("Amount to discuss, in dollars (optional)", { exact: true })
       .fill("6000");
     await page
       .getByLabel("Request description", { exact: true })
@@ -118,7 +118,7 @@ async function login(browser, role) {
     assert(document.case_id);
     const id = document.case_id;
     await page
-      .getByRole("button", { name: "Request sent", exact: true })
+      .getByRole("heading", { name: "Request sent", exact: true })
       .waitFor();
     const staff = await login(browser, "staff");
     await staff.page.goto(base + "/dashboard?case=" + id);
@@ -154,12 +154,10 @@ async function login(browser, role) {
     );
     assert.equal(response.status(), 200, await response.text());
     await page.goto(base + "/workspace/requests");
-    await page.getByText(clarification, { exact: true }).waitFor();
     const card = page
-      .locator("li")
-      .filter({ has: page.getByText(clarification, { exact: true }) })
-      .filter({ has: page.getByLabel("Your answer") })
-      .first();
+      .locator(".request-card")
+      .filter({ hasText: `Reference ${id}` });
+    await card.getByText(clarification, { exact: true }).waitFor();
     await card
       .getByLabel("Your answer")
       .fill("Tomorrow afternoon works for a conversation.");
@@ -184,7 +182,6 @@ async function login(browser, role) {
   } catch (error) {
     for (const context of browser.contexts())
       for (const page of context.pages()) {
-        console.log((await page.locator("body").innerText()).slice(-7000));
         await page.screenshot({
           path: "/tmp/coherent-upgrades-failed.png",
           fullPage: true,

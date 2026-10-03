@@ -25,7 +25,7 @@ export function AgentCard({ title, agent, loading, onRefresh, refreshLabel = "Re
   title: string; agent: string; loading?: boolean; onRefresh?: () => void; refreshLabel?: string; children: React.ReactNode;
 }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-primary/30 bg-primary/[0.03]">
+    <div className="overflow-hidden rounded-xl border border-primary/30 bg-primary/[0.03]">
       <div className="flex items-center justify-between gap-3 border-b border-primary/15 px-4 py-2.5">
         <div className="flex flex-wrap items-center gap-2">
           <Sparkles className="h-4 w-4 text-primary" />
@@ -45,5 +45,5 @@ export function AgentCard({ title, agent, loading, onRefresh, refreshLabel = "Re
 }
 
 export function Subheading({ children }: { children: React.ReactNode }) {
-  return <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{children}</p>;
+  return <p className="text-xs font-semibold text-muted-foreground">{children}</p>;
 }

@@ -20,7 +20,7 @@ export function ClientSnapshotPanel({ snapshot, onOpenCase }: { snapshot: Client
   return (
     <div>
       <Section title="About this client">
-        <dl className="grid grid-cols-2 gap-4 rounded-2xl border border-border bg-card p-4 sm:grid-cols-4">
+        <dl className="grid grid-cols-2 gap-4 rounded-xl border border-border bg-card p-4 sm:grid-cols-4">
           <Fact label="Prefers to be contacted by">{client.preferred_contact_channel ? sentence(client.preferred_contact_channel) : "Not recorded"}</Fact>
           <Fact label="Prefers to meet by">{client.meeting_preference ? sentence(client.meeting_preference) : "Not recorded"}</Fact>
           <Fact label="Usual advisor">{usual_advisor?.display_name || "None yet"}</Fact>
@@ -29,7 +29,7 @@ export function ClientSnapshotPanel({ snapshot, onOpenCase }: { snapshot: Client
       </Section>
 
       <Section title={`Accounts (${accounts.length})`}>
-        <ul className="divide-y divide-border rounded-2xl border border-border bg-card">
+        <ul className="divide-y divide-border rounded-xl border border-border bg-card">
           {accounts.map((a) => (
             <li key={a.account_id} className="flex items-center justify-between gap-4 p-4">
               <div className="min-w-0">
@@ -56,8 +56,9 @@ export function ClientSnapshotPanel({ snapshot, onOpenCase }: { snapshot: Client
       <Section title="Recent account activity">
         {recent_events.length === 0 ? <p className="text-sm text-muted-foreground">No activity on record.</p> : (
           <ul className="space-y-3">
-            {recent_events.map((e) => (
-              <li key={e.source_id} className="flex gap-4">
+            {recent_events.map((e, i) => (
+              // Two legs of one transfer, or two lines of one statement, share a source id.
+              <li key={`${e.source_id}-${i}`} className="flex gap-4">
                 <span className="w-24 shrink-0 text-xs text-muted-foreground">{prettyDate(e.date)}</span>
                 <div className="min-w-0">
                   <p className={`text-sm font-medium ${e.type === "security_alert" ? "text-red-700" : ""}`}>{sentence(e.type)}</p>

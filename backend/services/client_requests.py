@@ -11,11 +11,12 @@ from typing import Any
 
 from backend.errors import ApiError
 from backend.schemas import CaseRecord
-from backend.services.common import now_iso
+from backend.services.common import clean_text, now_iso
 from backend.services.priority import lifecycle_of
 from backend.store import Store
 
-_MESSAGE_EVENTS = {"clarification_requested": "advisor", "client_replied": "client"}
+# An approved prepared action carries the message the advisor signed off; a bare approval has no text.
+_MESSAGE_EVENTS = {"clarification_requested": "advisor", "action_approved": "advisor", "client_replied": "client"}
 
 
 class ClientRequests:
@@ -29,12 +30,14 @@ class ClientRequests:
             for h in case.get("history") or []
             if h.get("event") in _MESSAGE_EVENTS and (h.get("details") or {}).get("text")
         ]
+        lifecycle = lifecycle_of(case)
         return {
             "case_id": case["case_id"],
             "created_at": case["created_at"],
             "request": case["confirmed_plain_language_request"],
-            "lifecycle": lifecycle_of(case),
-            "awaiting_reply": case["status"] == "needs_client_followup",
+            "lifecycle": lifecycle,
+            # A resolved request no longer needs the client's answer, whatever was asked before.
+            "awaiting_reply": case["status"] == "needs_client_followup" and lifecycle != "resolved",
             "messages": messages,
         }
 
@@ -49,12 +52,13 @@ class ClientRequests:
                 raise ApiError(404, "CASE_NOT_FOUND", f"No such fictional case {case_id!r}.")
             if case["client_id"] != client_id:
                 raise ApiError(403, "WRONG_DEMO_CLIENT", "This request belongs to a different client (simulated access control).")
-            if case["status"] != "needs_client_followup":
+            if not self.view(case)["awaiting_reply"]:
                 raise ApiError(409, "NOT_AWAITING_REPLY", "This request is not waiting on an answer from you.")
-            if not (text or "").strip():
+            text = clean_text(text, "Your answer")
+            if not text:
                 raise ApiError(400, "MISSING_TEXT", "Type your answer before sending.")
             now = now_iso()
-            case.setdefault("history", []).append({"event": "client_replied", "at": now, "details": {"by": client_id, "text": text.strip()}})
+            case.setdefault("history", []).append({"event": "client_replied", "at": now, "details": {"by": client_id, "text": text}})
             case["status"] = "assigned" if case["routing"].get("assigned_advisor_id") else "staff_review"
             case["updated_at"] = now
             self.store.save_case(CaseRecord.model_validate(case).model_dump())

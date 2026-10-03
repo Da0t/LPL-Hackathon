@@ -34,10 +34,10 @@ Open **http://127.0.0.1:3200/login**. Private demo sign-ins are in ignored `../v
 - `/` , landing
 - `/login` , Cognito email/password sign-in
 - `/workspace` , client overview, with `/profile`, `/finances`, and `/requests` subpages
-- `/workspace/requests/new` , three-column request editor and printable A4 document
+- `/workspace/requests/new` , step-by-step request editor and printable A4 document
 - `/intake` , redirect to the authenticated request editor
-- `/dashboard` , advisor workspace (queue, case detail, **AI prep brief**, actions,
-  My pipeline board, compliance panel, impact charts)
+- `/dashboard` , advisor workspace (priority queue, prepared action packet, agent panels,
+  client messaging with compliance review, Pipeline board, Impact view)
 
 Browser API calls use the same-origin `/api` proxy to `http://127.0.0.1:8000`. HttpOnly Cognito cookies authorize requests. Client requests include current status and advisor clarification/reply threads alongside archived submission documents.
 
@@ -64,6 +64,6 @@ The reassurance bar links to a contact-request flow; it does not place a call.
 
 Staff calls now use authenticated SSE. Agent evidence displays actual model/tool/source events and
 uncalibrated confidence, with no simulated progress. Forge packets require a passing independent
-record audit before their fields, drafts, copy controls, or approval appear. The backend also rejects
+record audit before their fields, drafts, and send controls appear. The backend also rejects
 missing or stale approval receipts. Sentinel displays verified SEC/IRS KB excerpts alongside its
 checklist. See the root README for corpus scope, AWS provisioning, limits, and browser acceptance.

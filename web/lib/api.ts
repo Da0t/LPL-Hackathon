@@ -319,6 +319,7 @@ export const caseAction = (
   action: AdvisorAction,
   text?: string,
   compliance?: SentCompliance,
+  acknowledgedFlags?: string[],
   planId?: string,
 ) =>
   call<{
@@ -328,7 +329,7 @@ export const caseAction = (
   }>(`/staff/cases/${encodeURIComponent(id)}/action`, {
     method: "POST",
     role: "staff",
-    body: { action, text, compliance, plan_id: planId },
+    body: { action, text, compliance, acknowledged_flags: acknowledgedFlags, plan_id: planId },
   });
 
 export type ActionPlan = {
@@ -342,14 +343,15 @@ export type ActionPlan = {
     item: string;
     status: "pass" | "review" | "flag";
     note?: string;
+    confirm?: string;
   }[];
   draft_client_message: string;
   draft_advisor_followup: string;
   audit: any;
   plan_id: string;
 };
-export const getPlan = (id: string, onEvent?: (e: AgentEvent) => void) =>
-  callAgent<ActionPlan>(id, "plan", {}, onEvent);
+export const getPlan = (id: string, refresh = false, onEvent?: (e: AgentEvent) => void) =>
+  callAgent<ActionPlan>(id, "plan", { refresh }, onEvent);
 
 // ---- Advisor agents: reply drafter + compliance reviewer ----
 export type ComplianceCheck = {

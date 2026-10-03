@@ -40,7 +40,7 @@ export function InvestigationPanel({ caseId }: { caseId: string }) {
           </div>
 
           <div>
-            <Subheading>Timeline from account records</Subheading>
+            <Subheading>Timeline from account records · last 90 days</Subheading>
             <ol className="mt-2 space-y-3 border-l border-border pl-4">
               {inv.timeline.map((t, i) => (
                 <li key={i} className="relative">

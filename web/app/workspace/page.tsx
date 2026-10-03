@@ -6,12 +6,12 @@ import {
   Wallet,
   FileText,
   UserRound,
-  ArrowDownLeft,
+  MessageCircleQuestion,
 } from "lucide-react";
 import { useClient, PageHeading } from "@/components/portal/shell";
 import { money, accountTypes, title } from "@/lib/portal";
 export default function Overview() {
-  const { client } = useClient();
+  const { client, awaiting } = useClient();
   const total = client.accounts.reduce((n, a) => n + a.balance, 0),
     cash = client.accounts.reduce((n, a) => n + a.cash_balance, 0);
   return (
@@ -26,6 +26,22 @@ export default function Overview() {
           </Link>
         }
       />
+      {awaiting > 0 && (
+        <Link className="answer-banner" href="/workspace/requests">
+          <MessageCircleQuestion size={22} />
+          <span>
+            <strong>
+              {awaiting === 1
+                ? "Your advisor has a question about your request."
+                : `Your advisor has questions about ${awaiting} of your requests.`}
+            </strong>
+            <small>Your request waits until you answer.</small>
+          </span>
+          <b>
+            Answer now <ArrowRight size={16} />
+          </b>
+        </Link>
+      )}
       <div className="overview-stats">
         <div className="stat-card featured">
           <span>Total recorded assets</span>

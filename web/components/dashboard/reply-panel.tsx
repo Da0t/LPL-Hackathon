@@ -53,7 +53,7 @@ export function ReplyPanel({ caseId, busy, onSend, onClose }: {
   };
 
   return (
-    <div className="mt-3 overflow-hidden rounded-2xl border border-primary/30 bg-primary/[0.03]">
+    <div className="mt-3 overflow-hidden rounded-xl border border-primary/30 bg-primary/[0.03]">
       <div className="flex items-center justify-between border-b border-primary/15 px-4 py-2.5">
         <div className="flex flex-wrap items-center gap-2">
           <Sparkles className="h-4 w-4 text-primary" />
@@ -66,7 +66,7 @@ export function ReplyPanel({ caseId, busy, onSend, onClose }: {
 
       <div className="space-y-4 p-4">
         <div>
-          <textarea value={instruction} onChange={(e) => setInstruction(e.target.value)} rows={2}
+          <textarea value={instruction} onChange={(e) => setInstruction(e.target.value)} rows={2} maxLength={2000}
             placeholder="What do you need from the client? (optional) e.g. ‘Ask when they need the money.’"
             className="w-full rounded-lg border border-border bg-background p-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30" />
           <Button size="sm" className="mt-2" disabled={!!working} onClick={runDraft}>
@@ -83,7 +83,7 @@ export function ReplyPanel({ caseId, busy, onSend, onClose }: {
           <>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Draft · {audit?.verdict === "pass" ? "record audit passed; review before sending" : "unverified; correct the findings and re-check"}</p>
-              <textarea value={text} onChange={(e) => setText(e.target.value)} rows={6}
+              <textarea value={text} onChange={(e) => setText(e.target.value)} rows={6} maxLength={2000}
                 className="mt-1.5 w-full rounded-lg border border-border bg-background p-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30" />
             </div>
 

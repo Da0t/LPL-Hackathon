@@ -6,7 +6,7 @@ Run (one command, port 8000)::
     SAMEPAGE_AI_MODE=bedrock python -m backend.main   # live Bedrock via Agent 1's adapter
 
 ``python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000`` (the
-INTEGRATION_RUNBOOK.md command) also works. ``create_app`` builds an isolated
+README.md command) also works. ``create_app`` builds an isolated
 application for tests.
 """
 
@@ -107,6 +107,11 @@ def create_app(settings: Settings | None = None, *, store: Store | None = None, 
     if os.getenv("COHERENT_PORTAL_CONFIG"):
         from backend.portal.service import Portal
         app.state.portal = Portal(os.environ["COHERENT_PORTAL_CONFIG"], store)
+        app.state.intake.portal = app.state.portal
+    elif os.getenv("COHERENT_DEV_LOGIN", "").strip().lower() in {"1", "true", "yes", "on"}:
+        # Local development only: click-through sign-in, in-memory synthetic records.
+        from backend.portal.dev import DevPortal
+        app.state.portal = DevPortal(store)
         app.state.intake.portal = app.state.portal
 
     @app.middleware("http")

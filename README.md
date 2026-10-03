@@ -1,22 +1,20 @@
 # Coherent
 
 **Coherent turns everyday language into a confirmed, correctly routed wealth-management request, and
-hands the advisor a ready-to-act brief.** A client can say *"I need six thousand dollars from the Roth
-thing from my old job"*; Coherent notices there is no Roth account, surfaces the real rollover IRA,
-confirms what the client meant, and routes a structured request to the right advisor, who opens it to
-a Bedrock-generated prep brief instead of a cold transcript.
+hands the advisor a case they can act on.** A client can say *"I need six thousand dollars from the
+Roth thing from my old job"*; Coherent notices there is no Roth account, surfaces the real rollover
+IRA, confirms what the client meant, and routes a structured request to the right advisor, who opens
+it to a prepared action packet instead of a cold transcript.
 
 Built for the **2026 LPL Financial University Hackathon**. Awards targeted: *Startup We'd Buy
 Tomorrow* and *Biggest Business Impact*, plus the automatic *Best Use of AWS*.
 
-> The client portal uses real Amazon Cognito sign-in and DynamoDB storage when
-> `COHERENT_PORTAL_CONFIG` is set. All people and financial records are fictional; no real
-> financial transaction, appointment, email, or SMS is sent. Legacy unconfigured API mode uses
-> simulated role headers for offline tests.
+> All people and financial records are fictional. No real financial transaction, appointment, email,
+> or SMS is ever sent.
 >
-> Note: the product is **Coherent**. Some internal identifiers kept from the original codebase still
-> read `samepage` (e.g. the `SAMEPAGE_AI_MODE` env var, `backend/aws`); those are technical names, not
-> the product.
+> The product is **Coherent**. Some internal identifiers kept from the original codebase still read
+> `samepage` (for example the `SAMEPAGE_AI_MODE` environment variable); those are technical names,
+> not the product.
 
 **Documentation maintenance:** update this README whenever a significant feature, workflow,
 infrastructure, configuration, or validation procedure changes. Describe the behavior available on
@@ -26,115 +24,118 @@ the current branch and clearly identify work that is still awaiting integration.
 
 ## The demo in 60 seconds
 
-1. **Client portal** (`/login` → `/workspace`, with `/intake` redirecting to the request editor) , a client speaks or types a loose request. Amazon Bedrock proposes
-   up to three plain-language interpretations grounded in the client's real accounts, normalizes
-   shorthand/acronyms to approved terms ("R O I" -> *return on investment*, "the tax form" ->
-   *1099-R*), and asks one question at a time, never inventing an account or amount. The three-column editor combines the client’s words, clarification, and an A4 request document.
-2. **Client confirms** -> a structured **case** is created (original words, confirmed wording, account
-   snapshot with source ids, category tags, unresolved questions). Possible fraud routes to a security
-   specialist queue, never a general advisor.
-3. **Advisor workspace** (`/dashboard`) , the advisor opens the case to an **AI prep brief** (the ask
-   in advisor terms, talking points, facts to confirm, compliance cautions, generated live by
-   Bedrock), then acts on it , **Claim / Note / Request clarification / Mark scheduled / Resolve** ,
-   and watches it move across the **My pipeline** board, with a **compliance** panel alongside.
-4. **Advisor agents** , four more agents work the case: a **reply drafter** and a **compliance
-   reviewer** in a loop (draft, review, one revision, review), a **next-steps planner** with an owner
-   for each step, and a **security investigator** for fraud cases. The queue ranks itself and says why
-   in plain words ("Waiting 2 days for an advisor").
-5. **Impact** (`/dashboard`, Impact in the sidebar) , turns and seconds to a confirmed request,
-   measured from intakes run in the workspace, next to an advisor capacity model whose inputs are
-   editable assumptions.
+1. **Client portal** (`/login`, then `/workspace`). A signed-in client speaks or types a loose
+   request in the request editor. Amazon Bedrock proposes up to three plain-language interpretations
+   grounded in the client's real accounts, normalizes shorthand to approved terms ("R O I" becomes
+   *return on investment*, "the tax form" becomes *1099-R*), and asks one question at a time. It
+   never invents an account or an amount.
+2. **Client confirms.** A structured **case** is created: original words, confirmed wording, account
+   snapshot with source ids, category tags, and unresolved questions. Possible fraud routes to a
+   security specialist queue, never to a general advisor.
+3. **Advisor workspace** (`/dashboard`). The queue ranks itself and says why in plain words
+   ("Waiting 2 days for an advisor"). The advisor opens the case to a **prepared action packet**:
+   proposed fields, compliance checks, and a draft message. The independent Verifier must pass before
+   the prepared reply is shown; the final edited message is checked again when sent.
+4. **Advisor agents.** A **reply drafter** and a **compliance reviewer** work in a loop (draft,
+   review, one revision, review), next to a **prep brief**, a **next-steps planner** with an owner
+   for each step, and a **security investigator** for fraud cases.
+5. **Follow-up.** The advisor's message appears in the client's own workspace. The client replies
+   there, and the case returns to the top of the advisor's queue.
+6. **Impact** (`/dashboard`, Impact in the sidebar). Turns and seconds to a confirmed request,
+   measured from requests submitted in the workspace, next to an advisor capacity model whose inputs
+   are editable assumptions.
 
-### Advisor and client follow-up
-
-The advisor case view leads with a prepared action packet containing proposed fields, checks, and
-drafts for review. Approval records a workflow event; it does not execute a financial transaction.
-The client snapshot brings together the client's accounts, recent activity, and other requests.
-
-Advisors can request clarification from the client inside the demo. The backend checks the message
-with the compliance reviewer before recording it; flagged messages require revision or an explicit,
-recorded override. Clients see their own requests and clarification messages in the authenticated `/workspace/requests` view, and can reply while a request is waiting on them. A reply returns the case to its
-assigned advisor, or to staff review if it has no assignment. Staff notes, flags, and routing details
-are excluded from this client view. No email or SMS is sent.
-
-Security cases can be escalated to the specialist workflow. Advisor reassignment records the prior
-advisor and staff reason in case history. Prep briefs, next-step plans, and investigations reuse
-cached results for unchanged cases and can be explicitly regenerated.
+The speaking and clicking plan is in [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md).
 
 ---
 
 ## Architecture
 
 ```
-        Client (plain language)                         Advisor
-              │                                            │
-       web/ /workspace (Next.js)                     web/ /dashboard (Next.js)
-              │        Cognito + A4 requests                  │  AI prep brief + actions
-              └───────────────┬────────────────────────────┘
-                              │  HTTP (frozen v1 contract + additive advisor endpoints)
+        Client (plain language)                          Advisor
+              │                                             │
+     web/ /login, /workspace (Next.js)            web/ /dashboard (Next.js)
+     request editor + request document            queue, action packet, agents
+              └───────────────┬─────────────────────────────┘
+                              │  same-origin /api proxy, HttpOnly session cookie
                    backend/ , FastAPI
-            intake · triage · routing · case store (SQLite)
-                              │
-              ┌───────────────┴────────────────┐
-     backend/aws , Amazon Bedrock         data/ , synthetic records
-   Live Bedrock surfaces:                 clients · accounts · events
-   (1) intake_turn / triage_case         advisors · glossary · cases
-   (2) advisor prep brief
-   (3) advisor agents: reply drafter,
-       compliance reviewer, next-steps
-       planner, security investigator
-   (+ Transcribe custom vocabulary, Guardrails hook)
+        intake · triage · routing · staff workflow · client follow-up
+              │                    │                       │
+   backend/aws               backend/portal          backend/store.py
+   Amazon Bedrock            Amazon Cognito          SQLite: intake sessions,
+   intake, triage,           (sign-in) and           cases, assignments
+   action packet, brief,     DynamoDB (client        (local; reference records
+   four advisor agents       records, archived       synchronized from the
+   (+ Guardrails hook)       request documents)      cloud profiles)
 ```
 
-The language model only **interprets, classifies, and briefs**. Every fact, authorization check,
-account snapshot, security route, and advisor ranking is deterministic application code. Generated
-action fields and drafts additionally go through an independent record audit. This reduces unsupported
-claims; it is not a guarantee that a model can never make a mistake.
+The language model only **interprets, classifies, and drafts**. Every fact, authorization check,
+account snapshot, security route, advisor ranking, and compliance verdict is deterministic
+application code, so a confident but wrong model answer can never become a false account fact.
 
 ---
 
 ## How we use AWS
 
-- **Amazon Cognito and DynamoDB:** authenticated client/staff sessions, private client profiles, financial records, and immutable request document snapshots. The backend resolves record ownership from its identity map.
+- **Amazon Bedrock (Converse / ConverseStream with native tool use).** Intake and triage interpret the client's
+  words and classify the request through narrow, client-scoped tools with schema-forced output. On
+  the advisor side, Bedrock prepares the action packet and the prep brief and runs four **advisor
+  agents** (reply drafter, compliance reviewer, next-steps planner, security investigator). Each
+  agent answers through a fixed tool schema. A separate Verifier call audits the packet and drafts;
+  live audit failures block approval. Other agents have visibly labeled offline fallbacks. There is no orchestration framework: the only loop is draft,
+  review, one revision, review, run by plain code in `backend/services/reply_workflow.py`. The model
+  is **Claude Haiku 4.5** (`us.anthropic.claude-haiku-4-5-20251001-v1:0`), swappable via
+  `BEDROCK_MODEL_ID`.
+- **Bedrock Knowledge Bases, S3 Vectors, and Titan v2.** Sentinel retrieves and cites reviewed SEC/IRS
+  guidance. The corpus is limited to two public excerpts; it is not a legal determination.
+- **Amazon Polly.** Authenticated neural read-aloud for questions, options, and client message threads.
+- **Amazon Cognito and DynamoDB.** Cognito handles email and password sign-in for clients and staff.
+  A private, on-demand DynamoDB table holds client profiles, accounts, history, and immutable
+  snapshots of submitted request documents. Identity-to-client and staff-role mappings are owned by
+  the server, so changing a request header cannot impersonate another client.
+- **Safety by construction.** The adapter injects authorized ids (never the model's), drops invented
+  accounts, forces fraud cases to specialist review, and never asserts balances or history. The
+  compliance verdict is computed in code from what the reviewer quoted, never taken from the model.
+  Optional **Bedrock Guardrails** block investment and tax advice.
+- **Amazon Transcribe.** A financial custom vocabulary (`samepage-financial-terms`) is created and
+  the streaming adapter is built in `backend/aws/transcribe.py`, but no page calls it yet. Voice
+  input in the demo uses the browser's speech service.
+- **Reliability and security.** About one Bedrock call a second with bounded retry and graceful
+  failure; least-privilege IAM (`infra/iam_policy.json`); `us-east-1`; DynamoDB encryption at rest;
+  synthetic data; no credentials in code.
 
-- **Amazon Bedrock (Converse / ConverseStream + native tool use).** Intake and triage interpret
-  client requests, Forge prepares a packet, and a separate Verifier call audits it against the record.
-  Briefing, reply drafting, Sentinel compliance review, planning, and investigation use structured tool
-  output. Reply drafting has a bounded draft → review → revision → review loop. Staff operations stream
-  real content deltas and stage/tool events over authenticated SSE. Model: **Claude Haiku 4.5**
-  (`us.anthropic.claude-haiku-4-5-20251001-v1:0`), configurable with `BEDROCK_MODEL_ID`.
-- **Bedrock Knowledge Bases + S3 Vectors + Titan Text Embeddings v2:** Sentinel retrieves registered
-  SEC and IRS guidance excerpts, with source URLs and quoted evidence. See the corpus limits below.
-- **Amazon Polly:** authenticated neural Joanna read-aloud for questions, options, and request messages.
-  Browser speech recognition supplies optional voice input; typed input is always available.
-- **Safety by construction** , the adapter injects authorized ids (never the model's), drops invented
-  accounts, forces fraud cases to specialist review, and never asserts balances/history. The
-  compliance verdict is computed in code from what the reviewer quoted, never taken from the model. Optional
-  **Bedrock Guardrails** block investment/tax advice.
-- **Amazon Transcribe** , a financial **custom vocabulary** (`samepage-financial-terms`, created +
-  READY) biases speech-to-text toward financial terms.
-- **Reliability + security** , ~1 call/sec pacing, bounded retry, graceful failure; least-privilege
-  IAM (`infra/iam_policy.json`); `us-east-1`; synthetic data; no credentials in code.
-
-Full setup, model verification, and the live smoke test: [`AWS_SETUP.md`](AWS_SETUP.md).
+Bedrock setup, model verification, and the live smoke test: [`AWS_SETUP.md`](AWS_SETUP.md).
 
 ---
 
 ## Run it
 
-**1. Backend** (repo root) , live Bedrock:
+**1. Install and provision** (repo root, once):
 
 ```bash
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+AWS_DEFAULT_REGION=us-east-1 python -m scripts.provision_portal
+```
+
+The provisioning script uses the standard AWS credential chain and sends **no invitation emails or
+SMS**. It saves resource configuration to `var/portal-aws.json` and generated demo sign-ins to
+`var/demo-access.json`. Both files are ignored by git; never commit sign-ins or AWS credentials. It
+preserves existing profiles on rerun.
+
+**2. Backend** (repo root), with live Bedrock and the authenticated portal:
+
+```bash
 AWS_PROFILE=lpl-hackathon AWS_REGION=us-east-1 \
   BEDROCK_MODEL_ID=us.anthropic.claude-haiku-4-5-20251001-v1:0 \
   COHERENT_PORTAL_CONFIG=var/portal-aws.json SAMEPAGE_AI_MODE=bedrock \
   python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-`SAMEPAGE_AI_MODE=mock` replaces AI calls with deterministic responses. The authenticated portal still requires AWS credentials for Cognito and DynamoDB; omit `COHERENT_PORTAL_CONFIG` only for legacy offline API tests. Provision the portal first using the instructions below.
+`SAMEPAGE_AI_MODE=mock` replaces AI calls with deterministic responses. The authenticated portal
+still requires AWS credentials for Cognito and DynamoDB.
 
-**2. Frontend** (the demo UI):
+**3. Frontend:**
 
 ```bash
 cd web
@@ -142,15 +143,90 @@ pnpm install
 PORT=3200 pnpm dev          # use 3200, not 3000 (a stale service worker hijacks 3000)
 ```
 
-Open **http://127.0.0.1:3200/login**, then use a client or staff sign-in. `/workspace` is the client portal and `/dashboard` is the advisor workspace. See
-[`web/README.md`](web/README.md).
+Open **http://127.0.0.1:3200/login** and use a client or staff sign-in from `var/demo-access.json`.
+`/workspace` is the client portal and `/dashboard` is the advisor workspace. Sign-in is a cookie, so
+use two browser windows (one private) to show a client and an advisor side by side.
 
-**Tests:** `python -m pytest` (backend + AWS adapter + term matching).
+**Reset between runs:** `python -m backend.reset_demo` clears intake sessions, live cases, and
+assignments and reloads the seed data. The server does not need to restart.
+
+### Local click-through sign-in (no AWS, no passwords)
+
+For development, start the backend with `COHERENT_DEV_LOGIN=1` and without
+`COHERENT_PORTAL_CONFIG`:
+
+```bash
+COHERENT_DEV_LOGIN=1 SAMEPAGE_AI_MODE=mock \
+  python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+`/login` then shows one button per seeded user (staff and the three clients). Portal records are
+the synthetic seed profiles held in memory and reset on restart. `COHERENT_PORTAL_CONFIG` takes
+precedence, so this mode is never active alongside Cognito. Localhost only; never enable it on a
+reachable server.
+
+With neither variable set, the API runs in a legacy mode that simulates roles with request headers.
+That mode exists for the offline test suite and the legacy pages only.
+
+### Tests
+
+```bash
+python -m pytest                    # backend, AWS adapter, portal, term matching
+cd web && npx tsc --noEmit          # frontend types
+cd web && npm run build             # production build, type checking enabled
+```
 
 The follow-up workflows have regression coverage in `tests/backend/test_advisor_workspace.py`,
-`test_reply_workflow.py`, and `test_workspace_followups.py`; advisor agent output validation is in
-`tests/aws/test_advisor_agents.py`.
+`test_reply_workflow.py`, and `test_workspace_followups.py`. Advisor agent output validation is in
+`tests/aws/test_advisor_agents.py`, and client isolation, impersonation attempts, profile edit
+conflicts, ledger reconciliation, and immutable request snapshots are in `tests/portal/`.
 
+For a live browser check, install Playwright in a local test environment, start both servers, then
+run `NODE_PATH=/path/to/playwright/node_modules node tests/portal/browser.cjs` from the repository
+root. It reads `var/demo-access.json` (override with `PORTAL_ACCESS_FILE`), signs in all three
+clients and staff, saves and restores a profile edit, submits one fictional request through Bedrock
+and DynamoDB, checks the staff queue, and checks mobile layouts and draft restoration. It creates a
+synthetic case and writes screenshots under `/tmp`.
+
+---
+
+## Screens
+
+### Client
+
+- `/login`: email and password sign-in.
+- `/workspace`: overview with asset and cash snapshots, accounts, and recent activity.
+- `/workspace/profile`: editable identity, contact, employment, household finances, goals, and
+  trusted contact. Contact email and sign-in email are intentionally separate.
+- `/workspace/finances`: accounts, holdings, editable account details, searchable history, account
+  creation, and past-activity entry. Facts a client enters are marked as self-reported; entering a
+  transfer never moves money or changes a balance.
+- `/workspace/requests/new`: three columns for the client's words, the clarification, and an
+  A4-proportioned request document. The document carries the client's name, the description, the
+  original words, the chosen account's dated balances and holdings, and account history with source
+  ids. No SSN appears in it. Print or Save PDF uses A4 print CSS. `/intake` redirects here.
+- `/workspace/requests`: request status, advisor clarification messages, the client's replies, and
+  the immutable document snapshots stored in DynamoDB. A failed cloud archive can be retried without
+  submitting another request.
+
+Staff notes, flags, and routing details are never shown in the client view.
+
+### Advisor (`/dashboard`)
+
+- **Queue** with plain-language priority, filters, search, and a **Pipeline** board by workflow
+  stage.
+- **Case view.** The Overview leads with the prepared action packet; approving it records a workflow
+  event and sends the draft message to the client. It does not execute a financial transaction.
+  Further tabs hold next steps (or the security review for fraud cases), the client snapshot
+  (accounts, recent activity, other requests), advisor assignment, and compliance and history.
+- **Messaging.** A message to the client is checked by the compliance reviewer before it is
+  recorded; a flagged message needs a revision or an explicit override, which is recorded on the
+  case. A client reply returns the case to its assigned advisor, or to staff review if unassigned.
+- **Security and reassignment.** Security cases can be escalated to the specialist workflow.
+  Reassignment records the prior advisor and the staff reason in case history.
+- **Caching.** Prep briefs, next-step plans, and investigations reuse cached results for unchanged
+  cases and can be regenerated.
+- **Impact** view with measured intake numbers and the editable capacity model.
 
 ---
 
@@ -158,94 +234,76 @@ The follow-up workflows have regression coverage in `tests/backend/test_advisor_
 
 ```
 LPL-Hackathon/
-├── web/                     THE demo , Coherent frontend (Next.js + Geist + Tailwind)
-│   ├── app/                 page.tsx (landing), login/, workspace/, intake/ redirect, dashboard/
-│   ├── components/          hero, pipeline-preview, routing-graph, brand-logo, dashboard UI, ui/ (shadcn)
-│   ├── lib/api.ts           typed client for the backend
-│   └── public/              coherent-logo.png, coherent-icon.png
+├── web/                     the demo frontend (Next.js, Geist, Tailwind)
+│   ├── app/                 landing, login/, workspace/ (client portal), dashboard/ (advisor)
+│   ├── components/          dashboard/ (case view and agent panels), portal/ (client shell,
+│   │                        request document), landing sections, ui/ (shadcn)
+│   └── lib/                 api.ts (advisor and intake client), portal.ts (client portal client)
 ├── backend/                 FastAPI app
-│   ├── main.py api.py       app + routes (v1 contract + additive advisor endpoints: /brief, /action,
-│   │                        /plan, /reply-draft, /compliance-review, /next-steps, /investigation, /client;
-│   │                        client follow-up: /my/requests and /my/requests/{case_id}/reply)
-│   ├── services/            intake, triage, staff (brief + actions), routing, tools, validation,
-│   │                        priority (queue ranking + intake metrics), reply_workflow (drafter/reviewer loop),
-│   │                        client_requests (client-visible status and clarification replies)
-│   ├── store.py             SQLite cases + cloud-synchronized reference records
-│   ├── portal/               Cognito authorization, DynamoDB persistence, synthetic client profiles
-│   └── aws/                 Amazon Bedrock adapter (intake_turn, triage_case, advisor_brief), advisor_agents, config, transcribe
-├── data/                    synthetic seed data + shared store
+│   ├── main.py api.py       app and routes: v1 contract plus advisor endpoints under
+│   │                        /staff/cases/{id}/ and client follow-up under /my/requests
+│   ├── services/            intake, triage, routing, validation, staff workflow, priority (queue
+│   │                        ranking and intake metrics), reply_workflow, client_requests
+│   ├── portal/              Cognito sign-in, DynamoDB persistence, seed profiles, dev sign-in
+│   ├── aws/                 Bedrock adapter (intake, triage, brief), advisor_agents, transcribe
+│   └── store.py             SQLite cases plus reference records synchronized from the portal
+├── data/                    synthetic seed data
 ├── contracts/               frozen v1 HTTP contract, fixture, standalone mock
-├── infra/                   least-privilege IAM + Bedrock Guardrail config
-├── tests/                   aws/ , data/ , backend/
-├── AWS_SETUP.md             AWS setup, model verification, smoke test, the adapter seam
-├── INTEGRATION_RUNBOOK.md · SAMEPAGE_PRODUCT_SPEC.md · HACKATHON_PROJECT_BRIEF.md · DEMO_SCRIPT.md
-└── frontend/client, frontend/staff   LEGACY FastAPI-served UI (pre-Coherent); web/ is the demo now
+├── infra/                   least-privilege IAM and Bedrock Guardrail config
+├── scripts/                 provision_portal.py, generate_api_examples.py
+├── tests/                   aws/, backend/, data/, portal/, client/ (legacy page tests)
+└── frontend/                LEGACY pages served by the backend at /client and /staff
+                             (pre-Coherent); web/ is the demo
 ```
 
 ---
 
 ## What is live and what is simulated
 
-- **Live (with `SAMEPAGE_AI_MODE=bedrock`):** language interpretation, clarifying questions, term
-  normalization, triage, the advisor prep brief, and the four advisor agents , Amazon Bedrock.
+- **Live AWS:** Cognito sign-in, DynamoDB client records and archived request documents, and (with
+  `SAMEPAGE_AI_MODE=bedrock`) language interpretation, clarifying questions, term normalization,
+  triage, the action packet, the prep brief, the advisor agents, and the independent record critic.
+  Bedrock KB retrieval and Polly read-aloud are also live AWS calls.
 - **Always deterministic:** authorization scope, account facts and sources, security routing, advisor
-  ranking, queue priority, the compliance verdict, case state, assignment, and the workflow/lifecycle
-  actions.
-- **Synthetic:** every client, account, balance, event, and advisor. Role headers only simulate access when the portal is unconfigured.
-  Clarification messages and replies are stored and displayed inside the demo; no external email
-  or SMS is sent, and no real transaction or appointment is executed.
-- **Measured:** client turns and seconds from first message to confirmation, for intakes run in the
-  workspace. **Not measured:** advisor time saved. The capacity model on the Impact view is a formula
-  with assumed inputs.
+  ranking, queue priority, field comparisons, verdict calculation from reviewer findings, case state,
+  assignment, and workflow actions. Model-generated checks and findings are not deterministic.
+- **Synthetic:** every client, account, balance, event, and advisor. Three fictional households have
+  detailed profiles, 16 accounts, and 154 activity records; SSNs are represented by their last four
+  digits only. Clarification messages and replies stay inside the demo.
+- **Measured:** client turns and seconds from first message to confirmation, for requests submitted
+  in the workspace. **Not measured:** advisor time saved. The capacity model on the Impact view is a
+  formula with assumed inputs.
+
+## Operational boundaries
+
+This is a localhost prototype with real AWS identity and storage, not a production financial system.
+
+- Cognito sessions expire after one hour and require sign-in again.
+- Self-registration, password reset, MFA, bank connectivity, and full SSN collection are not
+  implemented.
+- Intake sessions and the staff case workflow use the local SQLite database; only client records and
+  archived request documents are persisted in the cloud.
+- AWS session credentials must remain valid for backend calls.
+- Before hosting publicly, configure HTTPS with Secure cookies and an explicit allowed origin
+  (`COHERENT_ALLOWED_ORIGINS`); the frontend proxy targets the backend on localhost.
+- Seed histories include reconciled account-value ledgers and matched transfer legs. They are
+  fictional statements, not market feeds. Editing an account replaces its holdings with a
+  self-reported balance awaiting verification.
+
+The profile fields, holdings, and activity categories were modeled on public brokerage documentation:
+[Schwab brokerage account information](https://www.schwab.com/brokerage),
+[Fidelity transaction-history categories](https://www.fidelity.com/webcontent/ap002390-mlo-content/18.04/help/learn_history.shtml),
+and [Fidelity cost-basis explanations](https://www.fidelity.com/webxpress/help/topics/learn_account_cost_basis.shtml).
+These inform the data model, not personalized financial advice.
 
 ## Documentation
 
-- [`web/README.md`](web/README.md) , frontend run + structure
-- [`AWS_SETUP.md`](AWS_SETUP.md) , AWS setup, model verification, smoke test
-- [`contracts/API_V1.md`](contracts/API_V1.md) , frozen HTTP contract (all advisor endpoints are additive)
-- [`SAMEPAGE_PRODUCT_SPEC.md`](SAMEPAGE_PRODUCT_SPEC.md) · [`HACKATHON_PROJECT_BRIEF.md`](HACKATHON_PROJECT_BRIEF.md) · [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md)
-
-
-## Client portal upgrade (October 3)
-
-The new `/workspace` experience replaces the fictional-client selector with a normal Cognito email/password sign-in. Client profiles, accounts, history, and immutable submitted request documents use a private, on-demand DynamoDB table in `us-east-1`. Identity-to-client and staff-role mappings are server-owned; changing demo headers cannot impersonate another client when the portal is enabled. Passwords are managed by Cognito, session tokens use HttpOnly SameSite cookies, and the Next.js `/api` proxy keeps browser requests on one origin. The original SQLite intake/case engine remains in use locally; its account lookup is synchronized from the cloud records.
-
-Three fictional households have detailed personal/contact/employment information, financial preferences, retirement and brokerage accounts, cash and education savings, holdings, beneficiaries, and dated history. SSNs are represented by **last four digits only**. These records must stay synthetic. User-entered account facts and historical activity are explicitly marked as self-reported; entering a transfer history record never moves money or changes a balance.
-
-Field research: [Schwab brokerage account information](https://www.schwab.com/brokerage), [Fidelity transaction-history categories](https://www.fidelity.com/webcontent/ap002390-mlo-content/18.04/help/learn_history.shtml), and [Fidelity cost-basis explanations](https://www.fidelity.com/webxpress/help/topics/learn_account_cost_basis.shtml) informed the profile fields, holdings, contributions, transfers, trades, dividends, reinvestment, fees, and retirement activity. These sources inform the data model, not personalized financial advice.
-
-Provision resources with `AWS_DEFAULT_REGION=us-east-1 .venv/bin/python -m scripts.provision_portal` using the standard AWS credential chain. The script sends **no invitation emails or SMS**. It saves resource configuration to ignored `var/portal-aws.json` and generated demo sign-ins to private, ignored `var/demo-access.json`. It preserves existing profiles on rerun. Never commit either sign-ins or AWS credentials. DynamoDB uses encryption at rest; [Cognito authentication](https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/API_InitiateAuth.html) and [GetUser validation](https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/API_GetUser.html) provide the identity boundary.
-
-Run the authenticated backend with `COHERENT_PORTAL_CONFIG=var/portal-aws.json SAMEPAGE_AI_MODE=bedrock .venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000`. Supply a verified Bedrock model and AWS credentials as described in `AWS_SETUP.md`; `SAMEPAGE_AI_MODE=mock` is the explicit offline AI option. Without `COHERENT_PORTAL_CONFIG`, the old simulated API mode remains available for legacy tests only. Run the frontend with `cd web && npm run dev -- --hostname 127.0.0.1 --port 3200`.
-
-### Client screens and request documents
-
-- `/login`: email/password sign-in, with no fictional-client picker.
-- `/workspace`: per-client overview, asset/cash snapshots, accounts, and recent activity.
-- `/workspace/profile`: editable identity, contact/address, employment, household finances, goals, and trusted contact fields. Contact email and Cognito sign-in email are intentionally separate.
-- `/workspace/finances`: account list, holdings, editable account details, searchable/type-filtered history, account creation, and past-activity entry. Account types include brokerage/joint, traditional/Roth/rollover/SEP/SIMPLE IRAs, 401(k), 403(b), 457(b), HSA, 529, trusts, cash, savings, and CDs.
-- `/workspace/requests/new`: three generous columns for the client's words, clarification/review, and an A4-proportioned document. The document includes the client's name, description, original words, chosen account's exact dated balances and holdings, and account-specific history with source IDs. Print / Save PDF uses A4 print CSS and flows long histories across pages. No SSN is included in the request document.
-- `/workspace/requests`: immutable submitted document snapshots stored in DynamoDB. A failed cloud archive can be retried without submitting another request.
-
-Seed histories include reconciled account-value ledgers and matched transfer legs; holdings plus cash match the recorded balances. These are fictional statements, not market feeds. Editing an account replaces its holdings presentation with a self-reported balance awaiting verification so old positions are not presented as a reconciliation of the new value. New historical notes do not recalculate balances.
-
-### Validation and operational boundaries
-
-The seeded portal contains **3 clients, 16 accounts, and 154 activity records**. The Python suite covers existing intake/routing plus client isolation, impersonation attempts, profile edit conflicts, historical transfer validation, ledger reconciliation, and immutable request snapshots. `cd web && npx tsc --noEmit` checks the frontend; build-time type checking is enabled. React 19/Motion typing in the existing shared animation components was corrected as part of enabling this check.
-
-For a live browser integration check, install Playwright in a local test environment, start the two servers, then run `NODE_PATH=/path/to/playwright/node_modules node tests/portal/browser.cjs` from the repository root. It reads `var/demo-access.json` (override with `PORTAL_ACCESS_FILE`), signs in all three clients and staff, saves/restores a profile edit, submits one fictional request through Bedrock and DynamoDB, checks the staff queue, and checks mobile layouts and draft restoration. It creates a synthetic case and writes screenshots/print output under `/tmp`; it does not send communications or execute financial transactions.
-
-This is a localhost prototype with real AWS identity/storage, not a production financial system. Cognito sessions expire after one hour and require sign-in again. Self-registration, password reset UI, MFA, bank connectivity, and full SSN collection are not implemented. Intake sessions and the staff case workflow still require the local SQLite database; only client records and archived request documents are cloud-persisted. AWS session credentials must remain valid for backend calls. Before hosting publicly, configure HTTPS with Secure cookies and an explicit allowed origin (`COHERENT_ALLOWED_ORIGINS`); the current proxy targets the backend on localhost. Browser voice uses the browser's speech service and requires permission. Typed requests remain fully usable when voice is unavailable.
-
-Live acceptance completed: all three Cognito client logins and the staff login, a Bedrock-assisted confirmed request, its DynamoDB document archive and staff visibility, profile persistence, logout, client isolation, draft restoration without automatic submission, and all four client screens at a 390px viewport. Printed request output was inspected as A4 pages with complete account values and history.
-
-Production validation: `npm run build` passes with TypeScript checking enabled; all 150 Python tests pass. Seven legacy client browser tests passed during portal development. The client portal's live browser smoke also passes. The current local preview uses the production build (`cd web && npm run start -- --hostname 127.0.0.1 --port 3200`). Use the development command above when editing. The SQLite reference history is replaced from each client's cloud record so legacy seed events cannot contradict the portal's history.
-
-### Portal and advisor integration
-
-The portal and advisor workspace now run together. `/workspace/requests` includes current request status, advisor clarification messages, client replies, and separately saved A4 document snapshots. Cognito identity scopes both `/portal/*` and `/my/requests/*`; demo headers cannot switch the signed-in client. Staff review and replies preserve the immutable submission snapshot, including when cloud archiving is retried after a workflow update.
-
-Merge validation: 150 Python tests and the production frontend build pass, including an authenticated advisor clarification/client reply regression that verifies client isolation and preservation of the original submission document.
+- [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md): the five-minute speaking and clicking plan, plus likely questions
+- [`web/README.md`](web/README.md): frontend run and structure
+- [`AWS_SETUP.md`](AWS_SETUP.md): Bedrock setup, model verification, smoke test
+- [`contracts/API_V1.md`](contracts/API_V1.md): frozen v1 HTTP contract (advisor, follow-up, and portal endpoints are additive)
+- [`HACKATHON_PROJECT_BRIEF.md`](HACKATHON_PROJECT_BRIEF.md): event rules, constraints, and judging criteria
+- [`SAMEPAGE_PRODUCT_SPEC.md`](SAMEPAGE_PRODUCT_SPEC.md): the original specification (historical)
 
 ## Six upgrades: verification, cited guidance, streaming, and accessible follow-up
 
@@ -254,7 +312,8 @@ Merge validation: 150 Python tests and the production frontend build pass, inclu
    unsupported statements. The UI shows **pass / needs fix** and field coverage. A failed or unavailable
    audit withholds the ready packet and disables approval. The backend requires its own passing receipt
    for the exact current case fingerprint; editing a case invalidates old receipts. Approval records a
-   history event; it does not execute a transaction or send a draft. Clarification messages are audited
+   history event and sends the reviewed message to the client thread when supplied; it never executes
+   a financial transaction. The final edited message is independently audited again before delivery. Clarification messages are audited
    again when sent, and a compliance override cannot bypass a failed record audit. Pass means *no
    detected mismatch*, not a truth guarantee. Offline mode clearly labels deterministic-only checks.
 2. **Sentinel retrieval and citations.** A real Bedrock KB indexes two curated public-guidance excerpts
@@ -303,7 +362,8 @@ The resumable script creates a private encrypted S3 document bucket, an S3 Vecto
 float32 dimensions, cosine distance), a scoped Bedrock service role, a Titan-v2-backed KB and S3 data
 source, then waits for ingestion. IDs are saved to ignored `var/knowledge-base.json`. Re-run after
 reviewing/updating corpus excerpts to sync them. The app reads this file automatically; override with
-`COHERENT_KB_CONFIG` or `BEDROCK_KNOWLEDGE_BASE_ID`. `BEDROCK_MAX_TOKENS` defaults to 2048. Requirements include the verified boto3/botocore
+`COHERENT_KB_CONFIG` or `BEDROCK_KNOWLEDGE_BASE_ID`. `BEDROCK_MAX_TOKENS` defaults to 2048. The Next.js API proxy allows 120 seconds so the
+backend can finish its bounded model calls or return its own timeout response. Requirements include the verified boto3/botocore
 1.43.108 SDK floor for the S3 Vectors storage configuration.
 Provisioning needs S3, S3 Vectors, IAM, and Bedrock control-plane permissions; these are separate from
 runtime permissions. Runtime needs `bedrock:Retrieve` for that KB, model invocation/streaming, and
@@ -311,7 +371,7 @@ runtime permissions. Runtime needs `bedrock:Retrieve` for that KB, model invocat
 resources and usage incur AWS charges; they persist until deleted. Remove the KB/data source, vector
 index/bucket, document objects/bucket, and dedicated service role when retiring this demo.
 
-Local acceptance: 167 Python tests, seven legacy browser checks, and the production build passed.
+Local acceptance: 188 Python tests, seven legacy browser checks, and the production build passed.
 Real KB ingestion completed with two indexed documents. The authenticated upgrade browser smoke
 passed Polly playback, persistent accessibility controls at 390px, live Bedrock audits, cited retrieval,
 and a complete advisor-clarification/client-reply loop. All three client logins and the staff login

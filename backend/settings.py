@@ -5,7 +5,7 @@ specific paths live in code. Agent 1 owns AWS configuration (``AWS_REGION``,
 ``BEDROCK_MODEL_ID``) in ``backend/aws/config.py``; this module only decides
 *which* language-model adapter to load:
 
-``SAMEPAGE_AI_MODE=bedrock``  Agent 1's live Bedrock adapter (the judged path; INTEGRATION_RUNBOOK.md)
+``SAMEPAGE_AI_MODE=bedrock``  Agent 1's live Bedrock adapter (the judged path; README.md)
 ``SAMEPAGE_AI_MODE=stub``     Agent 1's adapter in its offline stub mode (needs backend/aws present)
 ``SAMEPAGE_AI_MODE=mock``     Agent 2's deterministic mock (default; offline UI development)
 

@@ -26,7 +26,7 @@ class AgentInput(BaseModel):
         "investigation",
     ]
     instruction: str | None = Field(default=None, max_length=2000)
-    draft: str | None = Field(default=None, max_length=8000)
+    draft: str | None = Field(default=None, max_length=2000)
     refresh: bool = False
 
 
@@ -66,7 +66,7 @@ def stream(
         try:
             with capture(send) as trace, agent(names[body.operation]):
                 if body.operation == "plan":
-                    result = service.plan(case_id, mode)
+                    result = service.plan(case_id, mode, refresh=body.refresh)
                 elif body.operation == "reply-draft":
                     result = service.reply_draft(case_id, body.instruction, mode)
                 elif body.operation == "compliance-review":

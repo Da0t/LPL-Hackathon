@@ -33,7 +33,7 @@ export function CompliancePanel({ detail, hc }: { detail: any; hc: any }) {
     <Section title="Compliance">
       <AgentEvidence caseId={detail.case_id} operation="compliance-review" />
       <ComplianceSources review={review} />
-      <div className="rounded-2xl border border-border bg-card p-4">
+      <div className="rounded-xl border border-border bg-card p-4">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-sm font-medium"><ShieldCheck className="h-4 w-4 text-primary" /> Advisor checklist</div>
           <button onClick={run} disabled={running}

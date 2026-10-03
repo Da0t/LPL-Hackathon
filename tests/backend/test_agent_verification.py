@@ -205,3 +205,14 @@ def test_live_reply_workflow_calls_cited_reviewer_without_silent_fallback(app, m
     result=app.state.staff.reply_draft('CASE-1042',ai_mode='bedrock')
     assert calls==['bedrock'] and result['note'] is None
     assert result['review']['retrieval']['status']=='retrieved'
+
+
+def test_passing_packet_does_not_authorize_an_invented_edited_message(client):
+    path='/staff/cases/CASE-1042'
+    plan=client.post(path+'/plan',headers=STAFF).json()
+    response=client.post(path+'/action',headers=STAFF,json={
+        'action':'approve','plan_id':plan['plan_id'],
+        'text':'Your account balance is $999,999.', 'compliance':{'override':True}})
+    assert response.status_code==409 and response.json()['error_code']=='DRAFT_AUDIT_FAILED'
+    history=client.get(path,headers=STAFF).json()['history']
+    assert not any(e['event']=='action_approved' for e in history)

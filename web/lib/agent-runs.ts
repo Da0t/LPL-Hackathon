@@ -45,6 +45,7 @@ export function updateRun(key: string, event: AgentEvent) {
   else if (event.type === "result") {
     next.running = false;
     next.diagnostics = event.result?.diagnostics;
+    next.auditVerdict = event.result?.audit?.verdict || next.auditVerdict;
   } else if (event.type === "error") {
     next.running = false;
     next.error = event.message;

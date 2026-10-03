@@ -123,11 +123,3 @@
     @apply bg-background text-foreground;
   }
 }
-
-/* Coherent routing-graph node entrance */
-@keyframes rg-pop {
-  from { opacity: 0; transform: translate(-50%, -50%) scale(0.85); }
-  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-}
-.rg-pop { animation: rg-pop 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
-@media (prefers-reduced-motion: reduce) { .rg-pop { animation: none; } }

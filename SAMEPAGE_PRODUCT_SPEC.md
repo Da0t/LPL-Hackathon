@@ -1,5 +1,7 @@
 # SamePage Product and Development Specification
 
+> **Status:** this is the original specification, written before the build when the product was called SamePage and the work was split across four branches ("Agent 1" to "Agent 4"). It is kept for the product reasoning and the factual boundaries. The product is now **Coherent**; [`README.md`](README.md) describes what is actually built.
+
 SamePage helps people describe financial service needs in everyday language, verify which account they mean, and send a clear request to the right person. The first audience is older investors who prefer speaking or have trouble recalling financial terms, but the product is useful to anyone unfamiliar with wealth-management language. This specification defines the hackathon prototype, the product story, the data contracts, and the work that can be developed in parallel.
 
 The product promise is: **A client can say “the retirement money from my old job,” and SamePage helps them reach the right advisor without guessing which account they meant.**

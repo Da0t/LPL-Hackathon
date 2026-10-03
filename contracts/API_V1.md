@@ -1,5 +1,7 @@
 # SamePage Version One Integration Contract
 
+> **Status:** the version-one field names below are still what the backend serves and the tests enforce. The surrounding process notes (four parallel branches, the mock server, pages at `/client` and `/staff`) describe the initial build. The current app adds advisor, client follow-up, and portal endpoints on top of this contract; see [`README.md`](../README.md).
+
 This contract is frozen for the four parallel development branches. Every agent can start from this file, `demo_fixture_v1.json`, and `mock_api.py` without waiting for another agent's code. `SAMEPAGE_PRODUCT_SPEC.md` explains the product; this file fixes the data exchanged between components. Do not change version-one field names on an individual branch. Propose a version-two change to the team if the contract is genuinely insufficient.
 
 ## Local development

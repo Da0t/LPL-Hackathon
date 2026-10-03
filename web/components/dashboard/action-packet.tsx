@@ -1,145 +1,204 @@
 "use client";
 
-// The fulfillment agent's prepared action packet, as built on main: pipeline animation,
-// pre-filled fields, auto-run compliance checks, drafts, and the approve step.
+// The fulfillment agent's prepared reply: what it found on the request, what is still missing,
+// the flagged items the advisor signs off, and the message to the client, ready to edit and send.
 import React, { useEffect, useState } from "react";
-import {
-  CheckCircle2, RefreshCw, Clock, ShieldCheck,
-  Brain, Layers, ClipboardList, PenLine, Loader2, Copy, Check, AlertTriangle, Workflow,
-} from "lucide-react";
+import { CheckCircle2, RefreshCw, AlertTriangle, Send, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AgentEvidence, AuditVerdict } from "./agent-evidence";
 import type { ActionPlan } from "@/lib/api";
+import { Subheading } from "./section";
+import { agentNote, timeAgo } from "./labels";
 
-const PIPELINE_STEPS = [
-  { label: "Forge prepares", icon: ClipboardList },
-  { label: "Verifier audits", icon: ShieldCheck },
-];
+type SentEvent = { at: string; details?: { text?: string; acknowledged_flags?: string[] } };
 
-function AgentPipeline({ stage, done }: { stage: number; done: boolean }) {
-  const completed = done ? PIPELINE_STEPS.length : stage;
+function Shell({ title, aside, children }: { title: string; aside?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-1 rounded-2xl border border-border bg-muted/20 p-3">
-      {PIPELINE_STEPS.map((s, i) => {
-        const isDone = i < completed;
-        const isRunning = !done && i === completed;
-        return (
-          <React.Fragment key={s.label}>
-            <div className="flex flex-1 flex-col items-center gap-1.5 text-center">
-              <div className={`flex h-9 w-9 items-center justify-center rounded-full border transition-all duration-300 ${
-                isDone ? "border-primary bg-primary text-white shadow-[0_0_14px_rgba(22,119,255,0.4)]"
-                : isRunning ? "border-primary bg-primary/10 text-primary shadow-[0_0_14px_rgba(22,119,255,0.3)]"
-                : "border-border bg-background text-muted-foreground"}`}>
-                {isDone ? <Check className="h-4 w-4" /> : isRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <s.icon className="h-4 w-4" />}
-              </div>
-              <span className={`text-[10px] leading-tight ${isDone || isRunning ? "text-foreground" : "text-muted-foreground"}`}>{s.label}</span>
-            </div>
-            {i < PIPELINE_STEPS.length - 1 && <div className={`mb-4 h-px flex-1 transition-colors duration-300 ${i < completed ? "bg-primary" : "bg-border"}`} />}
-          </React.Fragment>
-        );
-      })}
-    </div>
-  );
-}
-
-function CopyCard({ title, text }: { title: string; text: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => { try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* clipboard blocked */ } };
-  return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <div className="flex items-center justify-between">
-        <p className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">{title}</p>
-        <button onClick={copy} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-          {copied ? <Check className="h-3 w-3 text-primary" /> : <Copy className="h-3 w-3" />}{copied ? "Copied" : "Copy"}
-        </button>
+    <div className="mt-5 overflow-hidden rounded-xl border border-primary/30 bg-primary/[0.03]">
+      <div className="flex items-center justify-between gap-3 border-b border-primary/15 px-4 py-2.5">
+        <span className="text-sm font-semibold">{title}</span>
+        {aside}
       </div>
-      <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">{text}</p>
+      <div className="space-y-5 p-4">{children}</div>
     </div>
   );
 }
 
-function ComplianceBadge({ status }: { status: string }) {
-  const map: Record<string, { cls: string; icon: any; label: string }> = {
-    pass: { cls: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: CheckCircle2, label: "Pass" },
-    review: { cls: "bg-amber-50 text-amber-700 border-amber-200", icon: Clock, label: "Review" },
-    flag: { cls: "bg-red-50 text-red-600 border-red-200", icon: AlertTriangle, label: "Flag" },
+// What was actually sent, read from the case history, so it never drifts from what the client received.
+function SentReceipt({ sent }: { sent: SentEvent }) {
+  const reviewed = sent.details?.acknowledged_flags || [];
+  return (
+    <Shell title="Reply sent to the client" aside={<span className="text-xs text-muted-foreground">{timeAgo(sent.at)}</span>}>
+      {sent.details?.text ? (
+        <blockquote className="whitespace-pre-wrap rounded-lg border-l-2 border-emerald-500 bg-card p-3 text-sm">{sent.details.text}</blockquote>
+      ) : (
+        <p className="text-sm text-muted-foreground">The prepared action was approved without a message to the client.</p>
+      )}
+      {reviewed.length > 0 && <p className="text-xs text-muted-foreground">Flagged items you signed off before sending: {reviewed.join(", ")}</p>}
+      <p className="flex items-center gap-1.5 text-sm text-emerald-700">
+        <CheckCircle2 className="h-4 w-4" /> Their answer will show up on this request. Use Message client to follow up.
+      </p>
+    </Shell>
+  );
+}
+
+// `sent` is the approval event from the case history, so the sent state survives a reload.
+// `onSend` resolves to the reason the send was refused, or null when the message went out.
+export function ActionPacket({ caseId, plan, loading, onRegenerate, onSend, sent, resolved }: {
+  caseId: string; plan: ActionPlan | null; loading: boolean; onRegenerate: () => void;
+  onSend: (message: string | undefined, reviewedChecks: string[]) => Promise<string | null>;
+  sent: SentEvent | null; resolved: boolean;
+}) {
+  const [text, setText] = useState("");
+  const [ticked, setTicked] = useState<number[]>([]);
+  const [showPassed, setShowPassed] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => { setText(plan?.draft_client_message || ""); setTicked([]); setError(null); }, [plan]);
+
+  if (sent) return <SentReceipt sent={sent} />;
+  if (resolved) return <Shell title="Prepared reply"><p className="text-sm text-muted-foreground">This request is resolved, so there is no reply to send.</p></Shell>;
+
+  const fields = plan?.prepared_fields || [];
+  const known = fields.filter((f) => f.value);
+  const missing = fields.filter((f) => !f.value);
+  const checks = plan?.compliance_checks || [];
+  // A flag blocks the message until the advisor signs it; a review item is a reminder for acting on the request.
+  const flagged = checks.map((c, i) => ({ ...c, i })).filter((c) => c.status === "flag");
+  const reminders = checks.filter((c) => c.status === "review");
+  const passed = checks.filter((c) => c.status === "pass");
+  const open = flagged.filter((c) => !ticked.includes(c.i)).length;
+  const message = text.trim();
+  const edited = !!plan && message !== (plan.draft_client_message || "").trim();
+  const actionTitle = (plan?.action_type || "").replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+  const live = plan?.ai_mode === "bedrock" && !plan.note;
+
+  const toggle = (i: number) => setTicked((t) => (t.includes(i) ? t.filter((x) => x !== i) : [...t, i]));
+  const send = async () => {
+    if (sending) return;
+    setSending(true); setError(null);
+    try { setError(await onSend(message, flagged.map((c) => c.item))); }
+    finally { setSending(false); }
   };
-  const m = map[status] || map.review;
-  return <span className={`inline-flex flex-none items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${m.cls}`}><m.icon className="h-3 w-3" />{m.label}</span>;
-}
 
-export function ActionPacket({ caseId, plan, loading, stage, onRegenerate, onApprove }: { caseId: string; plan: ActionPlan | null; loading: boolean; stage: number; onRegenerate: () => void; onApprove: () => Promise<void> }) {
-  const [approving, setApproving] = useState(false);
-  const [approved, setApproved] = useState(false);
-  useEffect(() => { setApproved(false); }, [plan]);
-  const approve = async () => { setApproving(true); try { await onApprove(); setApproved(true); } catch { /* Parent displays the approval error. */ } finally { setApproving(false); } };
-  const actionTitle = (plan?.action_type || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   return (
-    <div className="mt-5 overflow-hidden rounded-2xl border border-primary/30 bg-primary/[0.03]">
-      <div className="flex items-center justify-between border-b border-primary/15 px-4 py-2.5">
-        <div className="flex items-center gap-2">
-          <Workflow className="h-4 w-4 text-primary" />
-          <span className="text-sm font-semibold">Agent prepared this action</span>
-          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">{plan?.note ? "Fallback preparation" : plan?.ai_mode === "bedrock" ? "Amazon Bedrock" : "Offline record checks"}</span>
-        </div>
-        <button onClick={onRegenerate} disabled={loading} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50">
-          <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} /> {loading ? "Working…" : "Regenerate"}
-        </button>
-      </div>
-      <div className="space-y-4 p-4">
-        <AgentEvidence caseId={caseId} operation="plan" />
-        {!loading && plan && <AuditVerdict audit={plan.audit} />}
-        <AgentPipeline stage={stage} done={!loading && !!plan} />
-        {loading && <p className="text-center text-sm text-muted-foreground">Agents are preparing the packet and independently checking its facts…</p>}
-        {!loading && !plan && <p className="text-sm text-muted-foreground">Couldn't prepare this action right now. Try Regenerate.</p>}
-        {!loading && plan && plan.audit?.verdict !== "pass" && <p className="text-sm">The packet is withheld. Review the findings and regenerate after correcting the record.</p>}
-        {!loading && plan && plan.audit?.verdict === "pass" && (
-          <>
-            <div className="rounded-xl border border-border bg-card p-4">
-              <span className="rounded-md bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">{actionTitle}</span>
-              <p className="mt-2 text-sm font-medium">{plan.headline}</p>
-              {plan.prepared_fields?.length > 0 && (
-                <dl className="mt-3 grid grid-cols-1 gap-x-8 gap-y-2.5 sm:grid-cols-2">
-                  {plan.prepared_fields.map((f, i) => (
-                    <div key={i} className="flex flex-col">
-                      <dt className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">{f.label}</dt>
-                      <dd className="text-sm">{f.value ? f.value : <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">— to confirm</span>}</dd>
-                    </div>
-                  ))}
-                </dl>
-              )}
+    <Shell title="Reply ready for your review" aside={
+      <button onClick={onRegenerate} disabled={loading || sending} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50">
+        <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} /> {loading ? "Preparing…" : "Regenerate"}
+      </button>
+    }>
+      <AgentEvidence caseId={caseId} operation="plan" />
+      {!loading && plan && <AuditVerdict audit={plan.audit} />}
+      {!loading && plan && plan.audit?.verdict !== "pass" && <p>The prepared reply is withheld. Review the findings and regenerate.</p>}
+      {loading && <p className="text-sm text-muted-foreground">Pulling the facts from the request, running the checks and drafting a reply to the client…</p>}
+      {!loading && !plan && <p className="text-sm text-muted-foreground">A reply could not be prepared right now. Try Regenerate, or use Message client to write one.</p>}
+      {!loading && plan && plan.audit?.verdict === "pass" && (
+        <>
+          <p className={`flex items-center gap-2 text-sm font-medium ${open ? "text-amber-700" : "text-emerald-700"}`}>
+            {open ? <AlertTriangle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+            {open ? `${open} flagged ${open === 1 ? "item needs" : "items need"} your sign-off before you can send` : "Ready to send"}
+          </p>
+
+          <div>
+            <Subheading>The request</Subheading>
+            <p className="mt-1.5 text-sm font-medium">{plan.headline || actionTitle}</p>
+            {known.length > 0 && (
+              <dl className="mt-2 grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2">
+                {known.map((f, i) => (
+                  <div key={i}>
+                    <dt className="text-xs text-muted-foreground">{f.label}</dt>
+                    <dd className="text-sm">{f.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </div>
+
+          {missing.length > 0 && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <p className="text-xs font-semibold text-amber-800">Still needed from the client</p>
+              <p className="mt-1 text-sm text-amber-900">{missing.map((f) => f.label).join(", ")}</p>
+              <p className="mt-1 text-xs text-amber-800">Make sure the message below asks for {missing.length === 1 ? "it" : "them"}.</p>
             </div>
-            {plan.compliance_checks?.length > 0 && (
-              <div className="rounded-xl border border-border bg-card p-4">
-                <div className="flex items-center gap-2 text-sm font-medium"><ShieldCheck className="h-4 w-4 text-primary" /> Preparation checks · requires human review</div>
-                <ul className="mt-3 space-y-2.5">
-                  {plan.compliance_checks.map((c, i) => (
-                    <li key={i} className="flex items-start gap-2">
-                      <ComplianceBadge status={c.status} />
-                      <div><span className="text-sm font-medium">{c.item}</span>{c.note && <p className="text-xs text-muted-foreground">{c.note}</p>}</div>
+          )}
+
+          {flagged.length > 0 && (
+            <div>
+              <Subheading>Your sign-off</Subheading>
+              <p className="mt-1 text-xs text-muted-foreground">Something on this request was flagged. Tick each statement that is true; it is recorded on the request under your name.</p>
+              <ul className="mt-2 space-y-2">
+                {flagged.map((c) => (
+                  <li key={c.i}>
+                    <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm">
+                      <input type="checkbox" checked={ticked.includes(c.i)} onChange={() => toggle(c.i)} className="mt-0.5 h-4 w-4 flex-none" />
+                      <span>
+                        <span className="font-medium text-red-800">{c.confirm || `I have reviewed the flagged item: ${c.item}.`}</span>
+                        <span className="block text-xs text-red-700">Why it was flagged: {c.note || c.item}</span>
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div>
+            <div className="flex items-center justify-between">
+              <Subheading>Message to the client</Subheading>
+              {edited && <button onClick={() => setText(plan.draft_client_message || "")} className="text-xs text-muted-foreground hover:text-foreground">Undo my edits</button>}
+            </div>
+            <textarea value={text} onChange={(e) => setText(e.target.value)} rows={5} maxLength={2000} aria-label="Message to the client"
+              className="mt-1.5 w-full rounded-lg border border-border bg-background p-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30" />
+            <p className="mt-1 text-xs text-muted-foreground">Edit it freely. The independent record auditor and compliance reviewer check the final wording when you send.</p>
+          </div>
+
+          {(plan.draft_advisor_followup || reminders.length > 0) && (
+            <div>
+              <Subheading>Before you act on the request</Subheading>
+              {plan.draft_advisor_followup && <p className="mt-1.5 whitespace-pre-wrap text-sm">{plan.draft_advisor_followup}</p>}
+              {reminders.length > 0 && (
+                <ul className="mt-2 space-y-1.5">
+                  {reminders.map((c, i) => (
+                    <li key={i} className="flex gap-2 text-sm">
+                      <span className="mt-2 h-1 w-1 flex-none rounded-full bg-primary" />
+                      <span><span className="font-medium">{c.item}</span>{c.note ? `: ${c.note}` : ""}</span>
                     </li>
                   ))}
                 </ul>
-              </div>
-            )}
-            <div className="grid gap-3">
-              {plan.draft_client_message && <CopyCard title="Draft message to client" text={plan.draft_client_message} />}
-              {plan.draft_advisor_followup && <CopyCard title="Advisor follow-up" text={plan.draft_advisor_followup} />}
-            </div>
-            <div className="flex flex-wrap items-center gap-3 pt-1">
-              {approved ? (
-                <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
-                  <CheckCircle2 className="h-4 w-4" /> Approval recorded. No money moved or message was sent.
-                </div>
-              ) : (
-                <Button onClick={approve} disabled={approving} className="px-5">{approving ? "Approving…" : "Approve reviewed packet"}</Button>
               )}
-              <span className="text-xs text-muted-foreground">You approve; the agent did the prep. Nothing is executed.</span>
+              <p className="mt-2 text-xs text-muted-foreground">Reminders only. They do not hold up the message.</p>
             </div>
-            {plan.note && <p className="text-xs text-muted-foreground">{plan.note}</p>}
-          </>
-        )}
-      </div>
-    </div>
+          )}
+
+          {passed.length > 0 && (
+            <div>
+              <button onClick={() => setShowPassed((v) => !v)} aria-expanded={showPassed} className="flex items-center gap-1.5 text-xs text-emerald-700 hover:underline">
+                <CheckCircle2 className="h-3.5 w-3.5" /> {passed.length} automatic {passed.length === 1 ? "check" : "checks"} passed
+                <ChevronDown className={`h-3 w-3 transition-transform ${showPassed ? "rotate-180" : ""}`} />
+              </button>
+              {showPassed && (
+                <ul className="mt-1.5 space-y-1 pl-5 text-xs text-muted-foreground">
+                  {passed.map((c, i) => <li key={i}><span className="font-medium text-foreground">{c.item}</span>{c.note ? `: ${c.note}` : ""}</li>)}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Button onClick={send} disabled={sending || open > 0 || !message} className="px-5">
+              <Send className="mr-1.5 h-4 w-4" />{sending ? "Sending…" : "Send to client"}
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              {open > 0 ? "Tick your sign-off above to enable sending."
+                : !message ? "Write a message to send."
+                : "Sends this message only. No money moves and no paperwork is submitted."}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground">{live ? "Prepared by the live AI model from this request's records." : agentNote(plan.ai_mode, plan.note)}</p>
+        </>
+      )}
+    </Shell>
   );
 }
