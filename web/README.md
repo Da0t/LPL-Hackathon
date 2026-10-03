@@ -31,8 +31,11 @@ PORT=3200 pnpm dev          # NOT 3000 , a stale service worker from another
 
 Open **http://127.0.0.1:3200/login**. Private demo sign-ins are in ignored `../var/demo-access.json`.
 
-For the hosted AWS demo, `scripts/deploy_aws.py` runs this Next.js server beside FastAPI on one EC2
-instance and places CloudFront in front of it. Deployment and HTTPS details are in the root README.
+For the [hosted AWS demo](https://d2gkrph97rdk92.cloudfront.net/login),
+`scripts/deploy_aws.py` runs this Next.js server beside FastAPI on one EC2 instance and places
+CloudFront in front of it. The four fictional character cards work without a password; email/password
+sign-in remains available through Cognito. The public session cookie is HttpOnly and Secure. Deployment
+details and the [architecture picture](../docs/architecture.svg) are in the root README.
 
 - `/` , animated Coherent logo and replayable request-confirmation demo
 - `/login` , one-click fictional demo characters, Cognito email/password sign-in, and animated
@@ -44,15 +47,18 @@ instance and places CloudFront in front of it. Deployment and HTTPS details are 
 - `/dashboard` , advisor workspace (priority queue, prepared action packet, agent panels,
   client messaging with compliance review, Pipeline board, Impact view)
 
-Browser API calls use the same-origin `/api` proxy to `http://127.0.0.1:8000`. HttpOnly Cognito cookies authorize requests. Client requests include current status and advisor clarification/reply threads alongside archived submission documents.
+Browser API calls use the same-origin `/api` proxy to `http://127.0.0.1:8000` on the EC2 host.
+HttpOnly cookies authorize either server-signed demo sessions or Cognito sessions. Client requests
+include current status and advisor clarification/reply threads alongside archived submission documents.
 
 ## Design system
 
 - Light theme, brand blue `#1677ff`, navy text `#152033`, Geist font.
 - Logo: `public/coherent-logo.png` (lockup) and `public/coherent-icon.png` (mark);
   brand tokens in `app/globals.css`.
-- API client: `lib/api.ts`. Everything is synthetic data; the role switcher is
-  accepted only by the legacy unconfigured backend; configured portal access uses Cognito.
+- API clients: `lib/api.ts` and `lib/portal.ts`. Everything is synthetic data. The legacy role
+  switcher is accepted only by the unconfigured backend; configured portal access uses Cognito or
+  the fixed, signed one-click demo identities.
 
 ## Notes
 

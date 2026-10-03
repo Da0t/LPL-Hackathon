@@ -51,24 +51,18 @@ The speaking and clicking plan is in [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md).
 
 ## Architecture
 
-```
-        Client (plain language)                          Advisor
-              │                                             │
-     web/ /login, /workspace (Next.js)            web/ /dashboard (Next.js)
-     request editor + request document            queue, action packet, agents
-              └───────────────┬─────────────────────────────┘
-                              │  same-origin /api proxy, HttpOnly session cookie
-                   backend/ , FastAPI
-        intake · triage · routing · staff workflow · client follow-up
-              │                    │                       │
-   backend/aws               backend/portal          backend/store.py
-   Amazon Bedrock            Amazon Cognito          SQLite: intake sessions,
-   intake, triage,           (sign-in) and           cases, assignments
-   action packet, brief,     DynamoDB (client        (local; reference records
-   four advisor agents       records, archived       synchronized from the
-   (+ PII Guardrail)         request documents)      cloud profiles; on EBS
-                                                    in the AWS demo)
-```
+![Coherent's deployed AWS architecture, from client and advisor browsers through CloudFront and EC2 to managed AWS services](docs/architecture.svg)
+
+[Open the full-size architecture picture](docs/architecture.svg) · [PNG for slides](docs/architecture.png)
+
+The picture shows the **deployed** path. CloudFront terminates browser HTTPS and forwards requests
+to an origin restricted by its AWS-managed prefix list and a private header. On one EC2 instance,
+Nginx gates the origin, Next.js serves both workspaces and proxies `/api`, and FastAPI owns identity,
+record access, model calls, and workflows. SQLite cases live on encrypted EBS; DynamoDB holds the
+fictional client records and immutable submitted-document snapshots. The one-click demo session is
+signed by FastAPI and is separate from Cognito email/password authentication. AWS Systems Manager
+installs a pinned, pushed `main` commit on the instance. The diagram marks Transcribe as provisioned
+but not connected to the browser; browser speech recognition supplies the current voice input.
 
 The language model only **interprets, classifies, and drafts**. Every fact, authorization check,
 account snapshot, security route, advisor ranking, and compliance verdict is deterministic
@@ -143,8 +137,9 @@ AWS_DEFAULT_REGION=us-east-1 .venv/bin/python -m scripts.deploy_aws
 
 The resumable script records resource IDs in ignored `var/deployment-aws.json` and prints the HTTPS
 URL after the host and CloudFront are ready. Re-run it after pushing a new main commit to rebuild the
-host. Check the public `/login` and `/api/health` paths, then sign in with the private demo identities
-in `var/demo-access.json`. The deployment uses the same fictional accounts and cloud portal records as
+host. Check the public `/login` and `/api/health` paths, then enter as Mara, Evan, Lena, or Coherent
+Staff with the one-click cards. Private Cognito sign-ins remain available for testing the password
+path. The deployment uses the same fictional accounts and cloud portal records as
 the local app. If `var/guardrail-aws.json` exists, deployment grants the instance access to that one
 Guardrail and configures its version for Bedrock intake. The case SQLite file is separate on the
 instance's EBS disk; it survives reboot and
@@ -303,13 +298,14 @@ LPL-Hackathon/
 │   │                        /staff/cases/{id}/ and client follow-up under /my/requests
 │   ├── services/            intake, triage, routing, validation, staff workflow, priority (queue
 │   │                        ranking and intake metrics), reply_workflow, client_requests
-│   ├── portal/              Cognito sign-in, DynamoDB persistence, seed profiles, dev sign-in
-│   ├── aws/                 Bedrock adapter (intake, triage, brief), advisor_agents, transcribe
+│   ├── portal/              Cognito and signed demo sign-in, DynamoDB, profiles, Polly speech
+│   ├── aws/                 Bedrock intake/agents/Verifier, KB retrieval, Transcribe adapter
 │   └── store.py             SQLite cases plus reference records synchronized from the portal
 ├── data/                    synthetic seed data
 ├── contracts/               frozen v1 HTTP contract, fixture, standalone mock
 ├── infra/                   least-privilege IAM and Bedrock Guardrail config
-├── scripts/                 provision_portal.py, generate_api_examples.py
+├── scripts/                 AWS provisioning/deployment and API example generation
+├── docs/                    deployed architecture picture and API examples
 ├── tests/                   aws/, backend/, data/, portal/, client/ (legacy page tests)
 └── frontend/                LEGACY pages served by the backend at /client and /staff
                              (pre-Coherent); web/ is the demo
@@ -327,24 +323,29 @@ LPL-Hackathon/
   ranking, queue priority, field comparisons, verdict calculation from reviewer findings, case state,
   assignment, and workflow actions. Model-generated checks and findings are not deterministic.
 - **Synthetic:** every client, account, balance, event, and advisor. Three fictional households have
-  detailed profiles, 16 accounts, and 154 activity records; SSNs are represented by their last four
-  digits only. Clarification messages and replies stay inside the demo.
+  detailed profiles and 16 accounts; the live health endpoint reports the current activity count.
+  SSNs are represented by their last four digits only. Clarification messages and replies stay
+  inside the demo.
 - **Measured:** client turns and seconds from first message to confirmation, for requests submitted
   in the workspace. **Not measured:** advisor time saved. The capacity model on the Impact view is a
   formula with assumed inputs.
 
 ## Operational boundaries
 
-This is a localhost prototype with real AWS identity and storage, not a production financial system.
+The public demo is live on AWS, but it is a single-instance prototype for fictional data, not a
+production financial system.
 
-- Cognito sessions expire after one hour and require sign-in again.
+- One-click demo sessions expire after one hour. Cognito sessions also expire and require sign-in
+  again; the browser keeps the role-scoped session in an HttpOnly, Secure cookie.
 - Self-registration, password reset, MFA, bank connectivity, and full SSN collection are not
   implemented.
-- Intake sessions and the staff case workflow use the local SQLite database; only client records and
-  archived request documents are persisted in the cloud.
-- AWS session credentials must remain valid for backend calls.
-- Before hosting publicly, configure HTTPS with Secure cookies and an explicit allowed origin
-  (`COHERENT_ALLOWED_ORIGINS`); the frontend proxy targets the backend on localhost.
+- Intake sessions and the staff case workflow use SQLite on the EC2 instance's encrypted EBS root
+  disk; client records and archived request documents are in DynamoDB. Reboot preserves the case DB,
+  but there is no automated backup or multi-instance failover.
+- The EC2 instance uses a scoped IAM role for runtime AWS calls. Temporary AWS credentials are only
+  needed by the operator when running provisioning or deployment scripts.
+- CloudFront provides public HTTPS and secure cookies. The CloudFront-to-EC2 hop is HTTP inside a
+  CloudFront-restricted origin path; a production system needs origin TLS and a custom domain.
 - Seed histories include reconciled account-value ledgers and matched transfer legs. They are
   fictional statements, not market feeds. Editing an account replaces its holdings with a
   self-reported balance awaiting verification.
@@ -360,6 +361,7 @@ These inform the data model, not personalized financial advice.
 - [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md): the five-minute speaking and clicking plan, plus likely questions
 - [`web/README.md`](web/README.md): frontend run and structure
 - [`AWS_SETUP.md`](AWS_SETUP.md): Bedrock setup, model verification, smoke test
+- [`docs/architecture.svg`](docs/architecture.svg): full-size deployed architecture (also [PNG](docs/architecture.png))
 - [`contracts/API_V1.md`](contracts/API_V1.md): frozen v1 HTTP contract (advisor, follow-up, and portal endpoints are additive)
 - [`HACKATHON_PROJECT_BRIEF.md`](HACKATHON_PROJECT_BRIEF.md): event rules, constraints, and judging criteria
 - [`SAMEPAGE_PRODUCT_SPEC.md`](SAMEPAGE_PRODUCT_SPEC.md): the original specification (historical)
@@ -430,7 +432,7 @@ runtime permissions. Runtime needs `bedrock:Retrieve` for that KB, model invocat
 resources and usage incur AWS charges; they persist until deleted. Remove the KB/data source, vector
 index/bucket, document objects/bucket, and dedicated service role when retiring this demo.
 
-Local acceptance: 188 Python tests, seven legacy browser checks, and the production build passed.
+Earlier local acceptance: 188 Python tests, seven legacy browser checks, and the production build passed.
 Real KB ingestion completed with two indexed documents. The authenticated upgrade browser smoke
 passed Polly playback, persistent accessibility controls at 390px, live Bedrock audits, cited retrieval,
 and a complete advisor-clarification/client-reply loop. All three client logins and the staff login

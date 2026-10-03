@@ -1,6 +1,6 @@
-# Coherent AWS setup: Bedrock
+# Coherent AWS setup and hosted demo
 
-> **Status:** this covers Amazon Bedrock, the Guardrail, and Transcribe. Cognito and DynamoDB for the client portal are provisioned separately; see "Run it" in [`README.md`](README.md). Internal names still read `samepage` (for example `SAMEPAGE_AI_MODE`), and "Agent 1" refers to the branch that built this adapter.
+> **Status (October 3, 2026):** the [public demo](https://d2gkrph97rdk92.cloudfront.net/login) is deployed on CloudFront and EC2 in `us-east-1`. Cognito, DynamoDB, Bedrock, the Knowledge Base, Guardrail, and Polly are active. The three fictional clients and fictional staff advisor can enter with one click; this signed demo path is separate from Cognito. See the [deployed architecture picture](docs/architecture.svg) and [`README.md`](README.md) for the full stack. Internal names such as `SAMEPAGE_AI_MODE` remain for compatibility.
 
 This covers the AWS side of Coherent: the Bedrock intake + triage adapter, its
 configuration, least-privilege IAM, the optional Guardrail, optional Transcribe,
@@ -13,9 +13,11 @@ tool use. The typed client flow must work before voice is attempted.
 | --- | --- | --- |
 | Bedrock intake + triage adapter (Converse API, native tool use) | **Required, runs** | `backend/aws/bedrock_agent.py` |
 | Region/model/config from env (no creds in code) | **Required, runs** | `backend/aws/config.py` |
-| Bedrock Guardrails (blocks full SSNs and payment card numbers in intake) | **Optional, tested** | `infra/guardrail.json` |
-| Least-privilege IAM policy | **Required to deploy** | `infra/iam_policy.json` |
-| Amazon Transcribe streaming (voice) + financial custom vocabulary | **Built, vocabulary live** | `backend/aws/transcribe.py` |
+| Bedrock Guardrails (blocks full SSNs and payment card numbers in intake) | **Configured on the hosted demo** | `infra/guardrail.json` |
+| Runtime IAM role for EC2; reference policy for local use | **Deployed** | `scripts/deploy_aws.py`, `infra/iam_policy.json` |
+| Bedrock Knowledge Base, S3 source, S3 Vectors, Titan v2 | **Active; two reviewed excerpts indexed** | `scripts/provision_knowledge_base.py` |
+| Amazon Polly read-aloud | **Active in client workspace** | `backend/portal/speech.py` |
+| Amazon Transcribe streaming adapter + financial custom vocabulary | **Provisioned, not wired into the browser** | `backend/aws/transcribe.py` |
 
 ### Voice: Transcribe financial custom vocabulary
 
@@ -87,12 +89,13 @@ strong at tool use, so it is a good fit for both intake and triage. Nova Lite
 
 ## 4. Least-privilege IAM
 
-Use `infra/iam_policy.json`. Replace `ACCOUNT_ID`, the model ID / inference
-profile ID, and the optional guardrail ID. It grants only `bedrock:InvokeModel`
-(+ stream) on the single model, optional `bedrock:ApplyGuardrail`, and optional
-`transcribe:StartStreamTranscription`. No wildcards on the model resource.
+For local use, start from `infra/iam_policy.json` and replace its account/model/Guardrail placeholders.
+For the hosted demo, `scripts/deploy_aws.py` creates a scoped EC2 instance role with access to the
+configured Cognito pool, DynamoDB table, Bedrock model and Knowledge Base, Guardrail, and Polly.
+AWS Systems Manager installs the pinned main commit. The instance uses its role for runtime calls;
+operator credentials are not copied to it. The diagram and host details are in the root README.
 
-## 5. Optional Guardrail
+## 5. Guardrail (configured on the hosted demo; optional locally)
 
 The versioned Guardrail blocks full SSNs and payment card numbers from the Bedrock
 intake/triage adapter. It does not make investment or tax determinations. The

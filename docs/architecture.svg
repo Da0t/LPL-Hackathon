@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1090" viewBox="0 0 1800 1090" role="img" aria-labelledby="title description">
+  <title id="title">Coherent deployed AWS architecture</title>
+  <desc id="description">Fictional clients and staff use HTTPS through CloudFront. A CloudFront-restricted EC2 instance runs Nginx, Next.js, FastAPI, and SQLite on encrypted EBS. FastAPI uses Cognito, DynamoDB, Bedrock, a compliance Knowledge Base backed by S3 and S3 Vectors, and Polly. Systems Manager deploys a pinned main commit. Transcribe is provisioned but not used by the browser.</desc>
+  <defs>
+    <linearGradient id="page" x2="1" y2="1"><stop stop-color="#f7faff"/><stop offset="1" stop-color="#edf3ff"/></linearGradient>
+    <linearGradient id="blue" x2="1" y2="1"><stop stop-color="#1677ff"/><stop offset="1" stop-color="#074bd8"/></linearGradient>
+    <linearGradient id="ink" x2="1" y2="1"><stop stop-color="#18345b"/><stop offset="1" stop-color="#10233f"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-25%" width="140%" height="160%"><feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#172c54" flood-opacity=".10"/></filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#4689ea"/></marker>
+    <style>
+      text{font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#132543}
+      .h1{font-size:42px;font-weight:750;letter-spacing:-1.6px}.sub{font-size:18px;fill:#647895}.kicker{font-size:14px;font-weight:750;letter-spacing:2px;fill:#3f79d1}.box-title{font-size:24px;font-weight:750}.box-sub{font-size:17px;fill:#657997}.tile{font-size:19px;font-weight:700}.detail{font-size:16px;fill:#5a708e}.tiny{font-size:14px;fill:#647895}.white{fill:white}.white-sub{fill:#d9e9ff}.line{fill:none;stroke:#4689ea;stroke-width:4;stroke-linecap:round;stroke-linejoin:round;marker-end:url(#arrow)}.soft-line{fill:none;stroke:#a9c7ed;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}.card{fill:white;stroke:#d9e6f8;stroke-width:2;filter:url(#shadow)}.small-card{fill:white;stroke:#d9e6f8;stroke-width:2}
+    </style>
+  </defs>
+  <rect width="1800" height="1090" fill="url(#page)"/>
+  <rect x="0" y="0" width="1800" height="11" fill="url(#blue)"/>
+  <text x="70" y="75" class="kicker">COHERENT  /  DEPLOYED DEMO</text>
+  <text x="70" y="128" class="h1">From a client’s words to an advisor-ready case</text>
+  <text x="70" y="162" class="sub">Actual AWS topology · us-east-1 · single-instance hackathon deployment · fictional records only</text>
+
+  <!-- Browser participants -->
+  <rect x="60" y="226" width="292" height="455" rx="26" class="card"/>
+  <text x="86" y="272" class="kicker">PEOPLE</text>
+  <rect x="84" y="302" width="244" height="122" rx="18" fill="#eef5ff" stroke="#d4e3fa"/>
+  <circle cx="120" cy="342" r="17" fill="#c7dcff"/><circle cx="120" cy="335" r="7" fill="#287dff"/><path d="M109 352q11-14 22 0" fill="#287dff"/>
+  <text x="149" y="342" class="tile">Fictional clients</text>
+  <text x="104" y="380" class="detail">Mara · Evan · Lena</text>
+  <text x="104" y="403" class="tiny">One-click demo or Cognito login</text>
+  <rect x="84" y="442" width="244" height="122" rx="18" fill="#eef5ff" stroke="#d4e3fa"/>
+  <circle cx="120" cy="482" r="17" fill="#c7dcff"/><circle cx="120" cy="475" r="7" fill="#287dff"/><path d="M109 492q11-14 22 0" fill="#287dff"/>
+  <text x="149" y="482" class="tile">Fictional staff</text>
+  <text x="104" y="520" class="detail">Advisor workspace</text>
+  <text x="104" y="543" class="tiny">Same-origin, role-scoped access</text>
+  <text x="86" y="613" class="detail">Type, speak, read aloud, review.</text>
+  <text x="86" y="639" class="detail">No financial action is executed.</text>
+
+  <!-- Edge -->
+  <path d="M352 455 H408" class="line"/>
+  <text x="357" y="433" class="tiny">HTTPS</text>
+  <rect x="420" y="296" width="283" height="317" rx="26" fill="url(#ink)" filter="url(#shadow)"/>
+  <text x="448" y="342" class="kicker" style="fill:#8bbaff">PUBLIC EDGE</text>
+  <text x="448" y="386" class="box-title white">Amazon CloudFront</text>
+  <text x="448" y="421" class="white-sub" style="font-size:17px">HTTPS demo URL</text>
+  <path d="M448 448 H675" stroke="#6582ad" stroke-width="2"/>
+  <text x="448" y="484" class="white-sub" style="font-size:16px">Caching disabled</text>
+  <text x="448" y="512" class="white-sub" style="font-size:16px">Cookies + all methods forwarded</text>
+  <text x="448" y="540" class="white-sub" style="font-size:16px">Private origin header</text>
+  <text x="448" y="568" class="white-sub" style="font-size:16px">HTTP to restricted origin</text>
+  <path d="M703 455 H753" class="line"/>
+  <text x="708" y="433" class="tiny">origin</text>
+
+  <!-- Instance boundary -->
+  <rect x="765" y="209" width="525" height="677" rx="30" fill="#f8fbff" stroke="#9bc1f8" stroke-width="3" filter="url(#shadow)"/>
+  <rect x="765" y="209" width="525" height="89" rx="30" fill="url(#blue)"/>
+  <path d="M765 268 H1290 V298 H765z" fill="url(#blue)"/>
+  <text x="795" y="252" class="box-title white">Amazon EC2 · t3.large</text>
+  <text x="795" y="279" class="white-sub" style="font-size:16px">CloudFront-only security group · IAM instance role</text>
+  <rect x="793" y="324" width="469" height="77" rx="16" class="small-card"/>
+  <text x="816" y="354" class="tile">Nginx origin gate</text>
+  <text x="816" y="382" class="detail">Checks private CloudFront header</text>
+  <path d="M1028 401 V429" class="line"/>
+  <rect x="793" y="442" width="469" height="102" rx="16" class="small-card"/>
+  <text x="816" y="474" class="tile">Next.js · client + advisor screens</text>
+  <text x="816" y="502" class="detail">/login · /workspace · /dashboard</text>
+  <text x="816" y="526" class="tiny">Same-origin /api proxy · HttpOnly, Secure session cookie</text>
+  <path d="M1028 544 V568" class="line"/>
+  <rect x="793" y="581" width="469" height="119" rx="16" fill="#eaf3ff" stroke="#b7d2f9" stroke-width="2"/>
+  <text x="816" y="614" class="tile">FastAPI · portal + workflow</text>
+  <text x="816" y="644" class="detail">Client-scoped facts · case routing · audit gates</text>
+  <text x="816" y="670" class="detail">Bedrock orchestration · Polly speech endpoint</text>
+  <path d="M1028 700 V724" class="line"/>
+  <rect x="793" y="737" width="469" height="104" rx="16" class="small-card"/>
+  <text x="816" y="770" class="tile">Encrypted EBS · local SQLite</text>
+  <text x="816" y="800" class="detail">Intake sessions, cases, assignments</text>
+  <text x="816" y="824" class="tiny">Persists across reboot; no automated backup/failover</text>
+
+  <!-- Managed service fan-out -->
+  <path d="M1262 641 H1318" class="line"/>
+  <path d="M1318 355 V803" class="soft-line"/>
+  <text x="1325" y="290" class="kicker">MANAGED AWS SERVICES</text>
+  <rect x="1341" y="309" width="397" height="94" rx="16" class="small-card"/>
+  <circle cx="1318" cy="355" r="6" fill="#4689ea"/>
+  <text x="1365" y="344" class="tile">Amazon Cognito</text>
+  <text x="1365" y="372" class="detail">Email/password identity; demo path separate</text>
+  <rect x="1341" y="418" width="397" height="94" rx="16" class="small-card"/>
+  <circle cx="1318" cy="465" r="6" fill="#4689ea"/>
+  <text x="1365" y="453" class="tile">Amazon DynamoDB</text>
+  <text x="1365" y="481" class="detail">Profiles, accounts, request snapshots</text>
+  <rect x="1341" y="527" width="397" height="111" rx="16" class="small-card"/>
+  <circle cx="1318" cy="582" r="6" fill="#4689ea"/>
+  <text x="1365" y="561" class="tile">Amazon Bedrock · Haiku 4.5</text>
+  <text x="1365" y="589" class="detail">Intake, agents, streaming, Verifier</text>
+  <text x="1365" y="614" class="tiny">Versioned PII Guardrail on intake</text>
+  <rect x="1341" y="653" width="397" height="119" rx="16" class="small-card"/>
+  <circle cx="1318" cy="712" r="6" fill="#4689ea"/>
+  <text x="1365" y="688" class="tile">Bedrock Knowledge Base</text>
+  <text x="1365" y="716" class="detail">Cited SEC / IRS excerpts</text>
+  <text x="1365" y="742" class="tiny">S3 corpus · S3 Vectors · Titan v2</text>
+  <rect x="1341" y="787" width="397" height="78" rx="16" class="small-card"/>
+  <circle cx="1318" cy="826" r="6" fill="#4689ea"/>
+  <text x="1365" y="820" class="tile">Amazon Polly</text>
+  <text x="1365" y="847" class="detail">Authenticated read-aloud MP3</text>
+
+  <!-- Operations and scope -->
+  <rect x="60" y="931" width="1678" height="109" rx="24" fill="#e7effc" stroke="#cedcf2" stroke-width="2"/>
+  <text x="86" y="968" class="kicker">OPERATIONS + SCOPE</text>
+  <text x="86" y="1000" class="detail">Deploy script reads pushed main → Systems Manager installs its pinned commit on EC2; systemd keeps all three servers running.</text>
+  <text x="86" y="1025" class="tiny">Amazon Transcribe vocabulary/adapter is provisioned, but browser voice input uses the browser speech service. All people and balances are fictional.</text>
+  <text x="1738" y="1070" text-anchor="end" class="tiny">Coherent · submission architecture · October 2026</text>
+</svg>

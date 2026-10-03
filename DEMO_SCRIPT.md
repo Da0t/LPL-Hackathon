@@ -4,17 +4,17 @@ Everything shown is fictional: Mara Ellis, her accounts, the balances, and every
 
 The spoken lines below total about 450 words. At a calm 150 words a minute that is three minutes of talking, which leaves two minutes for the app to respond, typing, and clicks. Rehearse with a timer; the cut list at the end says what to drop if you run long.
 
-**Status of this script:** the screen names, button labels, and order below were taken from the current code. The full click path has not been walked in a browser since the client portal and the prepared action packet were merged, so rehearse it once end to end and correct any label that differs.
+**Status of this script:** the public login, all four one-click characters, role-specific destinations, and public health endpoint were checked after deployment. The entire timed presentation still needs a rehearsal on the public URL; model wording and timing can vary.
 
 ## Before you present
 
-1. Start the backend and frontend as described in `README.md`, with `COHERENT_PORTAL_CONFIG` set and `SAMEPAGE_AI_MODE=bedrock`. Open `http://127.0.0.1:8000/health` and check it says `"ai_mode":"bedrock"`. If it says `mock`, you are not showing the judged path.
-2. Run `python -m backend.reset_demo`. The server does not need a restart.
-3. Sign-in is a browser cookie, so the client and the advisor cannot share one browser session. Open `http://127.0.0.1:3200/login` in **two separate windows**: a normal window signed in as Mara Ellis, and a private window (or second browser profile) signed in as staff. The demo sign-ins are in `var/demo-access.json`. Zoom both to about 125%.
+1. Open the [public demo](https://d2gkrph97rdk92.cloudfront.net/login) and check [`/api/health`](https://d2gkrph97rdk92.cloudfront.net/api/health) says `"ai_mode":"bedrock"` and `"live_model":true`. If it says `mock`, you are not showing the judged path. For a local fallback, start the backend and frontend as described in `README.md`.
+2. Do **not** run the local `backend.reset_demo` command against a presentation expecting the EC2 case history to reset; it operates on the database in the environment where it runs. The hosted demo has shared fictional data. Check the queue and choose a case that exists before presenting.
+3. Sign-in is a browser cookie, so the client and the advisor need separate browser sessions. Open the public `/login` in a normal window and click **Mara Ellis**; in a private window (or second browser profile), click **Coherent Staff**. No password is needed. Zoom both to about 125%.
 4. Client window: open **New request** (`/workspace/requests/new`). Advisor window: open `/dashboard` and confirm the queue shows `CASE-1042` and `CASE-SEC-1`, with the security case at the top.
 5. Test the microphone once. If it is unreliable, type the request.
 6. **Rehearse the reply beat on live Bedrock at least twice.** See "The reply beat on live Bedrock" below.
-7. Cognito sessions expire after one hour. Sign in again in both windows shortly before you present.
+7. One-click demo sessions expire after one hour. Re-enter both characters shortly before you present.
 8. Keep the backup recording open in a third tab.
 
 Roles: one person speaks, one clicks, one watches the clock and calls the cuts.
@@ -89,12 +89,12 @@ Never cut the client confirming, the mismatch notice, or the compliance reviewer
 
 In mock mode this beat is deterministic: the instruction above produces a first draft containing "you should" and "tax-free", the reviewer flags two issues, the drafter revises, and the review passes. That was run end to end through the API.
 
-On live Bedrock it has **not** been run. The drafter is instructed never to give advice, so it may write a clean first draft, and then the trace shows only "Wrote the first draft" and "Passed". That is still a correct result, but it hides the loop. If that happens in rehearsal, use this path instead:
+On live Bedrock the drafter may write a clean first draft, so the trace may show only the first draft and a pass. That is a correct result, but it hides the review loop. If that happens in rehearsal, use this path instead:
 
 1. Click **Draft reply** with no instruction.
 2. In the draft box, add: **"You should take it from the rollover IRA. It will be tax-free."**
 3. Click **Re-check**. The reviewer flags the edit and quotes the words.
-4. Say: "The advisor edited the draft, and the reviewer caught it before it reached the client. Sending anyway is possible, and the override is recorded on the case."
+4. Say: "The advisor edited the draft, and the reviewer caught it before it reached the client. A failed record audit blocks sending until the text is fixed and rechecked."
 
 Pick whichever path worked in rehearsal and use only that one on the day.
 
@@ -104,7 +104,7 @@ A shorter alternative to the whole beat is **Send to client** on the prepared re
 
 Keep this on a slide and say it if asked.
 
-- **Live AWS:** Cognito sign-in, DynamoDB client records and archived request documents, and Bedrock for interpretation, triage, the prepared action packet, the prep brief, the reply drafter, the compliance reviewer, the next-steps planner, and the security investigator.
+- **Live AWS:** CloudFront/EC2 hosting, Cognito password sign-in, DynamoDB client records and archived request documents, Bedrock for interpretation and advisor agents, the independent Verifier, a two-document cited Knowledge Base, the PII Guardrail on intake, and Polly read-aloud. One-click fictional sessions are signed by the backend, separate from Cognito. Browser voice input is not Amazon Transcribe.
 - **Deterministic code, never the model:** account facts and their sources, authorization, security routing, advisor ranking, queue priority, and the compliance verdict.
 - **Synthetic:** every client, account, balance, event, and advisor. Messages between advisor and client stay inside the app; no email or SMS is sent, and no transaction or appointment is executed.
 - **Measured:** client turns and seconds from first message to confirmation, for requests submitted in this workspace.
@@ -112,13 +112,12 @@ Keep this on a slide and say it if asked.
 
 ## Reset between runs
 
-1. Run `python -m backend.reset_demo`. New cases and assignments are cleared; no restart is needed.
-2. Reload both windows. The queue should show only the four seed cases, with `CASE-1042` unassigned.
+On a **local** demo, run `python -m backend.reset_demo` against the local backend and reload both windows. For the public demo, use a new fictional request or an existing seed case; the EC2 SQLite case history and DynamoDB records are shared across visits. Do not assume the public queue has only four seed cases.
 
 ## If something fails
 
 - **Microphone fails:** type the same sentence. The typed path is the same flow.
-- **Signed out mid-demo:** the Cognito session expired. Sign in again; a request draft is restored and is not submitted automatically.
+- **Signed out mid-demo:** the one-hour demo session expired. Click the same fictional character again; a request draft is restored and is not submitted automatically.
 - **Bedrock is slow or throttled:** wait a second and resend once. If it still fails, say the live call did not return and narrate the advisor side with seed case `CASE-1042`, which holds the same scenario.
 - **A dashboard agent card fails:** click its refresh button once. If it still fails, move on; the case, the queue, and assignment do not depend on it.
 - **App will not start:** play the backup recording and say so.
@@ -132,4 +131,4 @@ Keep this on a slide and say it if asked.
 - **What stops the model inventing an account?** It can only suggest accounts returned by the backend's lookup, the client must confirm, and staff see the source of every account fact.
 - **Can the compliance reviewer be wrong?** Yes. That is why the verdict is computed in code from what the reviewer quoted, the advisor sees the quote, and an override is recorded on the case. It is a first check, not a replacement for supervision.
 - **Is this advice?** No. It creates and routes a service request. It does not recommend or execute anything.
-- **What would production need?** MFA and password reset, HTTPS with secure cookies, the firm's advisor directory with verified licence and state eligibility, audit logging, moving cases from local SQLite to managed storage, and compliance review of the glossary and the reviewer's rules.
+- **What would production need?** MFA and password reset, a custom domain and origin TLS, the firm's advisor directory with verified licence and state eligibility, durable audit logging, backups and managed multi-instance case storage, and compliance review of the glossary and the reviewer's rules. The public one-click demo is only for fictional data.
