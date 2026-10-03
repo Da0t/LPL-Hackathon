@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "version": "1",
+    "synthetic_only": true,
+    "description": "Fictional clients. Extends contracts/demo_fixture_v1.json; state and client_since are optional additions."
+  },
+  "clients": [
+    {
+      "client_id": "CLIENT-017",
+      "display_name": "Mara Ellis",
+      "preferred_contact_channel": "phone",
+      "meeting_preference": "phone",
+      "existing_advisor_id": null,
+      "state": "AZ",
+      "client_since": "2023-05-30"
+    },
+    {
+      "client_id": "CLIENT-022",
+      "display_name": "Evan Brooks",
+      "preferred_contact_channel": "email",
+      "meeting_preference": "video",
+      "existing_advisor_id": "ADV-01",
+      "state": "TX",
+      "client_since": "2019-02-21"
+    },
+    {
+      "client_id": "CLIENT-031",
+      "display_name": "Lena Marchetti",
+      "preferred_contact_channel": "phone",
+      "meeting_preference": "in_person",
+      "existing_advisor_id": "ADV-07",
+      "state": "CA",
+      "client_since": "2015-04-27"
+    }
+  ]
+}

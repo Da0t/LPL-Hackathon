@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SamePage staff review</title>
+  <script>
+    // Keep relative asset paths working whether the page is served at /staff or /staff/.
+    if (!/\/$|\.html$/.test(location.pathname)) {
+      document.write('<base href="' + location.pathname + '/">');
+    }
+    // Development aid: ?api=http://127.0.0.1:8001 points the page at the mock API.
+    (function () {
+      var api = new URLSearchParams(location.search).get("api");
+      if (api && !window.SAMEPAGE_API_BASE) window.SAMEPAGE_API_BASE = api;
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=Public+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <p class="brand">SamePage <span>staff review</span></p>
+    <p class="role-note">Simulated staff role. All clients, accounts, and advisors are fictional.</p>
+  </header>
+
+  <main class="desk">
+    <section class="queue" aria-labelledby="queue-title">
+      <div class="queue-head">
+        <h1 id="queue-title">Client requests</h1>
+        <button type="button" id="refresh" class="quiet">Refresh</button>
+      </div>
+      <form class="filters" id="filters" aria-label="Filter the queue">
+        <label>Status
+          <select id="filter-status"><option value="">All</option></select>
+        </label>
+        <label>Category
+          <select id="filter-category"><option value="">All</option></select>
+        </label>
+        <label class="check"><input type="checkbox" id="filter-flagged"> Flagged only</label>
+      </form>
+      <p id="queue-status" class="queue-status" role="status" aria-live="polite"></p>
+      <ol id="case-list" class="case-list"></ol>
+    </section>
+
+    <section class="case" id="case" aria-live="polite" tabindex="-1">
+      <div class="placeholder">
+        <p>Choose a request from the queue to read what the client said, what they confirmed, and the account facts behind it.</p>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

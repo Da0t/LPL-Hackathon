@@ -1,0 +1,69 @@
+{
+  "meta": {
+    "version": "1",
+    "synthetic_only": true,
+    "description": "Approved plain-language definitions. General explanations only, not personalized advice. The agent selects these; it does not write its own tax or legal rules. source_id and also_heard_as are optional additions."
+  },
+  "glossary": [
+    {
+      "term": "rollover IRA",
+      "plain": "A retirement account that holds money moved from an earlier workplace retirement plan.",
+      "source_id": "GLOSSARY-01",
+      "also_heard_as": ["retirement money from my old job", "the account from my last employer"]
+    },
+    {
+      "term": "Roth IRA",
+      "plain": "A type of retirement account generally funded with money that has already been taxed. Withdrawal rules vary.",
+      "source_id": "GLOSSARY-02",
+      "also_heard_as": ["Roth", "the Roth thing"]
+    },
+    {
+      "term": "distribution",
+      "plain": "Money taken out of a retirement account. Taxes and other rules may apply.",
+      "source_id": "GLOSSARY-03",
+      "also_heard_as": ["taking money out of my retirement"]
+    },
+    {
+      "term": "withdrawal",
+      "plain": "Taking money out of an account. For retirement accounts this is often called a distribution.",
+      "source_id": "GLOSSARY-04",
+      "also_heard_as": ["take money out", "cash out", "pull money"]
+    },
+    {
+      "term": "brokerage account",
+      "plain": "An account that holds investments such as stocks, bonds, and funds, without the special rules of a retirement account.",
+      "source_id": "GLOSSARY-05",
+      "also_heard_as": ["my investments", "my stock account"]
+    },
+    {
+      "term": "beneficiary",
+      "plain": "The person or organization you name to receive an account if you pass away.",
+      "source_id": "GLOSSARY-06",
+      "also_heard_as": ["who gets my money", "who it goes to"]
+    },
+    {
+      "term": "transfer",
+      "plain": "Moving money or investments from one account to another, at the same firm or a different one.",
+      "source_id": "GLOSSARY-07",
+      "also_heard_as": ["move my money", "switch accounts"]
+    },
+    {
+      "term": "required minimum distribution",
+      "plain": "An amount that the rules say must be taken out of certain retirement accounts each year after a set age. An advisor can explain whether it applies to you.",
+      "source_id": "GLOSSARY-08",
+      "also_heard_as": ["RMD", "the amount I have to take out"]
+    },
+    {
+      "term": "advisor",
+      "plain": "A professional who helps you plan and make decisions about your money and investments.",
+      "source_id": "GLOSSARY-09",
+      "also_heard_as": ["my financial person", "my planner"]
+    },
+    {
+      "term": "trusted contact",
+      "plain": "Someone you name whom the firm may reach out to if it cannot reach you or is concerned about your account. They cannot make changes or trades for you.",
+      "source_id": "GLOSSARY-10",
+      "also_heard_as": ["emergency contact", "someone you can call about me"]
+    }
+  ]
+}

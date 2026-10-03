@@ -1,0 +1,89 @@
+{
+  "meta": {
+    "version": "1",
+    "synthetic_only": true,
+    "description": "Fictional dated account events. source_id is the citation staff see next to each fact. client_id is an optional addition."
+  },
+  "events": [
+    {
+      "source_id": "EVENT-09",
+      "account_id": "ACCT-201",
+      "client_id": "CLIENT-017",
+      "type": "rollover",
+      "date": "2023-06-12",
+      "summary": "Fictional rollover from former workplace plan"
+    },
+    {
+      "source_id": "EVENT-14",
+      "account_id": "ACCT-201",
+      "client_id": "CLIENT-017",
+      "type": "service_request",
+      "date": "2025-04-09",
+      "summary": "Fictional contact-information update"
+    },
+    {
+      "source_id": "EVENT-17",
+      "account_id": "ACCT-202",
+      "client_id": "CLIENT-017",
+      "type": "deposit",
+      "date": "2026-02-18",
+      "summary": "Fictional deposit from a linked bank account"
+    },
+    {
+      "source_id": "EVENT-21",
+      "account_id": "ACCT-301",
+      "client_id": "CLIENT-022",
+      "type": "account_opened",
+      "date": "2019-03-04",
+      "summary": "Fictional Roth IRA opened"
+    },
+    {
+      "source_id": "EVENT-22",
+      "account_id": "ACCT-301",
+      "client_id": "CLIENT-022",
+      "type": "contribution",
+      "date": "2026-01-15",
+      "summary": "Fictional contribution recorded for the current year"
+    },
+    {
+      "source_id": "EVENT-24",
+      "account_id": "ACCT-302",
+      "client_id": "CLIENT-022",
+      "type": "security_alert",
+      "date": "2026-10-02",
+      "summary": "Fictional sign-in alert from a device not seen before on this client's online profile"
+    },
+    {
+      "source_id": "EVENT-25",
+      "account_id": "ACCT-303",
+      "client_id": "CLIENT-022",
+      "type": "transfer",
+      "date": "2019-02-28",
+      "summary": "Fictional transfer in from another firm"
+    },
+    {
+      "source_id": "EVENT-31",
+      "account_id": "ACCT-401",
+      "client_id": "CLIENT-031",
+      "type": "beneficiary_update",
+      "date": "2018-09-20",
+      "summary": "Fictional primary beneficiary designation recorded"
+    },
+    {
+      "source_id": "EVENT-33",
+      "account_id": "ACCT-401",
+      "client_id": "CLIENT-031",
+      "type": "service_request",
+      "date": "2024-11-05",
+      "summary": "Fictional mailing-address update"
+    },
+    {
+      "source_id": "EVENT-35",
+      "account_id": "ACCT-402",
+      "client_id": "CLIENT-031",
+      "type": "account_opened",
+      "date": "2015-05-11",
+      "summary": "Fictional joint account opened with spouse as co-owner"
+    }
+  ]
+}
