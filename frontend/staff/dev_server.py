@@ -1,7 +1,7 @@
 """Local preview server. Development and contingency aid; it is not Agent 2's backend.
 
-Serves the staff page at /staff (and the client page at /client when that folder is
-present) together with the version-one API on one origin, using the fictional data in
+Serves the site at /site, the staff page at /staff (and the client page at /client when
+that folder is present) together with the version-one API on one origin, using the fictional data in
 data/*.json. Standard library only.
 
 Run from the repository root:
@@ -50,7 +50,7 @@ mock_api.CASES.update({case["case_id"]: copy.deepcopy(case) for case in STORE.da
 
 V2 = False
 ADAPTER = None  # Agent 1's backend.aws module when --ai adapter is used
-STATIC = re.compile(r"/(staff|client)/((?:[\w-]+/)*[\w.-]+\.(?:html|css|js|woff2|png|svg))")
+STATIC = re.compile(r"/(staff|client|site)/((?:[\w-]+/)*[\w.-]+\.(?:html|css|js|woff2|png|svg))")
 
 
 def with_v2_fields(case: dict) -> dict:
@@ -75,6 +75,13 @@ class Handler(mock_api.Handler):
         path = self.path.split("?", 1)[0]
         if path in ("/staff", "/staff/"):
             return self._file(STAFF_DIR / "index.html")
+        if path in ("/", "/site"):
+            self.send_response(302)
+            self.send_header("Location", "/site/")
+            self.send_header("Content-Length", "0")
+            return self.end_headers()
+        if path == "/site/":
+            return self._file(ROOT / "frontend" / "site" / "index.html")
         if path in ("/client", "/client/"):
             return self._client_page()
         match = STATIC.fullmatch(path)

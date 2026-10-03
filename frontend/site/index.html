@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SamePage: say it your way</title>
+  <meta name="description" content="SamePage turns a client's everyday words into a confirmed request, checked against their own accounts.">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="nav">
+    <a class="wordmark" href="#top">SamePage</a>
+    <nav aria-label="Demo">
+      <a href="/client">Client demo</a>
+      <a class="nav-cta" href="/staff">Staff view</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <h1 class="rise">
+        <span><i>Say it your way.</i></span>
+        <span><i>We'll find the account</i></span>
+        <span><i>you mean.</i></span>
+      </h1>
+      <p class="hero-sub">SamePage turns a client's everyday words into a confirmed request, checked against their own accounts, and hands staff a case they can trust.</p>
+      <p class="hero-actions">
+        <a class="button solar" href="/client">Try the client demo</a>
+        <a class="button ghost" href="#story">See how it works</a>
+      </p>
+
+      <div class="phrases" aria-hidden="true">
+        <p data-drift="-1"><span>“the Roth thing from my old job”</span><span>“who gets my money”</span><span>“a sign-in I don't recognize”</span><span>“the account from my last employer”</span><span>“the Roth thing from my old job”</span><span>“who gets my money”</span></p>
+        <p data-drift="1"><span>“take money out of my retirement”</span><span>“my financial person”</span><span>“the amount I have to take out”</span><span>“move my money”</span><span>“take money out of my retirement”</span><span>“my financial person”</span></p>
+      </div>
+      <p class="visually-hidden">Clients describe accounts in their own words, such as “the Roth thing from my old job” or “who gets my money”.</p>
+    </section>
+
+    <section class="story" id="story" aria-label="How one request moves through SamePage">
+      <div class="stage" data-stage="0">
+        <div class="say">
+          <div class="captions">
+            <p>Mara says what she needs, in her own words.</p>
+            <p>SamePage checks her words against her own accounts.</p>
+            <p>She confirms the request before anything is sent.</p>
+            <p>Staff get the case with its evidence, and choose the advisor.</p>
+          </div>
+          <p class="utterance">“I need six thousand dollars from the <mark>Roth thing</mark> from my old job.”</p>
+          <div class="swap">
+            <p class="question">I don't see a Roth IRA here. Could you mean your rollover IRA from your former employer?</p>
+            <p class="confirmed">I want to speak with an advisor about using $6,000 from my retirement account from my former employer.<small>Confirmed by Mara</small></p>
+          </div>
+        </div>
+
+        <div class="objects">
+          <div class="voice" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+
+          <ul class="accounts">
+            <li class="account missing"><span>Roth IRA</span><small>Not in Mara's records</small></li>
+            <li class="account chosen"><span>Rollover IRA <b>····4821</b></span><small>Opened by a rollover from a former employer, 2023</small></li>
+            <li class="account other"><span>Brokerage account <b>····7314</b></span><small>Everyday investments</small></li>
+          </ul>
+
+          <div class="handoff">
+            <article class="case-card">
+              <header><strong>CASE-1042</strong><span>Mara Ellis</span><em>Submitted</em></header>
+              <p>Client requests discussion of a possible $6,000 distribution from a rollover IRA.</p>
+              <p class="chips"><span>Withdrawal or distribution</span><span>Retirement income</span><span class="flag">Wording did not match records</span></p>
+            </article>
+            <div class="link" aria-hidden="true"></div>
+            <article class="advisor-card">
+              <span class="avatar" aria-hidden="true">JL</span>
+              <div><strong>Jordan Lee</strong><small>Retirement income. Assigned by a staff member, with a reason.</small></div>
+            </article>
+          </div>
+        </div>
+
+        <ol class="rail">
+          <li><button type="button" data-go="0">Said</button></li>
+          <li><button type="button" data-go="1">Checked</button></li>
+          <li><button type="button" data-go="2">Confirmed</button></li>
+          <li><button type="button" data-go="3">Routed</button></li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="cases" id="cases" aria-labelledby="cases-title">
+      <div class="cases-pin">
+        <h2 id="cases-title">Four requests.<br>Four different right answers.</h2>
+        <div class="track">
+          <article class="scenario">
+            <blockquote>“I need six thousand dollars from the Roth thing from my old job.”</blockquote>
+            <p>No Roth IRA on file. SamePage asks, and the client picks her rollover IRA.</p>
+            <footer>Retirement advisor review</footer>
+          </article>
+          <article class="scenario">
+            <blockquote>“Can I put more money into my Roth IRA this year?”</blockquote>
+            <p>The words match the records. His current advisor is suggested first.</p>
+            <footer>Advisor review</footer>
+          </article>
+          <article class="scenario">
+            <blockquote>“I want my daughter to be the one who gets my retirement account if something happens to me.”</blockquote>
+            <p>“Who gets” means beneficiary. The account's last designation is attached, with its source.</p>
+            <footer>Estate and beneficiary review</footer>
+          </article>
+          <article class="scenario alert">
+            <blockquote>“I don't recognize a sign-in alert on my account.”</blockquote>
+            <p>Possible unauthorized access. This one never goes to a planning advisor.</p>
+            <footer>Security specialist review</footer>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="rules" aria-labelledby="rules-title">
+      <h2 id="rules-title" class="visually-hidden">Who does what</h2>
+      <div class="rule"><h3>The model interprets.</h3><p>It reads the client's words, explains a term in plain language, and asks one question at a time.</p></div>
+      <div class="rule"><h3>The code verifies.</h3><p>Accounts, balances, and history come from records. Every fact staff see carries its source.</p></div>
+      <div class="rule"><h3>People decide.</h3><p>The client confirms the request. A staff member chooses the advisor and records why.</p></div>
+    </section>
+
+    <section class="closing">
+      <p class="fill">SamePage lets clients speak in their own words and gives advisors a request they can trust.</p>
+      <p class="hero-actions">
+        <a class="button solar" href="/client">Try the client demo</a>
+        <a class="button ghost" href="/staff">Open the staff view</a>
+      </p>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <p>Prototype for the 2026 LPL Financial University Hackathon. Interpretation and triage are built on Amazon Bedrock.</p>
+    <p>Every client, account, balance, and advisor shown is fictional. SamePage creates and routes service requests; it does not give advice or move money.</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
