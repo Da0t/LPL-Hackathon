@@ -34,7 +34,8 @@ the current branch and clearly identify work that is still awaiting integration.
    security specialist queue, never to a general advisor.
 3. **Advisor workspace** (`/dashboard`). The queue ranks itself and says why in plain words
    ("Waiting 2 days for an advisor"). The advisor opens the case to a **prepared action packet**:
-   proposed fields, compliance checks, and a draft message, ready to approve.
+   proposed fields, compliance checks, and a draft message. The independent Verifier must pass before
+   the prepared reply is shown; the final edited message is checked again when sent.
 4. **Advisor agents.** A **reply drafter** and a **compliance reviewer** work in a loop (draft,
    review, one revision, review), next to a **prep brief**, a **next-steps planner** with an owner
    for each step, and a **security investigator** for fraud cases.
@@ -76,15 +77,18 @@ application code, so a confident but wrong model answer can never become a false
 
 ## How we use AWS
 
-- **Amazon Bedrock (Converse API with native tool use).** Intake and triage interpret the client's
+- **Amazon Bedrock (Converse / ConverseStream with native tool use).** Intake and triage interpret the client's
   words and classify the request through narrow, client-scoped tools with schema-forced output. On
   the advisor side, Bedrock prepares the action packet and the prep brief and runs four **advisor
   agents** (reply drafter, compliance reviewer, next-steps planner, security investigator). Each
-  agent is a single Bedrock call that must answer through one tool with a fixed schema, and each has
-  a deterministic offline fallback. There is no orchestration framework: the only loop is draft,
+  agent answers through a fixed tool schema. A separate Verifier call audits the packet and drafts;
+  live audit failures block approval. Other agents have visibly labeled offline fallbacks. There is no orchestration framework: the only loop is draft,
   review, one revision, review, run by plain code in `backend/services/reply_workflow.py`. The model
   is **Claude Haiku 4.5** (`us.anthropic.claude-haiku-4-5-20251001-v1:0`), swappable via
   `BEDROCK_MODEL_ID`.
+- **Bedrock Knowledge Bases, S3 Vectors, and Titan v2.** Sentinel retrieves and cites reviewed SEC/IRS
+  guidance. The corpus is limited to two public excerpts; it is not a legal determination.
+- **Amazon Polly.** Authenticated neural read-aloud for questions, options, and client message threads.
 - **Amazon Cognito and DynamoDB.** Cognito handles email and password sign-in for clients and staff.
   A private, on-demand DynamoDB table holds client profiles, accounts, history, and immutable
   snapshots of submitted request documents. Identity-to-client and staff-role mappings are owned by
@@ -190,15 +194,17 @@ synthetic case and writes screenshots under `/tmp`.
 
 ### Client
 
-- `/login`: email and password sign-in.
+- `/`: animated Coherent logo, a replayable example showing a client's words become a confirmed
+  request record, and the technology logo strip.
+- `/login`: email and password sign-in with a simplified typographic welcome panel.
 - `/workspace`: overview with asset and cash snapshots, accounts, and recent activity.
 - `/workspace/profile`: editable identity, contact, employment, household finances, goals, and
   trusted contact. Contact email and sign-in email are intentionally separate.
 - `/workspace/finances`: accounts, holdings, editable account details, searchable history, account
   creation, and past-activity entry. Facts a client enters are marked as self-reported; entering a
   transfer never moves money or changes a balance.
-- `/workspace/requests/new`: three columns for the client's words, the clarification, and an
-  A4-proportioned request document. The document carries the client's name, the description, the
+- `/workspace/requests/new`: a step-by-step editor for the client's words, account clarification,
+  and review of an A4-proportioned request document. The document carries the client's name, the description, the
   original words, the chosen account's dated balances and holdings, and account history with source
   ids. No SSN appears in it. Print or Save PDF uses A4 print CSS. `/intake` redirects here.
 - `/workspace/requests`: request status, advisor clarification messages, the client's replies, and
@@ -258,9 +264,11 @@ LPL-Hackathon/
 
 - **Live AWS:** Cognito sign-in, DynamoDB client records and archived request documents, and (with
   `SAMEPAGE_AI_MODE=bedrock`) language interpretation, clarifying questions, term normalization,
-  triage, the action packet, the prep brief, and the four advisor agents.
+  triage, the action packet, the prep brief, the advisor agents, and the independent record critic.
+  Bedrock KB retrieval and Polly read-aloud are also live AWS calls.
 - **Always deterministic:** authorization scope, account facts and sources, security routing, advisor
-  ranking, queue priority, the compliance verdict, case state, assignment, and the workflow actions.
+  ranking, queue priority, field comparisons, verdict calculation from reviewer findings, case state,
+  assignment, and workflow actions. Model-generated checks and findings are not deterministic.
 - **Synthetic:** every client, account, balance, event, and advisor. Three fictional households have
   detailed profiles, 16 accounts, and 154 activity records; SSNs are represented by their last four
   digits only. Clarification messages and replies stay inside the demo.
@@ -298,3 +306,90 @@ These inform the data model, not personalized financial advice.
 - [`contracts/API_V1.md`](contracts/API_V1.md): frozen v1 HTTP contract (advisor, follow-up, and portal endpoints are additive)
 - [`HACKATHON_PROJECT_BRIEF.md`](HACKATHON_PROJECT_BRIEF.md): event rules, constraints, and judging criteria
 - [`SAMEPAGE_PRODUCT_SPEC.md`](SAMEPAGE_PRODUCT_SPEC.md): the original specification (historical)
+
+## Six upgrades: verification, cited guidance, streaming, and accessible follow-up
+
+1. **Independent Verifier.** Forge's nonempty fields carry source paths. Deterministic checks compare
+   values, amounts, and masked accounts; a separate Bedrock call reviews the full packet and drafts for
+   unsupported statements. The UI shows **pass / needs fix** and field coverage. A failed or unavailable
+   audit withholds the ready packet and disables approval. The backend requires its own passing receipt
+   for the exact current case fingerprint; editing a case invalidates old receipts. Approval records a
+   history event and sends the reviewed message to the client thread when supplied; it never executes
+   a financial transaction. The final edited message is independently audited again before delivery. Clarification messages are audited
+   again when sent, and a compliance override cannot bypass a failed record audit. Pass means *no
+   detected mismatch*, not a truth guarantee. Offline mode clearly labels deterministic-only checks.
+2. **Sentinel retrieval and citations.** A real Bedrock KB indexes two curated public-guidance excerpts
+   in `data/compliance/sources.json`: the [SEC Reg BI compliance guide](https://www.sec.gov/resources-small-businesses/small-business-compliance-guides/regulation-best-interest)
+   and [IRS early-distribution guidance](https://www.irs.gov/retirement-plans/plan-participant-employee/retirement-topics-exceptions-to-tax-on-early-distributions).
+   This is a deliberately small guidance corpus, **not the full regulations or a legal/suitability
+   determination**. Retrieval uses category-only queries, without client records. Source IDs and
+   excerpts must match the registered corpus. Model citations are checked against retrieved text,
+   allowing whitespace and typographic-quote differences, and the UI displays the original excerpt.
+   Missing retrieval or a failed model review produces an explicit needs-changes result; it never
+   claims an uncited memory answer is RAG. The advisor checklist remains a human responsibility.
+3. **Actual streaming and run evidence.** `POST /staff/cases/{id}/agents/stream` provides real Bedrock
+   `ConverseStream` deltas, stage events, model ID, tools, cited sources, token usage, and elapsed time.
+   No artificial stage timers or fabricated confidence percentages. Confidence is explicitly
+   uncalibrated. Advanced output is model content/tool arguments, never hidden reasoning or prompts.
+   Forge/reply stream content stays hidden until the Verifier passes; live stage and received-chunk
+   progress remain visible. Other agents expose clearly marked provisional output. Cached/offline runs
+   do not simulate tokens. Disconnects cancel delivery; four simultaneous runs and bounded queues cap
+   stream work. A model request already in flight may finish before cancellation takes effect.
+4. **Polly + voice.** Client questions/options and request-message threads have read-aloud buttons;
+   “Read questions aloud” enables automatic playback. “Speak instead” uses browser speech recognition
+   where supported. Starting the microphone stops playback; stop/cancel controls remain available.
+   `/portal/speech` requires client authentication, accepts up to 2,500 characters, limits each client
+   to 15 calls/minute per server process, and returns uncached MP3 audio. Text/audio are not saved by
+   the app. Browser playback/microphone or AWS failures leave readable text and typing available.
+   Long message threads are read up to the 2,500-character limit.
+5. **Calm accessibility controls.** Larger text, stronger contrast, and read-aloud preferences persist
+   locally. Large-text request columns reflow; controls have visible focus and descriptive labels.
+   Persistent “No money has moved” reassurance and “Talk to a person” lead to a reviewed contact request,
+   without placing a call or automatically submitting. This is tested accessibility support, not a WCAG
+   conformance certification.
+6. **Post-submit reply loop.** My requests explains the current state in plain words, displays advisor
+   questions, and accepts the client's own-word reply. Status refreshes while the tab is visible and
+   can be refreshed manually. Replies return to the staff record and queue. Archived A4 submission
+   documents remain immutable; subsequent conversation lives in the case history.
+
+### Provision the compliance KB and enable speech
+
+With authorized AWS credentials in the normal SDK provider chain:
+
+```bash
+AWS_REGION=us-east-1 python scripts/provision_knowledge_base.py
+```
+
+The resumable script creates a private encrypted S3 document bucket, an S3 Vectors index (1,024
+float32 dimensions, cosine distance), a scoped Bedrock service role, a Titan-v2-backed KB and S3 data
+source, then waits for ingestion. IDs are saved to ignored `var/knowledge-base.json`. Re-run after
+reviewing/updating corpus excerpts to sync them. The app reads this file automatically; override with
+`COHERENT_KB_CONFIG` or `BEDROCK_KNOWLEDGE_BASE_ID`. `BEDROCK_MAX_TOKENS` defaults to 2048. The Next.js API proxy allows 120 seconds so the
+backend can finish its bounded model calls or return its own timeout response. Requirements include the verified boto3/botocore
+1.43.108 SDK floor for the S3 Vectors storage configuration.
+Provisioning needs S3, S3 Vectors, IAM, and Bedrock control-plane permissions; these are separate from
+runtime permissions. Runtime needs `bedrock:Retrieve` for that KB, model invocation/streaming, and
+`polly:SynthesizeSpeech` (see `infra/iam_policy.json`). Polly needs no resource provisioning. These
+resources and usage incur AWS charges; they persist until deleted. Remove the KB/data source, vector
+index/bucket, document objects/bucket, and dedicated service role when retiring this demo.
+
+Local acceptance: 188 Python tests, seven legacy browser checks, and the production build passed.
+Real KB ingestion completed with two indexed documents. The authenticated upgrade browser smoke
+passed Polly playback, persistent accessibility controls at 390px, live Bedrock audits, cited retrieval,
+and a complete advisor-clarification/client-reply loop. All three client logins and the staff login
+also passed the existing cloud portal smoke. A live adversarial check blocked an invented claim
+that a withdrawal had completed. Run regression and optional authenticated browser acceptance with:
+
+```bash
+python -m pytest -q
+cd web && npm run build
+# From repo root, with both servers running and private demo access configured:
+NODE_PATH=/path/to/playwright/node_modules node tests/portal/upgrades.cjs
+```
+
+The upgrade smoke checks real Polly audio, persisted reading preferences and 390px layouts, a live
+Bedrock audit, cited KB review, and one fictional clarification/reply loop. It creates synthetic test
+history and stores screenshots only under `/tmp`. Credentials, sign-in passwords, generated AWS IDs,
+and client documents remain outside Git. Audit receipts are process-local: restarting the backend
+requires regenerating before approval. Existing SQLite case history remains local to this demo host;
+DynamoDB stores portal profiles, financial records, and submission snapshots.

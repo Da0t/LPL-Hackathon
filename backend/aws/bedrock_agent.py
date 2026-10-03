@@ -151,6 +151,9 @@ def _invoke_converse(client, cfg: AwsConfig, pacer: _Pacer, **kwargs) -> dict:
     while True:
         pacer.wait()
         try:
+            from backend.aws import telemetry
+            if telemetry.active():
+                return telemetry.converse_stream(client, **kwargs)
             return client.converse(**kwargs)
         except ClientError as exc:
             code = exc.response.get("Error", {}).get("Code", "ClientError")
@@ -749,6 +752,8 @@ anything and you give no investment/tax/legal advice , you prepare and draft.
 Hard rules:
 - Use only the facts provided. Never invent an account, balance, amount, or history. If a field is unknown,
   leave its value empty and add a compliance check with status "review".
+- Use ONLY authoritative_fields for prepared_fields; omit purpose or any other field absent from that map. Keep balance and balance_as_of in separate fields. For example a balance value is "84000", never "$84,000 (as of ...)".
+- Every nonempty prepared field must include source_path from the supplied authoritative_fields map and exactly reproduce that value (currency formatting is allowed). Never use a path that is absent.
 - prepared_fields: the concrete fields a human would need to action this request (label + value), pre-filled
   from the facts (e.g. account, masked number, amount, delivery method, request type). Mark anything not
   stated as empty.
@@ -775,7 +780,7 @@ _FULFILL_TOOL = {
                 "headline": {"type": "string", "description": "One line naming the prepared action."},
                 "action_type": {"type": "string", "description": "A short slug, e.g. distribution_request, beneficiary_change, account_service, security_review."},
                 "prepared_fields": {"type": "array", "items": {"type": "object", "properties": {
-                    "label": {"type": "string"}, "value": {"type": "string"}}, "required": ["label", "value"]}},
+                    "label": {"type": "string"}, "value": {"type": "string"}, "source_path": {"type": "string", "enum": ["", "client_display_name", "amount_requested", "currency", "preferred_contact_channel", "intent", "categories.0", "account_context.account_type", "account_context.masked_identifier", "account_context.balance", "account_context.balance_as_of", "account_context.familiar_label", "account_context.account_id", "account_context.descriptor"]}}, "required": ["label", "value", "source_path"]}},
                 "compliance_checks": {"type": "array", "items": {"type": "object", "properties": {
                     "item": {"type": "string"}, "status": {"type": "string", "enum": ["pass", "review", "flag"]},
                     "note": {"type": "string"}, "confirm": {"type": "string"}}, "required": ["item", "status"]}},
@@ -803,13 +808,14 @@ def fulfillment_plan(case: dict, tools=None, *, cfg: AwsConfig | None = None, cl
         "amount_requested", "currency", "account_context", "unresolved_questions",
         "flags", "conflicts", "original_words", "client_display_name",
     )}
-    first_user = "Case facts:\n" + json.dumps(facts, ensure_ascii=False, default=str)
+    from backend.aws.auditor import facts as source_facts
+    first_user = "Case facts:\n" + json.dumps(facts, ensure_ascii=False, default=str) + "\nAuthoritative_fields: " + json.dumps(source_facts(case), default=str)
     result = _run_tool_loop(client, cfg, pacer, _FULFILL_SYSTEM, first_user, [_FULFILL_TOOL], "submit_plan", {})
     return _normalize_plan(result)
 
 
 def _normalize_plan(result: dict) -> dict:
-    fields = [{"label": str(f.get("label", "")), "value": str(f.get("value", ""))}
+    fields = [{"label": str(f.get("label", "")), "value": str(f.get("value", "")), "source_path": str(f.get("source_path", ""))}
               for f in (result.get("prepared_fields") or []) if isinstance(f, dict)]
     checks = []
     for c in (result.get("compliance_checks") or []):

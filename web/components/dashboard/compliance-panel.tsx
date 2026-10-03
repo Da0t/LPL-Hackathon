@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { ShieldCheck, RefreshCw } from "lucide-react";
 import { complianceReview, ApiError, type ComplianceReview } from "@/lib/api";
+import { AgentEvidence, ComplianceSources } from "./agent-evidence";
 import { Section } from "./section";
 import { agentNote, flagLabel } from "./labels";
 
@@ -30,6 +31,8 @@ export function CompliancePanel({ detail, hc }: { detail: any; hc: any }) {
 
   return (
     <Section title="Compliance">
+      <AgentEvidence caseId={detail.case_id} operation="compliance-review" />
+      <ComplianceSources review={review} />
       <div className="rounded-xl border border-border bg-card p-4">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-sm font-medium"><ShieldCheck className="h-4 w-4 text-primary" /> Advisor checklist</div>
@@ -55,7 +58,7 @@ export function CompliancePanel({ detail, hc }: { detail: any; hc: any }) {
                     </span>
                   )}
                 </label>
-                {result && <p className="ml-6 mt-0.5 text-xs text-muted-foreground">{result.evidence}</p>}
+                {result && <p className="ml-6 mt-0.5 text-xs text-muted-foreground">{result.evidence}{!!result.citation_ids?.length && <span className="block mt-1 font-medium">Guidance: {result.citation_ids.join(", ")}. Expand the source excerpts above.</span>}</p>}
               </li>
             );
           })}

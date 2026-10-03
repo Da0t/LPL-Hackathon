@@ -197,6 +197,8 @@ def test_an_offline_fallback_is_not_cached_so_the_model_is_retried(live, monkeyp
 
 
 def approve(client, case_id="CASE-1042", **body):
+    plan = client.post(f"/staff/cases/{case_id}/plan", headers=STAFF).json()
+    body.setdefault("plan_id", plan.get("plan_id"))
     return client.post(f"/staff/cases/{case_id}/action", json={"action": "approve", **body}, headers=STAFF)
 
 

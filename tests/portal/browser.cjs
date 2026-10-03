@@ -44,9 +44,9 @@ const users = JSON.parse(fs.readFileSync(process.env.PORTAL_ACCESS_FILE || 'var/
      await page.goto(base+'/workspace/requests/new');
      await page.getByLabel('Your request',{exact:true}).fill('I want to discuss withdrawing $6,000 from my old workplace retirement account for home repairs.');
      await page.getByRole('button',{name:'Confirm and send request',exact:true}).waitFor();
-     await page.waitForFunction(()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Confirm and send request'));return b&&!b.disabled},{timeout:120000});
+     await page.waitForFunction(()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Confirm and send request'));return b&&!b.disabled}, null, {timeout:120000});
      await page.getByLabel('Account to discuss',{exact:true}).selectOption('ACCT-201');
-     await page.getByLabel('Amount to discuss (USD, optional)',{exact:true}).fill('6000');
+     await page.getByLabel('Amount to discuss, in dollars (optional)',{exact:true}).fill('6000');
      await page.getByLabel('Request description',{exact:true}).fill('Please discuss a possible $6,000 withdrawal from my old workplace rollover IRA for home repairs. I want an advisor to explain the implications before deciding.');
      console.log('Request ready');await page.screenshot({path:'/tmp/coherent-request-filled.png',fullPage:true});
      const archive=page.waitForResponse(r=>r.url().endsWith('/archive')&&r.request().method()==='POST',{timeout:120000});
@@ -54,15 +54,15 @@ const users = JSON.parse(fs.readFileSync(process.env.PORTAL_ACCESS_FILE || 'var/
      const response=await archive;assert.equal(response.status(),200);const doc=await response.json();submitted=doc.case_id;
      assert.equal(doc.account.account_id,'ACCT-201');assert.equal(doc.account.balance,84000);assert.equal(doc.amount_requested,6000);assert(doc.history.length>=10);
      assert(doc.history.every(e=>e.account_id==='ACCT-201'));assert(!JSON.stringify(doc).includes('ssn'));
-     await page.getByRole('button',{name:'Request sent',exact:true}).waitFor();
+     await page.getByRole('heading',{name:'Request sent',exact:true}).waitFor();
      await page.pdf({path:'/tmp/coherent-request-print.pdf',format:'A4',printBackground:true,preferCSSPageSize:true});
      await page.goto(base+'/workspace/requests');
      await page.getByText(doc.request_description,{exact:true}).first().waitFor();
      await page.goto(base+'/workspace/requests/new');
-     await page.getByLabel('Pause automatic suggestions',{exact:true}).click();
+     await page.getByRole('button',{name:'Pause suggestions',exact:true}).click();
      await page.getByLabel('Your request',{exact:true}).fill('A draft that should stay local after refresh.');
      let posts=0;page.on('request',r=>{if(r.method()==='POST'&&r.url().includes('/intake'))posts++});
-     await page.reload();await page.getByText(/Draft restored/).waitFor();
+     await page.reload();await page.getByText(/We kept your draft from earlier/).waitFor();
      await page.waitForTimeout(1800);assert.equal(posts,0);
      await page.setViewportSize({width:390,height:844});
      for(const route of ['/workspace','/workspace/profile','/workspace/finances','/workspace/requests/new']) {

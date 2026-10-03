@@ -1,0 +1,18 @@
+[
+  {
+    "id": "SEC-REG-BI-CARE",
+    "title": "SEC Regulation Best Interest: Care Obligation",
+    "authority": "SEC staff compliance guide (not the rule text)",
+    "url": "https://www.sec.gov/resources-small-businesses/small-business-compliance-guides/regulation-best-interest",
+    "reviewed_at": "2026-10-03",
+    "excerpt": "You must consider the risks, rewards, and costs in light of the retail customer’s investment profile and have a reasonable basis to believe that the recommendation is in that particular customer’s best interest and does not place the broker-dealer’s interest ahead of the customer’s interest. The retail customer’s investment profile is defined to include, but is not limited to the retail customer’s: age; other investments; financial situation and needs; tax status; investment objectives; investment experience; investment time horizon; liquidity needs; risk tolerance; and any other information the retail customer may disclose to the broker in connection with a recommendation."
+  },
+  {
+    "id": "IRS-EARLY-DISTRIBUTIONS",
+    "title": "IRS Retirement topics: Exceptions to tax on early distributions",
+    "authority": "IRS taxpayer guidance (not an individual tax determination)",
+    "url": "https://www.irs.gov/retirement-plans/plan-participant-employee/retirement-topics-exceptions-to-tax-on-early-distributions",
+    "reviewed_at": "2026-10-03",
+    "excerpt": "Most retirement plan distributions are subject to income tax and may be subject to an additional 10% tax. Generally, the amounts an individual withdraws from an IRA or retirement plan before reaching age 59½ are called \"early\" or \"premature\" distributions. Individuals must pay an additional 10% early withdrawal tax unless an exception applies. Use Form 5329 to report distributions subject to the 10% additional tax on early distributions from a qualified retirement plan, including traditional IRAs."
+  }
+]

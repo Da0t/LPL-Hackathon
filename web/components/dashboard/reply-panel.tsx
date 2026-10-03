@@ -7,6 +7,7 @@ import {
   draftReply, complianceReview, ApiError,
   type AgentTraceStep, type ComplianceReview, type SentCompliance,
 } from "@/lib/api";
+import { AgentEvidence, AuditVerdict, ComplianceSources } from "./agent-evidence";
 import { agentNote } from "./labels";
 
 const AGENT_LABELS: Record<AgentTraceStep["agent"], string> = { drafter: "Drafter", compliance: "Compliance reviewer" };
@@ -22,17 +23,18 @@ export function ReplyPanel({ caseId, busy, onSend, onClose }: {
   const [review, setReview] = useState<ComplianceReview | null>(null);
   const [trace, setTrace] = useState<AgentTraceStep[]>([]);
   const [note, setNote] = useState<string | null>(null);
+  const [audit, setAudit] = useState<any>(null);
   const [override, setOverride] = useState(false);
 
   const stale = reviewedText !== null && text.trim() !== reviewedText.trim();
   const flagged = review?.verdict === "needs_changes";
-  const canSend = !!review && !stale && !!text.trim() && (!flagged || override) && !busy && !working;
+  const canSend = audit?.verdict === "pass" && !!review && !stale && !!text.trim() && (!flagged || override) && !busy && !working;
 
   const runDraft = async () => {
     setWorking("draft"); setError(null); setOverride(false);
     try {
       const r = await draftReply(caseId, instruction.trim() || undefined);
-      setText(r.draft); setReviewedText(r.draft); setReview(r.review); setTrace(r.trace); setNote(agentNote(r.ai_mode, r.note));
+      setAudit(r.audit); setText(r.draft); setReviewedText(r.draft); setReview(r.review); setTrace(r.trace); setNote(agentNote(r.ai_mode, r.note));
     } catch (e) { setError(e instanceof ApiError ? e.message : "Could not draft a reply."); }
     finally { setWorking(null); }
   };
@@ -41,7 +43,7 @@ export function ReplyPanel({ caseId, busy, onSend, onClose }: {
     setWorking("review"); setError(null); setOverride(false);
     try {
       const r = await complianceReview(caseId, text);
-      setReview(r); setReviewedText(text);
+      setAudit(r.audit); setReview(r); setReviewedText(text);
       setTrace((t) => [...t, {
         agent: "compliance", step: "review",
         summary: r.verdict === "pass" ? "Re-checked the advisor's edit: passed." : `Re-checked the advisor's edit: flagged ${r.findings.length} issue(s).`,
@@ -73,12 +75,14 @@ export function ReplyPanel({ caseId, busy, onSend, onClose }: {
           </Button>
         </div>
 
+        <AgentEvidence caseId={caseId} operation={working === "review" ? "compliance-review" : "reply-draft"} />
+        {review && <><AuditVerdict audit={audit} /><ComplianceSources review={review} /></>}
         {error && <p className="text-sm text-red-600">{error}</p>}
 
         {review && (
           <>
             <div>
-              <p className="text-xs font-semibold text-muted-foreground">Draft · edit before sending</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Draft · {audit?.verdict === "pass" ? "record audit passed; review before sending" : "unverified; correct the findings and re-check"}</p>
               <textarea value={text} onChange={(e) => setText(e.target.value)} rows={6} maxLength={2000}
                 className="mt-1.5 w-full rounded-lg border border-border bg-background p-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30" />
             </div>
@@ -93,7 +97,7 @@ export function ReplyPanel({ caseId, busy, onSend, onClose }: {
               </div>
             ) : flagged ? (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-                <div className="flex items-center gap-2 text-sm font-medium text-amber-800"><ShieldAlert className="h-4 w-4" /> Compliance: needs changes</div>
+                <div className="flex items-center gap-2 text-sm font-medium text-amber-800"><ShieldAlert className="h-4 w-4" /> Draft checks: needs changes</div>
                 <ul className="mt-2 space-y-2">
                   {review.findings.map((f, i) => (
                     <li key={i} className="text-sm text-amber-800">
@@ -109,13 +113,13 @@ export function ReplyPanel({ caseId, busy, onSend, onClose }: {
               </div>
             ) : (
               <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-700">
-                <ShieldCheck className="h-4 w-4" /> Compliance: passed
+                <ShieldCheck className="h-4 w-4" /> Draft checks: passed
               </div>
             )}
 
             {trace.length > 0 && (
               <div>
-                <p className="text-xs font-semibold text-muted-foreground">Agent trace</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Agent trace</p>
                 <ol className="mt-1.5 space-y-1.5 border-l border-primary/20 pl-4">
                   {trace.map((t, i) => (
                     <li key={i} className="relative text-sm">

@@ -17,6 +17,7 @@ import {
   ArrowUpRight,
   ShieldCheck,
 } from "lucide-react";
+import { AccessibilityToolbar, ReassuranceBar, useAccessibility } from "./accessibility";
 import { BrandLogo } from "@/components/brand-logo";
 import { Client, portalApi } from "@/lib/portal";
 import { getMyRequests } from "@/lib/api";
@@ -34,6 +35,8 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
     [awaiting, setAwaiting] = useState(0);
   const path = usePathname(),
     router = useRouter();
+  const {stop} = useAccessibility();
+  useEffect(() => { stop(); }, [path, stop]);
   const clientId = client?.client_id;
   const refreshAwaiting = useCallback(() => {
     if (!clientId) return;
@@ -134,6 +137,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
               </span>
             </div>
           </header>
+          <AccessibilityToolbar />
           <main
             className={
               path.endsWith("/new")
@@ -143,6 +147,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
           >
             {children}
           </main>
+          <ReassuranceBar />
         </div>
       </div>
     </Context.Provider>

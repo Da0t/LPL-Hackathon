@@ -17,7 +17,9 @@
     {
       "Sid": "OptionalGuardrail",
       "Effect": "Allow",
-      "Action": ["bedrock:ApplyGuardrail"],
+      "Action": [
+        "bedrock:ApplyGuardrail"
+      ],
       "Resource": [
         "arn:aws:bedrock:us-east-1:ACCOUNT_ID:guardrail/REPLACE_WITH_GUARDRAIL_ID"
       ]
@@ -25,7 +27,27 @@
     {
       "Sid": "OptionalTranscribeStreaming",
       "Effect": "Allow",
-      "Action": ["transcribe:StartStreamTranscription"],
+      "Action": [
+        "transcribe:StartStreamTranscription"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "RetrieveReviewedCompliance",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:Retrieve"
+      ],
+      "Resource": [
+        "arn:aws:bedrock:us-east-1:ACCOUNT_ID:knowledge-base/REPLACE_WITH_KB_ID"
+      ]
+    },
+    {
+      "Sid": "ReadAloudWithPolly",
+      "Effect": "Allow",
+      "Action": [
+        "polly:SynthesizeSpeech"
+      ],
       "Resource": "*"
     }
   ]

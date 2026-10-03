@@ -98,7 +98,7 @@ def load_config() -> AwsConfig:
         min_interval_seconds=_get_float("BEDROCK_MIN_INTERVAL_SECONDS", 1.0),
         max_retries=_get_int("BEDROCK_MAX_RETRIES", 3),
         base_backoff_seconds=_get_float("BEDROCK_BASE_BACKOFF_SECONDS", 0.75),
-        max_tokens=_get_int("BEDROCK_MAX_TOKENS", 1024),
+        max_tokens=_get_int("BEDROCK_MAX_TOKENS", 2048),
         temperature=_get_float("BEDROCK_TEMPERATURE", 0.2),
         connect_timeout=_get_float("BEDROCK_CONNECT_TIMEOUT", 5.0),
         read_timeout=_get_float("BEDROCK_READ_TIMEOUT", 30.0),

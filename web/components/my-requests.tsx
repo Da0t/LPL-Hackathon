@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { ReadAloudButton } from "@/components/portal/accessibility";
 import Link from "next/link";
 import { FileText, Printer, X, MessageCircleQuestion } from "lucide-react";
 import { getMyRequests, replyToRequest, ApiError, type MyRequest } from "@/lib/api";
@@ -11,7 +12,7 @@ const WHERE: Record<MyRequest["lifecycle"], { label: string; detail: string; ton
   awaiting_client: { label: "Needs your answer", detail: "Your advisor asked a question. Your request waits until you answer.", tone: "attention" },
   new: { label: "Received", detail: "We're finding the right person for you.", tone: "progress" },
   assigned: { label: "With an advisor", detail: "An advisor is working on your request.", tone: "progress" },
-  scheduled: { label: "Conversation scheduled", detail: "Your conversation is scheduled.", tone: "progress" },
+  scheduled: { label: "Meeting plan recorded", detail: "Your team recorded a meeting plan. Check the details with them.", tone: "progress" },
   resolved: { label: "Done", detail: "This request is complete.", tone: "done" },
 };
 
@@ -58,6 +59,8 @@ export function MyRequests({ clientId, onChange }: { clientId: string; onChange?
   }, [clientId]);
   useEffect(() => { setRows(null); setError(null); load(); }, [load]);
 
+  useEffect(() => { const timer = setInterval(() => { if (document.visibilityState === "visible") load(); }, 15000); return () => clearInterval(timer); }, [load]);
+
   const send = async (caseId: string) => {
     setSending(caseId); setError(null);
     try {
@@ -91,6 +94,7 @@ export function MyRequests({ clientId, onChange }: { clientId: string; onChange?
   return (
     <>
       {error && <p className="portal-error" role="alert">{error}</p>}
+      <div className="request-followup-heading"><p>No money has moved. Your request asks for a conversation.</p><button className="portal-secondary" onClick={load}>Refresh status</button></div>
       {waiting > 0 && (
         <p className="request-summary">
           {waiting === 1 ? "1 request needs your answer." : `${waiting} requests need your answer.`}
@@ -118,6 +122,7 @@ export function MyRequests({ clientId, onChange }: { clientId: string; onChange?
                   {r.document?.account ? `, about ${r.document.account.familiar_label}` : ""}
                 </span>
               </p>
+              <ReadAloudButton text={[r.text, where?.detail, ...messages.map(m => `${m.from === "client" ? "You said" : "Your team asks"}: ${m.text}`)].filter(Boolean).join(". ")} label="Read request and messages" />
               {messages.length > 0 && (
                 <ul className="request-thread" aria-label="Conversation with your advisor">
                   {messages.map((m, i) => (

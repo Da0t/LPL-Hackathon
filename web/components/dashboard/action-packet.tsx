@@ -5,6 +5,7 @@
 import React, { useEffect, useState } from "react";
 import { CheckCircle2, RefreshCw, AlertTriangle, Send, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AgentEvidence, AuditVerdict } from "./agent-evidence";
 import type { ActionPlan } from "@/lib/api";
 import { Subheading } from "./section";
 import { agentNote, timeAgo } from "./labels";
@@ -43,8 +44,8 @@ function SentReceipt({ sent }: { sent: SentEvent }) {
 
 // `sent` is the approval event from the case history, so the sent state survives a reload.
 // `onSend` resolves to the reason the send was refused, or null when the message went out.
-export function ActionPacket({ plan, loading, onRegenerate, onSend, sent, resolved }: {
-  plan: ActionPlan | null; loading: boolean; onRegenerate: () => void;
+export function ActionPacket({ caseId, plan, loading, onRegenerate, onSend, sent, resolved }: {
+  caseId: string; plan: ActionPlan | null; loading: boolean; onRegenerate: () => void;
   onSend: (message: string | undefined, reviewedChecks: string[]) => Promise<string | null>;
   sent: SentEvent | null; resolved: boolean;
 }) {
@@ -86,9 +87,12 @@ export function ActionPacket({ plan, loading, onRegenerate, onSend, sent, resolv
         <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} /> {loading ? "Preparing…" : "Regenerate"}
       </button>
     }>
+      <AgentEvidence caseId={caseId} operation="plan" />
+      {!loading && plan && <AuditVerdict audit={plan.audit} />}
+      {!loading && plan && plan.audit?.verdict !== "pass" && <p>The prepared reply is withheld. Review the findings and regenerate.</p>}
       {loading && <p className="text-sm text-muted-foreground">Pulling the facts from the request, running the checks and drafting a reply to the client…</p>}
       {!loading && !plan && <p className="text-sm text-muted-foreground">A reply could not be prepared right now. Try Regenerate, or use Message client to write one.</p>}
-      {!loading && plan && (
+      {!loading && plan && plan.audit?.verdict === "pass" && (
         <>
           <p className={`flex items-center gap-2 text-sm font-medium ${open ? "text-amber-700" : "text-emerald-700"}`}>
             {open ? <AlertTriangle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
@@ -145,7 +149,7 @@ export function ActionPacket({ plan, loading, onRegenerate, onSend, sent, resolv
             </div>
             <textarea value={text} onChange={(e) => setText(e.target.value)} rows={5} maxLength={2000} aria-label="Message to the client"
               className="mt-1.5 w-full rounded-lg border border-border bg-background p-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30" />
-            <p className="mt-1 text-xs text-muted-foreground">Edit it freely. The compliance reviewer checks the final wording when you send.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Edit it freely. The independent record auditor and compliance reviewer check the final wording when you send.</p>
           </div>
 
           {(plan.draft_advisor_followup || reminders.length > 0) && (

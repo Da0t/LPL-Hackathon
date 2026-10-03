@@ -1,4 +1,5 @@
 "use client";
+import { useAccessibility, ReadAloudButton } from "@/components/portal/accessibility";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
@@ -22,6 +23,9 @@ import {
 } from "@/lib/api";
 export default function NewRequest() {
   const { client } = useClient();
+  const accessibility = useAccessibility();
+  const [humanHelp, setHumanHelp] = useState(false);
+  useEffect(() => { setHumanHelp(new URLSearchParams(window.location.search).get("help") === "person"); }, []);
   const [words, setWords] = useState(""),
     [turn, setTurn] = useState<any>(null),
     [summary, setSummary] = useState(""),
@@ -138,6 +142,7 @@ export default function NewRequest() {
     }
   }
   function microphone() {
+    accessibility.stop();
     if (listening) {
       stopMic();
       return;
@@ -286,6 +291,8 @@ export default function NewRequest() {
             ? "Suggestions are paused."
             : "We’ll read this when you pause typing."
           : speechHint;
+  const questionText = turn ? [turn.question || "Does this capture what you mean?", ...(turn.suggestions || []).map((s:any,i:number)=>`Option ${i+1}: ${s.label}`)].join(". ") : "";
+  useEffect(() => { if (accessibility.prefs.autoRead && questionText && !listening) accessibility.speak(questionText); return () => accessibility.stop(); }, [questionText, accessibility.prefs.autoRead]);
   return (
     <>
       <div className="request-top">
@@ -308,6 +315,7 @@ export default function NewRequest() {
             : "Say it in your own words. We’ll check we understood, then you review the document before anything is sent."
         }
       />
+      {humanHelp && <div className="portal-success" role="status">A person can help. Describe what you need below, then review and send your request. This does not place a call or submit anything automatically.</div>}
       <div className="request-workspace">
         {sent ? (
           <section className="request-flow request-sent" role="status">
@@ -492,6 +500,7 @@ export default function NewRequest() {
               )}
               {turn ? (
                 <>
+                  <ReadAloudButton text={questionText} label="Read question and options" />
                   <div className="clarifying-question" aria-live="polite">
                     <Sparkles size={20} />
                     <h3>{turn.question || "Does this capture what you mean?"}</h3>
@@ -582,6 +591,7 @@ export default function NewRequest() {
                   <label>
                     Request description
                     <textarea
+                      aria-label="Request description"
                       rows={4}
                       value={summary}
                       disabled={locked}
@@ -596,6 +606,7 @@ export default function NewRequest() {
                     <label>
                       Account to discuss
                       <select
+                        aria-label="Account to discuss"
                         value={selected}
                         disabled={locked}
                         onChange={(e) => setSelected(e.target.value)}
@@ -611,6 +622,7 @@ export default function NewRequest() {
                     <label>
                       Amount to discuss, in dollars (optional)
                       <input
+                        aria-label="Amount to discuss, in dollars (optional)"
                         inputMode="decimal"
                         value={amount}
                         disabled={locked}
