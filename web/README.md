@@ -35,7 +35,8 @@ For the hosted AWS demo, `scripts/deploy_aws.py` runs this Next.js server beside
 instance and places CloudFront in front of it. Deployment and HTTPS details are in the root README.
 
 - `/` , animated Coherent logo and replayable request-confirmation demo
-- `/login` , Cognito email/password sign-in and animated request routing board
+- `/login` , one-click fictional demo characters, Cognito email/password sign-in, and animated
+  request routing board
 - `/workspace` , client overview with recorded-value chart, range tabs, account sparklines, and
   `/profile`, `/finances`, and `/requests` subpages
 - `/workspace/requests/new` , step-by-step request editor and printable A4 document
