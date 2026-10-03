@@ -1,16 +1,26 @@
 # Python
 __pycache__/
 *.py[cod]
-.venv/
-venv/
 *.egg-info/
 .pytest_cache/
+.venv/
+venv/
 
 # Secrets / credentials (never commit event-account creds)
 .env
 .env.*
+!.env.example
 *.pem
 .aws/
 
-# OS
+# Local state (never commit demo databases)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+var/
+
+# Editors / OS
 .DS_Store
+.idea/
+.vscode/
