@@ -153,7 +153,7 @@ For the fastest reliable demo, implement typed intake first, then microphone inp
 
 ## API contracts for parallel development
 
-The four development agents should use **FastAPI on port 8000** with separate static client and staff pages. Agent 2 owns the following version-one HTTP contract. Other agents should build against these exact paths and field names; any change requires notifying the team before merging.
+The four development agents should use **FastAPI on port 8000** with separate static client and staff pages. The version-one HTTP contract is frozen in `contracts/API_V1.md`, with fictional examples in `contracts/demo_fixture_v1.json` and a standalone mock at `contracts/mock_api.py`. The paths below summarize that contract. Build against the frozen fields; do not wait for another agent's implementation.
 
 - `POST /intake/start` with `{client_id}` → `{session_id, client_display_name, status}`.
 - `POST /intake/{session_id}/turn` with `{text, input_mode, selected_option_id?}` → `{session_id, transcript, suggestions, question, definitions, candidate_intent, selected_account_id, uncertainty, status}`. A suggestion is `{id, label, account_id?}`; a definition is `{term, plain}`. `suggestions` has no more than three items.
@@ -197,9 +197,9 @@ Integrate against the API contracts early. Keep one known-good synthetic client 
 
 ## Four agent coordination protocol
 
-Each teammate gives one file from `agent-briefs/` to their development agent and works in a **separate clone or worktree** on the named branch. Agents do not share chat memory, so the brief, this specification, and merged Git commits are the shared context. No agent should rely on a decision made only in its own conversation.
+Each teammate gives one file from `agent-briefs/` to their development agent and works in a **separate clone or worktree** on the named branch. Agents do not share chat memory, so the brief, this specification, `contracts/API_V1.md`, `contracts/demo_fixture_v1.json`, and merged Git commits are the shared context. No agent should rely on a decision made only in its own conversation.
 
-Agent 2 owns the version-one HTTP contract in this document. Agent 1 owns the AWS adapter interface, Agent 3 the client page, and Agent 4 the staff page plus seed data. Publish endpoint stubs and fixture IDs early so UI work does not wait for Bedrock. When a field or endpoint must change, Agent 2 updates the contract, tells the other three agents, and waits for acknowledgment before they implement against the new shape. Each agent pushes a branch and opens a pull request; a teammate acting as integrator merges them into `main` after checking that owned paths do not conflict.
+The frozen contract, fixture, and mock API let every agent start independently. Agent 1 can use fixture-backed tool callbacks; Agent 2 can use a temporary local AI stub; Agents 3 and 4 can call the mock API on port 8001. Agent 1 owns AWS integration, Agent 2 the real backend, Agent 3 the client page, and Agent 4 the staff page plus expanded seed data. When a field or endpoint truly must change, propose a version-two contract to the team and coordinate adoption; do not silently edit version one. Each agent pushes a branch and opens a pull request; a teammate acting as integrator merges them into `main` after checking that owned paths do not conflict.
 
 At each milestone, every agent reports four facts to the team: branch and commit, what works, contract or fixture changes, and blockers. After each merge, the other agents pull `main` and rerun their own flow. Before the deadline, run one integrated rehearsal from client speech or text through staff assignment, then reset and repeat on the presentation machine.
 
