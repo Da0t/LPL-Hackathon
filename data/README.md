@@ -13,7 +13,7 @@ Each file is `{ "meta": {...}, "<name>": [...] }`, where `<name>` matches the fi
 | `glossary.json` | 10 | The ten approved terms from the product spec |
 | `cases.json` | 4 | Optional queue seed: the two fixture cases plus a Roth IRA question and a beneficiary request |
 
-Run `python3 data/validate_data.py` from the repository root. It checks references between files and that every fixture record is still present with unchanged values.
+Run `python3 data/validate_data.py` from the repository root. It checks references between files, row counts, masked identifiers, dates, the ten glossary terms, that each demo scenario is still supported, and that every fixture record is present with unchanged values.
 
 ## Scenarios the data supports
 
@@ -30,12 +30,9 @@ The client and account files hold no interpretations of these requests. `cases.j
 
 `clients`: `state`, `client_since`. `accounts`: `ownership`, `opened_date`. `events`: `client_id`. `advisors`: `region`, `note`. `glossary`: `source_id`, `also_heard_as`. New account types: `traditional_ira`, `joint_brokerage`, `cash_management`. New routing destinations in seed cases: `advisor_review`, `estate_and_beneficiary_review`. `ADV-05` is unavailable and `ADV-08` is inactive, to exercise routing rules.
 
-## Proposed for a version-two contract
+## For Agent 2
 
-Version one's candidate object has no way to say whether an advisor already works with the client, which the staff page is asked to show. Proposed optional field on each item of `GET /staff/cases/{case_id}/candidates`:
-
-```json
-{"existing_client_relationship": true}
-```
-
-The staff page already reads it when present and shows "Not reported" when absent, so nothing blocks on it.
+- Import cases from one place. `cases.json` already contains the two fixture cases, so loading both it and the fixture's `cases` would duplicate them.
+- `python3 data/validate_data.py --export` prints all six files merged into one document with the fixture's shape, if a single file is easier to load.
+- `ADV-08` is inactive and must never be a candidate. `ADV-05` is active but at capacity.
+- Optional fields the staff page would use if the API sent them are in `CONTRACT_V2_PROPOSAL.md`. Nothing depends on them.

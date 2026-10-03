@@ -1,12 +1,17 @@
 """Check that data/*.json is coherent and still contains the frozen fixture.
 
-Run from the repository root: python3 data/validate_data.py
+Run from the repository root:
+
+    python3 data/validate_data.py            # check the data
+    python3 data/validate_data.py --export   # print one fixture-shaped JSON document
 """
 
 from __future__ import annotations
 
 import json
+import re
 import sys
+from datetime import date
 from pathlib import Path
 
 DATA = Path(__file__).parent
@@ -23,6 +28,10 @@ STATUSES = {
 KEYS = {
     "clients": "client_id", "accounts": "account_id", "events": "source_id",
     "advisors": "advisor_id", "glossary": "term", "cases": "case_id",
+}
+GLOSSARY_TERMS = {
+    "roth ira", "rollover ira", "brokerage account", "beneficiary", "transfer", "withdrawal",
+    "distribution", "required minimum distribution", "advisor", "trusted contact",
 }
 REQUIRED = {
     "accounts": ("client_id", "account_type", "familiar_label", "masked_identifier",
@@ -99,6 +108,35 @@ def check(data: dict) -> list[str]:
             if advisor not in index["advisors"]:
                 errors.append(f"case {cid}: unknown recommended advisor {advisor}")
 
+    for name, low, high in (("clients", 3, 3), ("accounts", 6, 8), ("advisors", 8, 8), ("glossary", 10, 10)):
+        if not low <= len(data[name]) <= high:
+            errors.append(f"{name}: expected {low} to {high} rows, found {len(data[name])}")
+    for account in data["accounts"]:
+        if not re.fullmatch(r"\*{4}\d{4}", account["masked_identifier"]):
+            errors.append(f"account {account['account_id']}: identifier is not masked")
+    days = [(a["account_id"], a["balance_as_of"]) for a in data["accounts"]]
+    days += [(e["source_id"], e["date"]) for e in data["events"]]
+    for owner, day in days:
+        try:
+            date.fromisoformat(day)
+        except ValueError:
+            errors.append(f"{owner}: {day} is not a YYYY-MM-DD date")
+    terms = {entry["term"].lower() for entry in data["glossary"]}
+    missing = GLOSSARY_TERMS - terms
+    if missing:
+        errors.append("glossary: missing " + ", ".join(sorted(missing)))
+    for advisor in data["advisors"]:
+        if advisor["available"] and (not advisor["active"] or advisor["capacity"] < 1):
+            errors.append(f"advisor {advisor['advisor_id']}: available but inactive or at capacity")
+    held = {a["account_type"] for a in data["accounts"]}
+    if "roth_ira" not in held:
+        errors.append("no client holds a Roth IRA for the clear Roth question")
+    if not any(e["type"] == "beneficiary_update" for e in data["events"]):
+        errors.append("no beneficiary event for the beneficiary request")
+    if not any("fraud_or_security" in c["categories"] and not c["routing"]["recommended_advisor_ids"]
+               for c in data["cases"]):
+        errors.append("no security case routed to a specialist queue without advisors")
+
     # The demo depends on this: CLIENT-017 has a rollover IRA and no Roth IRA.
     mara = {a["account_type"] for a in data["accounts"] if a["client_id"] == "CLIENT-017"}
     if "rollover_ira" not in mara or "roth_ira" in mara:
@@ -108,6 +146,10 @@ def check(data: dict) -> list[str]:
 
 if __name__ == "__main__":
     data = load()
+    if "--export" in sys.argv:
+        merged = {"meta": {**FIXTURE["meta"], "description": "Merged from data/*.json"}, **data}
+        print(json.dumps(merged, indent=2))
+        sys.exit(0)
     problems = check(data)
     for problem in problems:
         print("FAIL", problem)

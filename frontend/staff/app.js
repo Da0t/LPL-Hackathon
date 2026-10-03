@@ -35,6 +35,7 @@
     known: null, // case IDs seen so far; null until the first successful load
     arrived: {},
     signature: null,
+    openStatus: null,
     selectedId: null,
     openToken: 0
   };
@@ -153,6 +154,9 @@
       queueStatusEl.className = "queue-status";
       syncFilterOptions();
       renderQueue();
+      // If the open case changed elsewhere (for example, a colleague assigned it), reload it.
+      var open = cases.filter(function (item) { return item.case_id === state.selectedId; })[0];
+      if (open && state.openStatus && open.status !== state.openStatus) openCase(state.selectedId, false);
     }).catch(function (error) {
       queueStatusEl.className = "queue-status error";
       queueStatusEl.textContent = error.message;
@@ -249,6 +253,7 @@
 
   function openCase(caseId, moveFocus) {
     state.selectedId = caseId;
+    state.openStatus = null;
     if (location.hash.slice(1) !== caseId) history.replaceState(null, "", "#" + caseId);
     renderQueue();
     var token = ++state.openToken;
@@ -275,6 +280,26 @@
     });
   }
 
+  // Says only what the case record supports: the recorded account type, any sourced
+  // conflict statements (optional version-two field), and whether the client confirmed.
+  function mismatchNotice(record, context) {
+    var box = el("div", { class: "mismatch" },
+      el("strong", { text: "The client's wording did not match their records" }));
+    var conflicts = record.conflicts || [];
+    conflicts.forEach(function (conflict) {
+      box.appendChild(el("p", {}, conflict.statement + " ", source(conflict.source_id)));
+    });
+    if (!conflicts.length && context) {
+      box.appendChild(el("p", {},
+        "The account on this request is recorded as a " + label(ACCOUNT_TYPE_LABELS, context.account_type) + ". ",
+        source(context.account_source_id)));
+    }
+    box.appendChild(el("p", { text: record.account_match_status === "client_confirmed"
+      ? "The client confirmed this account before sending, so the request below is the corrected version."
+      : "The client has not confirmed which account they mean. Check with the client before assigning." }));
+    return box;
+  }
+
   function block(title, body, origin) {
     return el("div", { class: "block" },
       el("h3", { text: title }), body, origin ? el("p", { class: "origin", text: origin }) : null);
@@ -284,6 +309,7 @@
     var security = isSecurity(record);
     var routing = record.routing || {};
     var context = record.account_context;
+    state.openStatus = record.status;
     caseEl.textContent = "";
 
     if (security) {
@@ -301,24 +327,22 @@
         el("strong", { text: record.case_id }),
         el("span", { text: record.client_display_name }),
         el("span", { text: "Received " + formatTime(record.created_at) }),
+        record.preferred_contact_channel
+          ? el("span", { text: "Prefers contact by " + humanize(record.preferred_contact_channel).toLowerCase() }) : null,
         el("span", { class: "tag status " + record.status, text: label(STATUS_LABELS, record.status) })),
       block("What the client said",
         el("blockquote", { class: "client-words", text: "“" + record.original_words + "”" }),
         record.input_mode === "voice" ? "Spoken by the client and transcribed. Unedited." : "Typed by the client. Unedited."));
 
     if ((record.flags || []).indexOf("client_term_did_not_match_account_type") !== -1) {
-      page1.appendChild(el("div", { class: "mismatch" },
-        el("strong", { text: "The client's wording did not match their records" }),
-        context
-          ? "The account the client confirmed is recorded as a " + label(ACCOUNT_TYPE_LABELS, context.account_type) +
-            ". The client corrected this before sending; the request below is the confirmed version. "
-          : "The client corrected this before sending; the request below is the confirmed version. ",
-        context ? source(context.account_source_id) : null));
+      page1.appendChild(mismatchNotice(record, context));
     }
 
     page1.appendChild(block("What the client confirmed",
       el("p", { class: "confirmed", text: record.confirmed_plain_language_request }),
-      "Reviewed and confirmed by the client before sending."));
+      record.client_confirmed_at
+        ? "Reviewed and confirmed by the client, " + formatTime(record.client_confirmed_at) + "."
+        : "Reviewed and confirmed by the client before sending."));
     page1.appendChild(block("Staff summary",
       el("p", { text: record.staff_summary }),
       "Drafted by the triage agent. It describes the question; it is not advice to take any action."));
@@ -353,7 +377,8 @@
       });
       fact("Flags", flagTags);
     }
-    fact("Suggested destination", humanize(routing.destination || "staff_review"));
+    fact("Suggested destination", humanize(routing.destination || "staff_review"),
+      routing.reason ? el("span", { class: "muted", text: routing.reason }) : null);
     page1.appendChild(el("div", { class: "block" }, facts));
 
     var questions = record.unresolved_questions || [];
@@ -375,10 +400,11 @@
     } else {
       var accountFacts = el("dl", { class: "facts" });
       [
+        context.familiar_label ? ["Client knows it as", context.familiar_label] : null,
         ["Account type", label(ACCOUNT_TYPE_LABELS, context.account_type)],
         ["Account number", context.masked_identifier],
-        ["Balance snapshot", formatMoney(context.balance, record.currency) + " as of " + formatDate(context.balance_as_of)]
-      ].forEach(function (row) {
+        ["Balance snapshot", formatMoney(context.balance, context.currency) + " as of " + formatDate(context.balance_as_of)]
+      ].filter(Boolean).forEach(function (row) {
         accountFacts.appendChild(el("dt", { text: row[0] }));
         accountFacts.appendChild(el("dd", {}, row[1], source(context.account_source_id)));
       });
@@ -388,7 +414,8 @@
       var eventList = el("dl", { class: "facts" });
       events.forEach(function (event) {
         eventList.appendChild(el("dt", { text: formatDate(event.date) }));
-        eventList.appendChild(el("dd", {}, humanize(event.type), source(event.source_id)));
+        eventList.appendChild(el("dd", {},
+          humanize(event.type) + (event.summary ? ": " + event.summary : ""), source(event.source_id)));
       });
       page2.appendChild(block("Earlier activity that explains this request",
         events.length ? eventList : el("p", { class: "muted", text: "No earlier activity is relevant to this request." })));
@@ -459,6 +486,8 @@
       row("Existing client", candidate.existing_client_relationship === true ? "Yes, this is the client's current advisor"
         : candidate.existing_client_relationship === false ? "No existing relationship"
         : "Not reported");
+      if (candidate.meeting_mode) row("Meets by", candidate.meeting_mode.map(humanize).join(", ").toLowerCase());
+      if (candidate.capacity != null) row("Room for", candidate.capacity + (candidate.capacity === 1 ? " more case" : " more cases"));
       row("Why suggested", candidate.reason || "No reason given");
 
       group.appendChild(el("label", { class: "candidate" },
@@ -475,7 +504,8 @@
     group.appendChild(el("label", { class: "candidate" },
       otherRadio,
       el("span", { class: "name", text: "Choose a different advisor" }),
-      el("div", { class: "detail" }, otherInput)));
+      el("div", { class: "detail" }, otherInput,
+        el("p", { class: "muted", text: "Enter the advisor's ID. The case service rejects IDs it does not know." }))));
     form.appendChild(group);
 
     var reason = el("textarea", { id: "staff-reason", required: true, "aria-describedby": "reason-hint" });
@@ -524,6 +554,11 @@
         renderCase(updated, candidates, el("div", { class: "notice ok", role: "status" },
           el("strong", { text: "Assigned to " + (name ? name.display_name + " (" + name.advisor_id + ")" : result.assigned_advisor_id) }),
           "The case status is now " + label(STATUS_LABELS, result.status).toLowerCase() + "."));
+        var confirmation = caseEl.querySelector(".notice.ok");
+        if (confirmation) {
+          confirmation.setAttribute("tabindex", "-1");
+          confirmation.focus();
+        }
         loadQueue();
       }).catch(function (error) {
         submit.textContent = "Assign case";

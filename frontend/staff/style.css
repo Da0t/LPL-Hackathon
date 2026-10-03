@@ -1,3 +1,25 @@
+@font-face {
+  font-family: "Newsreader";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("fonts/newsreader.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Newsreader";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/newsreader-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Public Sans";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("fonts/public-sans.woff2") format("woff2");
+}
+
 :root {
   --desk: #e3e9eb;
   --sheet: #ffffff;
@@ -192,6 +214,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   border-left-width: 5px;
 }
 .mismatch strong { display: block; }
+.mismatch p + p { margin-top: 0.35rem; }
 
 .facts { display: grid; grid-template-columns: max-content 1fr; gap: 0.45rem 1.5rem; max-width: 46rem; }
 .facts dt { color: var(--ink-soft); }
@@ -272,6 +295,7 @@ button.quiet {
 .notice.error { background: var(--alert-wash); border-color: var(--alert); }
 .notice.ok { background: var(--ok-wash); border-color: var(--ok); }
 .notice strong { display: block; }
+.notice:focus { outline: none; }
 
 @media (max-width: 56rem) {
   .desk { grid-template-columns: 1fr; padding: 1rem; }
@@ -283,6 +307,20 @@ button.quiet {
   .facts dd { margin-bottom: 0.5rem; }
   .candidate .detail dl { grid-template-columns: 1fr; gap: 0; }
   .candidate .detail dd { margin-bottom: 0.35rem; }
+}
+
+/* Printing a case gives the two-page document on paper: no queue, no controls. */
+@media print {
+  body { background: #fff; }
+  .queue, form, .placeholder, .sheet:has(form) { display: none; }
+  .topbar { background: none; color: var(--ink); padding: 0 0 1rem; }
+  .desk { display: block; padding: 0; max-width: none; }
+  .sheet { border: 0; box-shadow: none; padding: 0; margin-bottom: 1.5rem; }
+  .sheet + .sheet { break-before: page; }
+  .sheet + .sheet + .sheet { break-before: auto; }
+  .facts { grid-template-columns: max-content 1fr; gap: 0.45rem 1.5rem; }
+  .facts dd { margin-bottom: 0; }
+  .source, .tag, .mismatch, .security-banner { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 }
 
 @media (prefers-reduced-motion: reduce) {

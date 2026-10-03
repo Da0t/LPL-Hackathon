@@ -15,9 +15,7 @@
       if (api && !window.SAMEPAGE_API_BASE) window.SAMEPAGE_API_BASE = api;
     })();
   </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=Public+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -45,7 +43,7 @@
       <ol id="case-list" class="case-list"></ol>
     </section>
 
-    <section class="case" id="case" aria-live="polite" tabindex="-1">
+    <section class="case" id="case" aria-label="Selected request" tabindex="-1">
       <div class="placeholder">
         <p>Choose a request from the queue to read what the client said, what they confirmed, and the account facts behind it.</p>
       </div>
