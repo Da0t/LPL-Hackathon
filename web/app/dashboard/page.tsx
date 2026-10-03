@@ -8,13 +8,13 @@ import {
 } from "recharts";
 import {
   Inbox, UserPlus, Flag, ShieldAlert, CheckCircle2, Search, RefreshCw,
-  ArrowLeft, MessageSquareQuote, Home, Clock, Hash,
+  ArrowLeft, MessageSquareQuote, Home, Clock, Hash, Sparkles, Columns3,
+  Hand, StickyNote, Send, CalendarCheck, CheckCheck, ShieldCheck,
 } from "lucide-react";
-import { CoherentMark } from "@/components/coherent-logo";
 import { Button } from "@/components/ui/button";
 import {
-  getCases, getCase, getCandidates, assignCase, ApiError, prettyCategory,
-  type CaseRow, type Candidate,
+  getCases, getCase, getCandidates, assignCase, getBrief, caseAction, health,
+  ApiError, prettyCategory, type CaseRow, type Candidate, type Brief, type AdvisorAction,
 } from "@/lib/api";
 
 const BLUE = "#1677ff";
@@ -29,9 +29,22 @@ function timeAgo(iso: string): string {
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
   return `${Math.floor(s / 86400)}d ago`;
 }
-
 function prettyStatus(s: string): string {
   return (s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+const HISTORY_LABELS: Record<string, string> = {
+  advisor_claimed: "Claimed", advisor_note: "Note", clarification_requested: "Clarification requested",
+  meeting_scheduled: "Scheduled", request_resolved: "Resolved", assigned: "Assigned",
+  reassigned: "Reassigned", staff_review_started: "Opened",
+};
+
+const PIPELINE_COLS = ["New / In review", "Awaiting client", "Assigned", "Scheduled", "Resolved"] as const;
+type Lifecycle = (typeof PIPELINE_COLS)[number];
+function lifecycleOf(c: CaseRow, override?: Lifecycle): Lifecycle {
+  if (override) return override;
+  if (c.status === "needs_client_followup") return "Awaiting client";
+  if (c.status === "assigned" || c.routing?.assigned_advisor_id) return "Assigned";
+  return "New / In review";
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -40,12 +53,9 @@ function StatusBadge({ status }: { status: string }) {
     staff_review: "bg-amber-100 text-amber-700",
     assigned: "bg-emerald-100 text-emerald-700",
   };
-  const cls = status?.startsWith("needs_")
-    ? "bg-amber-100 text-amber-700"
-    : map[status] || "bg-muted text-muted-foreground";
+  const cls = status?.startsWith("needs_") ? "bg-amber-100 text-amber-700" : map[status] || "bg-muted text-muted-foreground";
   return <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${cls}`}>{prettyStatus(status)}</span>;
 }
-
 function Chip({ children, tone = "muted" }: { children: React.ReactNode; tone?: "muted" | "red" | "amber" }) {
   const tones = {
     muted: "bg-muted text-muted-foreground border-border",
@@ -63,30 +73,36 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
-  const [view, setView] = useState<"queue" | "impact">("queue");
+  const [view, setView] = useState<"queue" | "pipeline" | "impact">("queue");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<any>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [candMeta, setCandMeta] = useState<{ destination?: string; reason?: string }>({});
   const [detailLoading, setDetailLoading] = useState(false);
   const [assigning, setAssigning] = useState<string | null>(null);
+  const [brief, setBrief] = useState<Brief | null>(null);
+  const [briefLoading, setBriefLoading] = useState(false);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [hc, setHc] = useState<any>(null);
+  const [overrides, setOverrides] = useState<Record<string, Lifecycle>>({});
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
-    try {
-      const r = await getCases();
-      setCases(r.cases || []);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not load the request queue.");
-    } finally {
-      setLoading(false);
-    }
+    try { setCases((await getCases()).cases || []); }
+    catch (e) { setError(e instanceof ApiError ? e.message : "Could not load the request queue."); }
+    finally { setLoading(false); }
   }, []);
-
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { health().then(setHc).catch(() => setHc(null)); }, []);
+
+  const loadBrief = useCallback(async (id: string) => {
+    setBrief(null); setBriefLoading(true);
+    try { setBrief(await getBrief(id)); } catch { setBrief(null); } finally { setBriefLoading(false); }
+  }, []);
 
   const openCase = useCallback(async (id: string) => {
     setSelectedId(id); setDetailLoading(true); setDetail(null); setCandidates([]); setCandMeta({});
+    loadBrief(id);
     try {
       const [c, cand] = await Promise.all([getCase(id), getCandidates(id).catch(() => ({ candidates: [] }))]);
       setDetail(c);
@@ -94,26 +110,31 @@ export default function DashboardPage() {
       setCandMeta({ destination: (cand as any).destination, reason: (cand as any).reason });
     } catch (e) {
       setDetail({ _error: e instanceof ApiError ? e.message : "Could not load this case." });
-    } finally {
-      setDetailLoading(false);
-    }
-  }, []);
+    } finally { setDetailLoading(false); }
+  }, [loadBrief]);
 
   const doAssign = async (advisor_id: string, reason: string) => {
     if (!selectedId) return;
     setAssigning(advisor_id);
+    try { await assignCase(selectedId, advisor_id, reason || "Assigned by staff."); await Promise.all([load(), openCase(selectedId)]); }
+    catch (e) { alert(e instanceof ApiError ? e.message : "Assignment failed."); }
+    finally { setAssigning(null); }
+  };
+
+  const doAction = async (action: AdvisorAction, text?: string) => {
+    if (!selectedId) return;
+    setActionBusy(true);
     try {
-      await assignCase(selectedId, advisor_id, reason || "Assigned by staff.");
+      await caseAction(selectedId, action, text);
+      if (action === "schedule") setOverrides((o) => ({ ...o, [selectedId]: "Scheduled" }));
+      if (action === "resolve") setOverrides((o) => ({ ...o, [selectedId]: "Resolved" }));
       await Promise.all([load(), openCase(selectedId)]);
-    } catch (e) {
-      alert(e instanceof ApiError ? e.message : "Assignment failed.");
-    } finally {
-      setAssigning(null);
-    }
+    } catch (e) { alert(e instanceof ApiError ? e.message : "Action failed."); }
+    finally { setActionBusy(false); }
   };
 
   const isSecurity = (c: CaseRow) => c.categories?.includes("fraud_or_security");
-  const isAssigned = (c: CaseRow) => c.status === "assigned" || c.routing?.assigned_advisor_id;
+  const isAssigned = (c: CaseRow) => c.status === "assigned" || !!c.routing?.assigned_advisor_id;
   const counts = useMemo(() => ({
     all: cases.length,
     assign: cases.filter((c) => c.status === "submitted" && !isAssigned(c) && !isSecurity(c)).length,
@@ -130,8 +151,7 @@ export default function DashboardPage() {
     else if (filter === "assigned") list = list.filter(isAssigned);
     const q = search.trim().toLowerCase();
     if (q) list = list.filter((c) =>
-      c.client_display_name?.toLowerCase().includes(q) ||
-      c.case_id?.toLowerCase().includes(q) ||
+      c.client_display_name?.toLowerCase().includes(q) || c.case_id?.toLowerCase().includes(q) ||
       c.confirmed_plain_language_request?.toLowerCase().includes(q));
     return list;
   }, [cases, filter, search]);
@@ -139,22 +159,15 @@ export default function DashboardPage() {
   const impact = useMemo(() => {
     const total = cases.length || 1;
     const clarify = cases.filter((c) => c.flags?.includes("client_term_did_not_match_account_type") || c.status?.startsWith("needs_")).length;
-    const catCount: Record<string, number> = {};
-    const statusCount: Record<string, number> = {};
-    const destCount: Record<string, number> = {};
+    const catCount: Record<string, number> = {}; const destCount: Record<string, number> = {};
     cases.forEach((c) => {
       (c.categories || []).forEach((cat) => (catCount[cat] = (catCount[cat] || 0) + 1));
-      statusCount[c.status] = (statusCount[c.status] || 0) + 1;
-      const d = c.routing?.destination || "unrouted";
-      destCount[d] = (destCount[d] || 0) + 1;
+      const d = c.routing?.destination || "unrouted"; destCount[d] = (destCount[d] || 0) + 1;
     });
     return {
-      total: cases.length,
-      clarifyPct: Math.round((clarify / total) * 100),
-      security: cases.filter(isSecurity).length,
-      assigned: cases.filter(isAssigned).length,
+      total: cases.length, clarifyPct: Math.round((clarify / total) * 100),
+      security: cases.filter(isSecurity).length, assigned: cases.filter(isAssigned).length,
       categories: Object.entries(catCount).map(([k, v]) => ({ name: prettyCategory(k), value: v })).sort((a, b) => b.value - a.value),
-      statuses: Object.entries(statusCount).map(([k, v]) => ({ name: prettyStatus(k), value: v })),
       destinations: Object.entries(destCount).map(([k, v]) => ({ name: prettyStatus(k), value: v })).sort((a, b) => b.value - a.value),
     };
   }, [cases]);
@@ -168,11 +181,11 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="flex min-h-screen pt-14">
+    <div className="flex min-h-screen">
       {/* Sidebar */}
       <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-muted/30 p-4 md:flex">
         <div className="flex items-center gap-2 px-1">
-          <CoherentMark size={26} />
+          <img src="/coherent-icon.png" alt="Coherent" className="h-6 w-6" />
           <div>
             <div className="text-sm font-semibold leading-tight">Coherent</div>
             <div className="text-[11px] text-muted-foreground">Advisor review</div>
@@ -187,8 +200,14 @@ export default function DashboardPage() {
               <span className="text-xs text-muted-foreground">{it.count}</span>
             </button>
           ))}
+          <div className="!my-3 border-t border-border" />
+          <button onClick={() => setView("pipeline")}
+            className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
+              view === "pipeline" ? "bg-primary/10 text-primary" : "text-foreground hover:bg-foreground/5"}`}>
+            <Columns3 className="h-4 w-4" /> My pipeline
+          </button>
           <button onClick={() => setView("impact")}
-            className={`mt-2 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
+            className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
               view === "impact" ? "bg-primary/10 text-primary" : "text-foreground hover:bg-foreground/5"}`}>
             <RefreshCw className="h-4 w-4" /> Impact
           </button>
@@ -204,8 +223,10 @@ export default function DashboardPage() {
       <main className="flex-1 overflow-hidden">
         {view === "impact" ? (
           <ImpactView impact={impact} />
+        ) : view === "pipeline" ? (
+          <PipelineBoard cases={cases} overrides={overrides} onOpen={(id) => { setView("queue"); openCase(id); }} />
         ) : (
-          <div className="flex h-[calc(100vh-3.5rem)]">
+          <div className="flex h-screen">
             {/* Queue list */}
             <section className="flex w-full max-w-md shrink-0 flex-col border-r border-border">
               <div className="border-b border-border p-4">
@@ -248,12 +269,16 @@ export default function DashboardPage() {
                 <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
                   <MessageSquareQuote className="h-8 w-8 opacity-40" />
                   <p className="mt-3 text-lg font-medium text-foreground">Select a request</p>
-                  <p className="mt-1 max-w-xs text-sm">See the client's words, what they confirmed, and the account facts behind it.</p>
+                  <p className="mt-1 max-w-xs text-sm">Open a request to see the AI prep brief, act on it, and move it along.</p>
                 </div>
               )}
               {selectedId && detailLoading && <p className="p-8 text-sm text-muted-foreground">Loading case…</p>}
               {selectedId && detail && !detailLoading && (
-                <CaseDetail detail={detail} candidates={candidates} candMeta={candMeta} assigning={assigning} onAssign={doAssign} />
+                <CaseDetail
+                  detail={detail} candidates={candidates} candMeta={candMeta} assigning={assigning} onAssign={doAssign}
+                  brief={brief} briefLoading={briefLoading} onRegenerateBrief={() => selectedId && loadBrief(selectedId)}
+                  onAction={doAction} actionBusy={actionBusy} hc={hc}
+                />
               )}
             </section>
           </div>
@@ -272,9 +297,161 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function CaseDetail({ detail, candidates, candMeta, assigning, onAssign }: any) {
+function PrepBrief({ brief, loading, onRegenerate }: { brief: Brief | null; loading: boolean; onRegenerate: () => void }) {
+  return (
+    <div className="mt-6 overflow-hidden rounded-2xl border border-primary/30 bg-primary/[0.03]">
+      <div className="flex items-center justify-between border-b border-primary/15 px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-primary" />
+          <span className="text-sm font-semibold">Prep brief</span>
+          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">Prepared with Amazon Bedrock</span>
+        </div>
+        <button onClick={onRegenerate} disabled={loading}
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50">
+          <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} /> {loading ? "Generating…" : "Regenerate"}
+        </button>
+      </div>
+      <div className="p-4">
+        {loading && <p className="text-sm text-muted-foreground">Asking the model to prepare you for this conversation…</p>}
+        {!loading && !brief && <p className="text-sm text-muted-foreground">Prep brief unavailable right now. Try Regenerate.</p>}
+        {!loading && brief && (
+          <div className="space-y-4">
+            <p className="text-sm font-medium text-foreground">{brief.headline}</p>
+            {brief.talking_points?.length > 0 && (
+              <div>
+                <p className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">Talking points</p>
+                <ul className="mt-1.5 space-y-1.5">
+                  {brief.talking_points.map((t, i) => (
+                    <li key={i} className="flex gap-2 text-sm"><span className="mt-1.5 h-1 w-1 flex-none rounded-full bg-primary" />{t}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {brief.confirm?.length > 0 && (
+              <div>
+                <p className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">Confirm with the client</p>
+                <ul className="mt-1.5 space-y-1">
+                  {brief.confirm.map((t, i) => (
+                    <li key={i} className="flex gap-2 text-sm"><CheckCircle2 className="mt-0.5 h-3.5 w-3.5 flex-none text-primary/70" />{t}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {brief.cautions?.length > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <p className="text-[11px] font-mono uppercase tracking-wider text-amber-700">Compliance cautions</p>
+                <ul className="mt-1.5 space-y-1">
+                  {brief.cautions.map((t, i) => <li key={i} className="text-sm text-amber-800">• {t}</li>)}
+                </ul>
+              </div>
+            )}
+            {brief.note && <p className="text-xs text-muted-foreground">{brief.note}</p>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ActionBar({ onAction, busy, assigned }: { onAction: (a: AdvisorAction, t?: string) => void; busy: boolean; assigned: boolean }) {
+  const [open, setOpen] = useState<AdvisorAction | null>(null);
+  const [text, setText] = useState("");
+  const prompts: Partial<Record<AdvisorAction, string>> = {
+    note: "Add an internal note…",
+    clarify: "What should we ask the client? This goes back to them and moves the case to ‘Awaiting client’.",
+    schedule: "Meeting details (optional), e.g. ‘Phone, Thu 2pm’.",
+    resolve: "Outcome / resolution summary…",
+  };
+  const submit = () => { if (open) { onAction(open, text.trim() || undefined); setOpen(null); setText(""); } };
+  return (
+    <div className="mt-6 rounded-2xl border border-border bg-muted/20 p-3">
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => onAction("claim")}><Hand className="mr-1 h-3.5 w-3.5" />Claim</Button>
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => setOpen(open === "note" ? null : "note")}><StickyNote className="mr-1 h-3.5 w-3.5" />Note</Button>
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => setOpen(open === "clarify" ? null : "clarify")}><Send className="mr-1 h-3.5 w-3.5" />Request clarification</Button>
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => setOpen(open === "schedule" ? null : "schedule")}><CalendarCheck className="mr-1 h-3.5 w-3.5" />Mark scheduled</Button>
+        <Button size="sm" disabled={busy} onClick={() => setOpen(open === "resolve" ? null : "resolve")}><CheckCheck className="mr-1 h-3.5 w-3.5" />Resolve</Button>
+      </div>
+      {open && (
+        <div className="mt-3">
+          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} placeholder={prompts[open]}
+            className="w-full rounded-lg border border-border bg-background p-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30" />
+          <div className="mt-2 flex gap-2">
+            <Button size="sm" disabled={busy} onClick={submit}>{busy ? "Working…" : "Submit"}</Button>
+            <Button size="sm" variant="ghost" onClick={() => { setOpen(null); setText(""); }}>Cancel</Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Activity({ history }: { history: any[] }) {
+  if (!history?.length) return null;
+  const items = [...history].reverse();
+  return (
+    <Section title="Activity">
+      <ol className="space-y-2.5 border-l border-border pl-4">
+        {items.map((h, i) => (
+          <li key={i} className="relative">
+            <span className="absolute -left-[21px] top-1 h-2 w-2 rounded-full bg-primary/50" />
+            <div className="text-sm">{HISTORY_LABELS[h.event] || prettyStatus(h.event)}</div>
+            {h.details?.text && <div className="text-xs text-muted-foreground">“{h.details.text}”</div>}
+            <div className="text-[11px] text-muted-foreground">{timeAgo(h.at)}</div>
+          </li>
+        ))}
+      </ol>
+    </Section>
+  );
+}
+
+function Compliance({ detail, hc }: { detail: any; hc: any }) {
+  const defaults = [
+    "Client identity confirmed",
+    "No investment / tax advice given",
+    "Suitability considered",
+    "Account confirmed with the client",
+  ];
+  const [checked, setChecked] = useState<boolean[]>(defaults.map(() => false));
+  const flags: string[] = detail.flags || [];
+  const complianceFlags = flags.filter((f) => ["client_term_did_not_match_account_type", "possible_unauthorized_access"].includes(f));
+  return (
+    <Section title="Compliance">
+      <div className="rounded-2xl border border-border bg-card p-4">
+        <div className="flex items-center gap-2 text-sm font-medium"><ShieldCheck className="h-4 w-4 text-primary" /> Advisor checklist</div>
+        <ul className="mt-3 space-y-2">
+          {defaults.map((label, i) => (
+            <li key={i}>
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input type="checkbox" checked={checked[i]} onChange={() => setChecked((c) => c.map((v, j) => (j === i ? !v : v)))}
+                  className="h-4 w-4 accent-[#1677ff]" />
+                <span className={checked[i] ? "text-muted-foreground line-through" : ""}>{label}</span>
+              </label>
+            </li>
+          ))}
+        </ul>
+        {complianceFlags.length > 0 && (
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
+            System flags to resolve: {complianceFlags.map((f) => f.replace(/_/g, " ")).join("; ")}.
+          </div>
+        )}
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border pt-3 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <span className={`h-1.5 w-1.5 rounded-full ${hc?.live_model ? "bg-emerald-500" : "bg-muted-foreground"}`} />
+            Language model: {hc ? (hc.live_model ? "Amazon Bedrock (live)" : `simulated (${hc.ai_mode})`) : "…"}
+          </span>
+          <span>Bedrock Guardrail: configured</span>
+          <span>Synthetic data · simulated access control</span>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+function CaseDetail({ detail, candidates, candMeta, assigning, onAssign, brief, briefLoading, onRegenerateBrief, onAction, actionBusy, hc }: any) {
   if (detail._error) return <p className="p-8 text-sm text-red-600">{detail._error}</p>;
   const security = detail.categories?.includes("fraud_or_security");
+  const assigned = !!detail.routing?.assigned_advisor_id;
   const ac = detail.account_context;
   return (
     <div className="mx-auto max-w-2xl p-8">
@@ -286,19 +463,17 @@ function CaseDetail({ detail, candidates, candMeta, assigning, onAssign }: any) 
         <StatusBadge status={detail.status} />
       </div>
 
+      {/* 1 , AI Prep Brief (hero) */}
+      <PrepBrief brief={brief} loading={briefLoading} onRegenerate={onRegenerateBrief} />
+
+      {/* 2 , Advisor actions */}
+      <ActionBar onAction={onAction} busy={actionBusy} assigned={assigned} />
+
       <Section title="Client's original words">
         <blockquote className="rounded-lg border-l-2 border-primary bg-muted/40 p-3 text-sm italic">“{detail.original_words}”</blockquote>
       </Section>
-
-      <Section title="Confirmed request">
-        <p className="text-sm">{detail.confirmed_plain_language_request}</p>
-      </Section>
-
-      {detail.staff_summary && (
-        <Section title="Staff summary">
-          <p className="text-sm text-muted-foreground">{detail.staff_summary}</p>
-        </Section>
-      )}
+      <Section title="Confirmed request"><p className="text-sm">{detail.confirmed_plain_language_request}</p></Section>
+      {detail.staff_summary && <Section title="Staff summary"><p className="text-sm text-muted-foreground">{detail.staff_summary}</p></Section>}
 
       {ac && (
         <Section title="Account context · record-backed">
@@ -311,9 +486,7 @@ function CaseDetail({ detail, candidates, candMeta, assigning, onAssign }: any) 
             {ac.account_source_id && <div className="mt-1 text-xs text-muted-foreground">Source: {ac.account_source_id}</div>}
             {(ac.relevant_events || []).length > 0 && (
               <ul className="mt-3 space-y-1 border-t border-border pt-3 text-xs text-muted-foreground">
-                {ac.relevant_events.map((e: any, i: number) => (
-                  <li key={i}>• {prettyStatus(e.type)} · {e.date} <span className="opacity-60">({e.source_id})</span></li>
-                ))}
+                {ac.relevant_events.map((e: any, i: number) => <li key={i}>• {prettyStatus(e.type)} · {e.date} <span className="opacity-60">({e.source_id})</span></li>)}
               </ul>
             )}
           </div>
@@ -369,15 +542,55 @@ function CaseDetail({ detail, candidates, candMeta, assigning, onAssign }: any) 
                   <div className="mt-1 flex flex-wrap gap-1">{(a.specialties || []).map((s) => <Chip key={s}>{prettyCategory(s)}</Chip>)}</div>
                   <p className="mt-1.5 text-xs text-muted-foreground">{a.reason}</p>
                 </div>
-                <Button size="sm" disabled={!!assigning || !!detail.routing?.assigned_advisor_id}
-                  onClick={() => onAssign(a.advisor_id, a.reason)}>
-                  {assigning === a.advisor_id ? "Assigning…" : detail.routing?.assigned_advisor_id ? "Assigned" : "Assign"}
+                <Button size="sm" disabled={!!assigning || assigned} onClick={() => onAssign(a.advisor_id, a.reason)}>
+                  {assigning === a.advisor_id ? "Assigning…" : assigned ? "Assigned" : "Assign"}
                 </Button>
               </div>
             ))}
           </div>
         )}
       </Section>
+
+      {/* 4 , Compliance */}
+      <Compliance detail={detail} hc={hc} />
+
+      {/* 2 , Activity timeline */}
+      <Activity history={detail.history || []} />
+    </div>
+  );
+}
+
+function PipelineBoard({ cases, overrides, onOpen }: { cases: CaseRow[]; overrides: Record<string, Lifecycle>; onOpen: (id: string) => void }) {
+  const cols = useMemo(() => {
+    const m: Record<Lifecycle, CaseRow[]> = { "New / In review": [], "Awaiting client": [], "Assigned": [], "Scheduled": [], "Resolved": [] };
+    cases.forEach((c) => m[lifecycleOf(c, overrides[c.case_id])].push(c));
+    return m;
+  }, [cases, overrides]);
+  return (
+    <div className="h-screen overflow-auto p-8">
+      <h1 className="text-2xl font-semibold">My pipeline</h1>
+      <p className="mt-1 text-sm text-muted-foreground">Every request, by where it is in the advisor workflow.</p>
+      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        {PIPELINE_COLS.map((col) => (
+          <div key={col} className="rounded-2xl border border-border bg-muted/20 p-3">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-xs font-semibold">{col}</span>
+              <span className="rounded-full bg-background px-2 py-0.5 text-[11px] text-muted-foreground">{cols[col].length}</span>
+            </div>
+            <div className="mt-3 space-y-2">
+              {cols[col].length === 0 && <p className="px-1 py-6 text-center text-xs text-muted-foreground/60">—</p>}
+              {cols[col].map((c) => (
+                <button key={c.case_id} onClick={() => onOpen(c.case_id)}
+                  className="block w-full rounded-xl border border-border bg-card p-3 text-left transition-colors hover:border-primary/40">
+                  <div className="text-sm font-medium">{c.client_display_name}</div>
+                  <div className="font-mono text-[11px] text-muted-foreground">{c.case_id}</div>
+                  {(c.categories || [])[0] && <div className="mt-1.5"><Chip tone={c.categories?.includes("fraud_or_security") ? "red" : "muted"}>{prettyCategory(c.categories[0])}</Chip></div>}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -393,17 +606,15 @@ function Tile({ big, label, tone }: { big: string; label: string; tone?: string 
 
 function ImpactView({ impact }: { impact: any }) {
   return (
-    <div className="h-[calc(100vh-3.5rem)] overflow-y-auto p-8">
+    <div className="h-screen overflow-y-auto p-8">
       <h1 className="text-2xl font-semibold">Impact</h1>
       <p className="mt-1 text-sm text-muted-foreground">Live from the request queue · plus illustrative scale figures.</p>
-
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Tile big={String(impact.total)} label="Total requests in queue" tone="text-primary" />
         <Tile big={`${impact.clarifyPct}%`} label="Needed clarification before routing" />
         <Tile big={String(impact.security)} label="Security / fraud flagged" tone="text-red-600" />
         <Tile big={String(impact.assigned)} label="Assigned to an advisor" tone="text-emerald-600" />
       </div>
-
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
         <div className="rounded-2xl border border-border bg-card p-5">
           <h3 className="text-sm font-medium">Request category mix</h3>
@@ -433,7 +644,6 @@ function ImpactView({ impact }: { impact: any }) {
           </div>
         </div>
       </div>
-
       <h2 className="mt-10 text-sm font-mono uppercase tracking-wider text-muted-foreground">Why it matters , at scale</h2>
       <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Tile big="61.2M" label="Americans are 65+ , the clients who struggle most with financial terms." />
