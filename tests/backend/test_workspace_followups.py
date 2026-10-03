@@ -293,3 +293,39 @@ def test_messaging_a_client_twice_keeps_both_messages_in_order(client):
     clarify(client)
     approve(client, text=OK_MESSAGE)
     assert [m["text"] for m in messages(client)] == [QUESTION, OK_MESSAGE]
+
+
+# ------------------------------------------------------------- security review on portal-backed records
+
+
+@pytest.fixture
+def signed_in_staff(tmp_path, monkeypatch):
+    """Development sign-in mode: the portal replaces each client's seed history with its own ledger."""
+    monkeypatch.delenv("COHERENT_PORTAL_CONFIG", raising=False)
+    monkeypatch.setenv("COHERENT_DEV_LOGIN", "1")
+    with TestClient(create_app(make_settings(tmp_path))) as test_client:
+        assert test_client.post("/auth/login", json={"email": "advisor@example.com", "password": "dev"}).status_code == 200
+        yield test_client
+
+
+def test_security_alert_survives_the_portal_replacing_account_history(signed_in_staff):
+    inv = signed_in_staff.post("/staff/cases/CASE-SEC-1/investigation").json()
+    assert inv["risk_level"] == "high"
+    assert any(t["type"] == "security_alert" and t["source_id"] == "EVENT-24" for t in inv["timeline"])
+
+
+def test_security_timeline_covers_the_weeks_around_the_report_not_all_history(signed_in_staff):
+    timeline = signed_in_staff.post("/staff/cases/CASE-SEC-1/investigation").json()["timeline"]
+    assert min(t["date"] for t in timeline) >= "2026-07-04", "90 days before the 2026-10-02 report"
+    assert len(timeline) < 30 and timeline[-1]["source_id"] == "CASE-SEC-1"
+
+
+def test_money_leaving_after_an_alert_is_called_out():
+    case = {"original_words": "I don't recognize a sign-in.", "flags": ["possible_unauthorized_access"]}
+    timeline = [
+        {"date": "2026-10-01", "type": "security_alert", "source_id": "EVENT-1", "account": "Brokerage ****1"},
+        {"date": "2026-10-02", "type": "transfer_out", "source_id": "TRANSFER-9", "account": "Brokerage ****1"},
+        {"date": "2026-10-02", "type": "transfer_in", "source_id": "TRANSFER-9", "account": "Savings ****2"},
+    ]
+    reasons = aa.stub_investigate_security(case, timeline)["reasons"]
+    assert sum("followed the alert" in r for r in reasons) == 1 and any("TRANSFER-9" in r for r in reasons)

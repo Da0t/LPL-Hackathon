@@ -56,8 +56,9 @@ export function ClientSnapshotPanel({ snapshot, onOpenCase }: { snapshot: Client
       <Section title="Recent account activity">
         {recent_events.length === 0 ? <p className="text-sm text-muted-foreground">No activity on record.</p> : (
           <ul className="space-y-3">
-            {recent_events.map((e) => (
-              <li key={e.source_id} className="flex gap-4">
+            {recent_events.map((e, i) => (
+              // Two legs of one transfer, or two lines of one statement, share a source id.
+              <li key={`${e.source_id}-${i}`} className="flex gap-4">
                 <span className="w-24 shrink-0 text-xs text-muted-foreground">{prettyDate(e.date)}</span>
                 <div className="min-w-0">
                   <p className={`text-sm font-medium ${e.type === "security_alert" ? "text-red-700" : ""}`}>{sentence(e.type)}</p>

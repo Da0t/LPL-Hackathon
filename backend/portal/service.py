@@ -160,9 +160,12 @@ class Portal:
                     (a["account_id"], doc["client_id"], json.dumps(normalized)),
                 )
             # Replace this client's reference history so legacy seed events cannot
-            # appear alongside the cloud record as contradictory facts.
+            # appear alongside the cloud record as contradictory facts. Security alerts
+            # are kept: they are not ledger entries, the portal record has no equivalent,
+            # and a security case's review depends on them.
             self.store._conn.execute(
-                "DELETE FROM events WHERE account_id IN (SELECT account_id FROM accounts WHERE client_id=?)",
+                "DELETE FROM events WHERE account_id IN (SELECT account_id FROM accounts WHERE client_id=?)"
+                " AND COALESCE(json_extract(doc, '$.type'), '') != 'security_alert'",
                 (doc["client_id"],),
             )
             for e in doc["activity"]:

@@ -403,7 +403,7 @@ def stub_plan_next_steps(case: dict) -> dict:
 # by the caller; the agent only assesses it.
 # --------------------------------------------------------------------------- #
 RISK_LEVELS = ("low", "medium", "high")
-_MONEY_EVENTS = ("transfer", "withdrawal", "distribution")
+_MONEY_EVENTS = ("transfer", "transfer_out", "withdrawal", "distribution")  # money leaving an account
 
 _INVESTIGATE_SYSTEM = """You support a security specialist at a wealth-management firm reviewing a client's report of possible unauthorized access.
 
@@ -464,7 +464,7 @@ def stub_investigate_security(case: dict, timeline: list[dict]) -> dict:
         since = min(a["date"] for a in alerts)
         moved = [t for t in timeline if t.get("type") in _MONEY_EVENTS and t["date"] >= since]
         if moved:
-            reasons.extend(f"A {t['type']} on {t['date']} followed the alert ({t['source_id']})." for t in moved)
+            reasons.extend(f"A {t['type'].replace('_', ' ')} on {t['date']} followed the alert ({t['source_id']})." for t in moved)
         else:
             reasons.append("No transfers or withdrawals are on record since the alert.")
     else:
