@@ -324,6 +324,8 @@ class StaffCaseSummary(BaseModel):
     clarification_needed: bool
     existing_advisor_id: str | None = None
     routing: QueueRouting
+    priority: dict[str, Any] = Field(default_factory=dict)  # {level, rank, reason}
+    lifecycle: str = "new"
 
 
 class StaffCasesResponse(BaseModel):

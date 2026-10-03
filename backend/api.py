@@ -122,7 +122,37 @@ def staff_brief(case_id: str, request: Request, _role: str = Depends(require_sta
 @router.post("/staff/cases/{case_id}/action", responses=_ERRORS, tags=["staff"])
 def staff_action(case_id: str, body: dict, request: Request, _role: str = Depends(require_staff)):
     """Record an advisor workflow action (claim/note/clarify/schedule/resolve) as a history event."""
-    return _staff(request).action(case_id, body.get("action", ""), body.get("text"))
+    return _staff(request).action(case_id, body.get("action", ""), body.get("text"), body.get("compliance"))
+
+
+@router.post("/staff/cases/{case_id}/reply-draft", responses=_ERRORS, tags=["staff"])
+def staff_reply_draft(case_id: str, body: dict, request: Request, _role: str = Depends(require_staff)):
+    """Drafter + compliance-reviewer loop for a client message (read-only, additive, not in v1)."""
+    return _staff(request).reply_draft(case_id, body.get("instruction"), request.app.state.settings.ai_mode)
+
+
+@router.get("/staff/cases/{case_id}/client", responses=_ERRORS, tags=["staff"])
+def staff_client_snapshot(case_id: str, request: Request, _role: str = Depends(require_staff)):
+    """The whole client behind a case: accounts, recent activity, other requests (read-only, additive)."""
+    return _staff(request).client_snapshot(case_id)
+
+
+@router.post("/staff/cases/{case_id}/next-steps", responses=_ERRORS, tags=["staff"])
+def staff_next_steps(case_id: str, request: Request, _role: str = Depends(require_staff)):
+    """Next-steps planner agent: ordered, owned steps for the request (read-only, additive)."""
+    return _staff(request).next_steps(case_id, request.app.state.settings.ai_mode)
+
+
+@router.post("/staff/cases/{case_id}/investigation", responses=_ERRORS, tags=["staff"])
+def staff_investigation(case_id: str, request: Request, _role: str = Depends(require_staff)):
+    """Fraud investigator agent for security cases: record-built timeline plus an assessment (read-only, additive)."""
+    return _staff(request).investigation(case_id, request.app.state.settings.ai_mode)
+
+
+@router.post("/staff/cases/{case_id}/compliance-review", responses=_ERRORS, tags=["staff"])
+def staff_compliance_review(case_id: str, body: dict, request: Request, _role: str = Depends(require_staff)):
+    """Compliance reviewer on the case record and an optional draft (read-only, additive, not in v1)."""
+    return _staff(request).compliance_review(case_id, body.get("draft"), request.app.state.settings.ai_mode)
 
 
 # --------------------------------------------------------- additive helpers
