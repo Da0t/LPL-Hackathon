@@ -1,5 +1,6 @@
 "use client";
 
+import { MyRequests } from "@/components/my-requests";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -178,6 +179,7 @@ export default function IntakePage() {
           </div>
         </section>
       )}
+      {screen === "start" && <MyRequests clientId={clientId} />}
 
       {(screen === "describe" || screen === "review" || screen === "success") && (
         <div className="mb-8 overflow-hidden rounded-2xl border border-border bg-gradient-to-b from-white/[0.03] to-transparent shadow-[0_24px_64px_rgba(0,0,0,0.5)]">

@@ -29,6 +29,7 @@ from backend.errors import ApiError
 from backend.services.agent_adapter import AgentAdapter, load_adapter
 from backend.services.intake import IntakeService
 from backend.services.staff import StaffService
+from backend.services.client_requests import ClientRequests
 from backend.settings import Settings, load_settings
 from backend.store import Store
 
@@ -101,6 +102,7 @@ def create_app(settings: Settings | None = None, *, store: Store | None = None, 
     app.state.adapter = adapter
     app.state.intake = IntakeService(store, adapter)
     app.state.staff = StaffService(store)
+    app.state.client_requests = ClientRequests(store)
 
     # Local-only CORS so UI agents can develop with a separate static server if they prefer.
     app.add_middleware(

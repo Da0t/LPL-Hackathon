@@ -8,77 +8,40 @@ import {
 } from "recharts";
 import {
   Inbox, UserPlus, Flag, ShieldAlert, CheckCircle2, Search, RefreshCw,
-  ArrowLeft, MessageSquareQuote, Home, Clock, Hash, Sparkles, Columns3,
-  Hand, StickyNote, Send, CalendarCheck, CheckCheck, ShieldCheck,
-  Brain, Layers, ClipboardList, PenLine, Loader2, Copy, Check, AlertTriangle, Workflow,
+  ArrowLeft, MessageSquareQuote, Home, Columns3,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import {
-  getCases, getCase, getCandidates, assignCase, getBrief, getPlan, caseAction, health,
+  getCases, getCase, getCandidates, assignCase, getBrief, getPlan, caseAction, getClientSnapshot, health,
   ApiError, prettyCategory, type CaseRow, type Candidate, type Brief, type ActionPlan, type AdvisorAction,
+  type ClientSnapshot, type Lifecycle, type SentCompliance,
 } from "@/lib/api";
+import { Chip } from "@/components/dashboard/section";
+import { CaseDetail, type CaseTab } from "@/components/dashboard/case-detail";
+import { LIFECYCLE_LABELS, PRIORITY_DOT, PRIORITY_TEXT, sentence, statusLabel, timeAgo } from "@/components/dashboard/labels";
 
 const BLUE = "#1677ff";
 const CHART_COLORS = ["#1677ff", "#60a5fa", "#93c5fd", "#1e40af", "#bfdbfe", "#3b82f6", "#1d4ed8", "#cbd5e1"];
 
-function timeAgo(iso: string): string {
-  const t = Date.parse(iso);
-  if (isNaN(t)) return "";
-  const s = Math.max(0, (Date.now() - t) / 1000);
-  if (s < 60) return "just now";
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86400)}d ago`;
-}
-function prettyStatus(s: string): string {
-  return (s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-const HISTORY_LABELS: Record<string, string> = {
-  advisor_claimed: "Claimed", advisor_note: "Note", clarification_requested: "Clarification requested",
-  meeting_scheduled: "Scheduled", request_resolved: "Resolved", assigned: "Assigned",
-  reassigned: "Reassigned", staff_review_started: "Opened",
-};
-
-const PIPELINE_COLS = ["New / In review", "Awaiting client", "Assigned", "Scheduled", "Resolved"] as const;
-type Lifecycle = (typeof PIPELINE_COLS)[number];
-function lifecycleOf(c: CaseRow, override?: Lifecycle): Lifecycle {
-  if (override) return override;
-  if (c.status === "needs_client_followup") return "Awaiting client";
-  if (c.status === "assigned" || c.routing?.assigned_advisor_id) return "Assigned";
-  return "New / In review";
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, string> = {
-    submitted: "bg-primary/10 text-primary",
-    staff_review: "bg-amber-100 text-amber-700",
-    assigned: "bg-emerald-100 text-emerald-700",
-  };
-  const cls = status?.startsWith("needs_") ? "bg-amber-100 text-amber-700" : map[status] || "bg-muted text-muted-foreground";
-  return <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${cls}`}>{prettyStatus(status)}</span>;
-}
-function Chip({ children, tone = "muted" }: { children: React.ReactNode; tone?: "muted" | "red" | "amber" }) {
-  const tones = {
-    muted: "bg-muted text-muted-foreground border-border",
-    red: "bg-red-50 text-red-600 border-red-200",
-    amber: "bg-amber-50 text-amber-700 border-amber-200",
-  };
-  return <span className={`rounded-md border px-1.5 py-0.5 text-[11px] ${tones[tone]}`}>{children}</span>;
-}
+const PIPELINE_COLS: Lifecycle[] = ["new", "awaiting_client", "assigned", "scheduled", "resolved"];
+const CASE_TABS: CaseTab[] = ["overview", "plan", "client", "assign", "compliance"];
 
 type Filter = "all" | "assign" | "flagged" | "security" | "assigned";
+type Sort = "priority" | "newest";
 
 export default function DashboardPage() {
   const [cases, setCases] = useState<CaseRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
+  const [sort, setSort] = useState<Sort>("priority");
   const [search, setSearch] = useState("");
   const [view, setView] = useState<"queue" | "pipeline" | "impact">("queue");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [initialTab, setInitialTab] = useState<CaseTab | undefined>(undefined);
   const [detail, setDetail] = useState<any>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [candMeta, setCandMeta] = useState<{ destination?: string; reason?: string }>({});
+  const [snapshot, setSnapshot] = useState<ClientSnapshot | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [assigning, setAssigning] = useState<string | null>(null);
   const [brief, setBrief] = useState<Brief | null>(null);
@@ -87,21 +50,28 @@ export default function DashboardPage() {
   const [plan, setPlan] = useState<ActionPlan | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
   const [planStage, setPlanStage] = useState(0);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [hc, setHc] = useState<any>(null);
-  const [overrides, setOverrides] = useState<Record<string, Lifecycle>>({});
 
-  const load = useCallback(async () => {
-    setLoading(true); setError(null);
-    try { setCases((await getCases()).cases || []); }
-    catch (e) { setError(e instanceof ApiError ? e.message : "Could not load the request queue."); }
+  const load = useCallback(async (quiet = false) => {
+    if (!quiet) { setLoading(true); setError(null); }
+    try { setCases((await getCases()).cases || []); if (quiet) setError(null); }
+    catch (e) { if (!quiet) setError(e instanceof ApiError ? e.message : "Could not load the request queue."); }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
+  // New requests and client replies arrive from elsewhere, so keep the queue current while the tab is visible.
+  useEffect(() => {
+    const tick = () => { if (document.visibilityState === "visible") load(true); };
+    const timer = setInterval(tick, 15000);
+    document.addEventListener("visibilitychange", tick);
+    return () => { clearInterval(timer); document.removeEventListener("visibilitychange", tick); };
+  }, [load]);
   useEffect(() => { health().then(setHc).catch(() => setHc(null)); }, []);
 
-  const loadBrief = useCallback(async (id: string) => {
+  const loadBrief = useCallback(async (id: string, refresh = false) => {
     setBrief(null); setBriefLoading(true);
-    try { setBrief(await getBrief(id)); } catch { setBrief(null); } finally { setBriefLoading(false); }
+    try { setBrief(await getBrief(id, refresh)); } catch { setBrief(null); } finally { setBriefLoading(false); }
   }, []);
 
   const loadPlan = useCallback(async (id: string) => {
@@ -111,52 +81,61 @@ export default function DashboardPage() {
     finally { timers.forEach(clearTimeout); setPlanStage(5); setPlanLoading(false); }
   }, []);
 
-  const refreshDetail = useCallback(async (id: string) => {
+  // Reloads the case without touching the brief, so acting on a case does not re-run the briefing agent.
+  const refreshCase = useCallback(async (id: string, showLoading: boolean) => {
+    if (showLoading) { setDetailLoading(true); setDetail(null); setCandidates([]); setCandMeta({}); setSnapshot(null); }
     try {
-      const [c, cand] = await Promise.all([getCase(id), getCandidates(id).catch(() => ({ candidates: [] }))]);
-      setDetail(c); setCandidates((cand as any).candidates || []);
-      setCandMeta({ destination: (cand as any).destination, reason: (cand as any).reason });
-    } catch { /* keep current detail */ }
-  }, []);
-
-  const openCase = useCallback(async (id: string) => {
-    setSelectedId(id); setDetailLoading(true); setDetail(null); setCandidates([]); setCandMeta({});
-    setBrief(null); loadPlan(id);
-    try {
-      const [c, cand] = await Promise.all([getCase(id), getCandidates(id).catch(() => ({ candidates: [] }))]);
+      const [c, cand, snap] = await Promise.all([
+        getCase(id), getCandidates(id).catch(() => ({ candidates: [] })), getClientSnapshot(id).catch(() => null),
+      ]);
       setDetail(c);
       setCandidates((cand as any).candidates || []);
       setCandMeta({ destination: (cand as any).destination, reason: (cand as any).reason });
+      setSnapshot(snap);
     } catch (e) {
-      setDetail({ _error: e instanceof ApiError ? e.message : "Could not load this case." });
+      setDetail({ _error: e instanceof ApiError ? e.message : "Could not load this request." });
     } finally { setDetailLoading(false); }
-  }, [loadPlan]);
+  }, []);
+
+  const openCase = useCallback((id: string, tab?: CaseTab) => {
+    setSelectedId(id); setInitialTab(tab); setActionError(null); setView("queue");
+    window.history.replaceState(null, "", `?case=${encodeURIComponent(id)}`);
+    setBrief(null); loadPlan(id);  // the prepared action leads; the prep brief loads when its tab is opened
+    refreshCase(id, true);
+  }, [loadPlan, refreshCase]);
+
+  // A link to /dashboard?case=CASE-1042&tab=plan opens that request on that tab.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("case");
+    const tab = params.get("tab") as CaseTab | null;
+    if (id) openCase(id, tab && CASE_TABS.includes(tab) ? tab : undefined);
+  }, [openCase]);
 
   const doAssign = async (advisor_id: string, reason: string) => {
     if (!selectedId) return;
-    setAssigning(advisor_id);
-    try { await assignCase(selectedId, advisor_id, reason || "Assigned by staff."); await Promise.all([load(), refreshDetail(selectedId)]); }
-    catch (e) { alert(e instanceof ApiError ? e.message : "Assignment failed."); }
+    setAssigning(advisor_id); setActionError(null);
+    try { await assignCase(selectedId, advisor_id, reason || "Assigned by staff."); await Promise.all([load(true), refreshCase(selectedId, false)]); }
+    catch (e) { setActionError(e instanceof ApiError ? e.message : "The assignment did not go through. Try again."); }
     finally { setAssigning(null); }
   };
 
-  const doAction = async (action: AdvisorAction, text?: string) => {
+  const doAction = async (action: AdvisorAction, text?: string, compliance?: SentCompliance) => {
     if (!selectedId) return;
-    setActionBusy(true);
+    setActionBusy(true); setActionError(null);
     try {
-      await caseAction(selectedId, action, text);
-      if (action === "schedule") setOverrides((o) => ({ ...o, [selectedId]: "Scheduled" }));
-      if (action === "resolve") setOverrides((o) => ({ ...o, [selectedId]: "Resolved" }));
-      await Promise.all([load(), refreshDetail(selectedId)]);
-    } catch (e) { alert(e instanceof ApiError ? e.message : "Action failed."); }
+      await caseAction(selectedId, action, text, compliance);
+      await Promise.all([load(true), refreshCase(selectedId, false)]);
+    } catch (e) { setActionError(e instanceof ApiError ? e.message : "That did not go through. Try again."); }
     finally { setActionBusy(false); }
   };
 
   const isSecurity = (c: CaseRow) => c.categories?.includes("fraud_or_security");
   const isAssigned = (c: CaseRow) => c.status === "assigned" || !!c.routing?.assigned_advisor_id;
+  const toAssign = (c: CaseRow) => c.lifecycle === "new" && !isSecurity(c);
   const counts = useMemo(() => ({
     all: cases.length,
-    assign: cases.filter((c) => c.status === "submitted" && !isAssigned(c) && !isSecurity(c)).length,
+    assign: cases.filter(toAssign).length,
     flagged: cases.filter((c) => (c.flags?.length || 0) > 0).length,
     security: cases.filter(isSecurity).length,
     assigned: cases.filter(isAssigned).length,
@@ -164,7 +143,7 @@ export default function DashboardPage() {
 
   const filtered = useMemo(() => {
     let list = cases;
-    if (filter === "assign") list = list.filter((c) => c.status === "submitted" && !isAssigned(c) && !isSecurity(c));
+    if (filter === "assign") list = list.filter(toAssign);
     else if (filter === "flagged") list = list.filter((c) => (c.flags?.length || 0) > 0);
     else if (filter === "security") list = list.filter(isSecurity);
     else if (filter === "assigned") list = list.filter(isAssigned);
@@ -172,8 +151,23 @@ export default function DashboardPage() {
     if (q) list = list.filter((c) =>
       c.client_display_name?.toLowerCase().includes(q) || c.case_id?.toLowerCase().includes(q) ||
       c.confirmed_plain_language_request?.toLowerCase().includes(q));
+    if (sort === "priority") {
+      // Most pressing first; within a level, whoever has waited longest.
+      list = [...list].sort((a, b) => (a.priority?.rank ?? 2) - (b.priority?.rank ?? 2) || a.created_at.localeCompare(b.created_at));
+    }
     return list;
-  }, [cases, filter, search]);
+  }, [cases, filter, search, sort]);
+
+  const today = useMemo(() => {
+    const level = (l: string) => cases.filter((c) => c.priority?.level === l).length;
+    const parts = [
+      level("urgent") && `${level("urgent")} urgent`,
+      level("high") && `${level("high")} waiting over a day`,
+      level("normal") && `${level("normal")} to work on`,
+      level("low") && `${level("low")} waiting on others`,
+    ].filter(Boolean) as string[];
+    return parts.length ? parts.join(" · ") : "Nothing needs attention right now.";
+  }, [cases]);
 
   const impact = useMemo(() => {
     const total = cases.length || 1;
@@ -186,8 +180,9 @@ export default function DashboardPage() {
     return {
       total: cases.length, clarifyPct: Math.round((clarify / total) * 100),
       security: cases.filter(isSecurity).length, assigned: cases.filter(isAssigned).length,
+      intakes: cases.flatMap((c) => (c.intake ? [c.intake] : [])),
       categories: Object.entries(catCount).map(([k, v]) => ({ name: prettyCategory(k), value: v })).sort((a, b) => b.value - a.value),
-      destinations: Object.entries(destCount).map(([k, v]) => ({ name: prettyStatus(k), value: v })).sort((a, b) => b.value - a.value),
+      destinations: Object.entries(destCount).map(([k, v]) => ({ name: sentence(k), value: v })).sort((a, b) => b.value - a.value),
     };
   }, [cases]);
 
@@ -198,6 +193,9 @@ export default function DashboardPage() {
     { key: "security", label: "Security", icon: ShieldAlert, count: counts.security },
     { key: "assigned", label: "Assigned", icon: CheckCircle2, count: counts.assigned },
   ];
+  const navClass = (active: boolean) =>
+    `flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors ${
+      active ? "bg-primary/10 font-medium text-primary" : "text-foreground hover:bg-foreground/5"}`;
 
   return (
     <div className="flex min-h-screen">
@@ -207,34 +205,28 @@ export default function DashboardPage() {
           <img src="/coherent-icon.png" alt="Coherent" className="h-6 w-6" />
           <div>
             <div className="text-sm font-semibold leading-tight">Coherent</div>
-            <div className="text-[11px] text-muted-foreground">Advisor review</div>
+            <div className="text-xs text-muted-foreground">Advisor workspace</div>
           </div>
         </div>
         <nav className="mt-6 space-y-1">
           {navItems.map((it) => (
-            <button key={it.key} onClick={() => { setFilter(it.key); setView("queue"); }}
-              className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors ${
-                view === "queue" && filter === it.key ? "bg-primary/10 text-primary" : "text-foreground hover:bg-foreground/5"}`}>
+            <button key={it.key} onClick={() => { setFilter(it.key); setView("queue"); }} className={navClass(view === "queue" && filter === it.key)}>
               <span className="flex items-center gap-2"><it.icon className="h-4 w-4" /> {it.label}</span>
-              <span className="text-xs text-muted-foreground">{it.count}</span>
+              <span className="text-xs tabular-nums text-muted-foreground">{it.count}</span>
             </button>
           ))}
           <div className="!my-3 border-t border-border" />
-          <button onClick={() => setView("pipeline")}
-            className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
-              view === "pipeline" ? "bg-primary/10 text-primary" : "text-foreground hover:bg-foreground/5"}`}>
-            <Columns3 className="h-4 w-4" /> My pipeline
+          <button onClick={() => setView("pipeline")} className={navClass(view === "pipeline")}>
+            <span className="flex items-center gap-2"><Columns3 className="h-4 w-4" /> Pipeline</span>
           </button>
-          <button onClick={() => setView("impact")}
-            className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
-              view === "impact" ? "bg-primary/10 text-primary" : "text-foreground hover:bg-foreground/5"}`}>
-            <RefreshCw className="h-4 w-4" /> Impact
+          <button onClick={() => setView("impact")} className={navClass(view === "impact")}>
+            <span className="flex items-center gap-2"><RefreshCw className="h-4 w-4" /> Impact</span>
           </button>
         </nav>
         <div className="mt-auto space-y-2 pt-6 text-xs text-muted-foreground">
           <Link href="/" className="flex items-center gap-2 hover:text-foreground"><Home className="h-3.5 w-3.5" /> Home</Link>
           <Link href="/intake" className="flex items-center gap-2 hover:text-foreground"><ArrowLeft className="h-3.5 w-3.5" /> Client intake</Link>
-          <p className="pt-2 leading-relaxed">Simulated staff role · synthetic data only.</p>
+          <p className="pt-2 leading-relaxed">Demo workspace. All clients and data are fictional.</p>
         </div>
       </aside>
 
@@ -243,65 +235,81 @@ export default function DashboardPage() {
         {view === "impact" ? (
           <ImpactView impact={impact} />
         ) : view === "pipeline" ? (
-          <PipelineBoard cases={cases} overrides={overrides} onOpen={(id) => { setView("queue"); openCase(id); }} />
+          <PipelineBoard cases={cases} onOpen={(id) => openCase(id)} />
         ) : (
           <div className="flex h-screen">
             {/* Queue list */}
-            <section className="flex w-full max-w-md shrink-0 flex-col border-r border-border">
+            <section className="flex w-full max-w-sm shrink-0 flex-col border-r border-border">
               <div className="border-b border-border p-4">
-                <h1 className="text-lg font-semibold">Requests</h1>
+                <div className="flex items-center justify-between">
+                  <h1 className="text-lg font-semibold">{navItems.find((n) => n.key === filter)?.label}</h1>
+                  <div className="flex rounded-lg border border-border p-0.5 text-xs" role="group" aria-label="Sort requests">
+                    {(["priority", "newest"] as Sort[]).map((s) => (
+                      <button key={s} onClick={() => setSort(s)} aria-pressed={sort === s}
+                        className={`rounded-md px-2 py-1 ${sort === s ? "bg-primary/10 font-medium text-primary" : "text-muted-foreground hover:text-foreground"}`}>
+                        {s === "priority" ? "Priority" : "Newest"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">{loading ? "Loading…" : today}</p>
                 <div className="relative mt-3">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search requests"
+                  <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by client or request" aria-label="Search requests"
                     className="w-full rounded-lg border border-border bg-background py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-primary/30" />
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto">
-                {loading && <p className="p-4 text-sm text-muted-foreground">Loading queue…</p>}
                 {error && <p className="p-4 text-sm text-red-600">{error}</p>}
                 {!loading && !error && filtered.length === 0 && <p className="p-4 text-sm text-muted-foreground">No requests here.</p>}
-                {filtered.map((c) => (
-                  <button key={c.case_id} onClick={() => openCase(c.case_id)}
-                    className={`block w-full border-b border-border p-4 text-left transition-colors hover:bg-foreground/[0.03] ${
-                      selectedId === c.case_id ? "bg-primary/5" : ""}`}>
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium">{c.client_display_name}</span>
-                      <span className="flex items-center gap-1 text-[11px] text-muted-foreground"><Clock className="h-3 w-3" />{timeAgo(c.created_at)}</span>
-                    </div>
-                    <div className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground"><Hash className="h-3 w-3" />{c.case_id}</div>
-                    <p className="mt-1.5 line-clamp-2 text-sm text-muted-foreground">{c.confirmed_plain_language_request}</p>
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      <StatusBadge status={c.status} />
-                      {(c.categories || []).slice(0, 2).map((cat) => (
-                        <Chip key={cat} tone={cat === "fraud_or_security" ? "red" : "muted"}>{prettyCategory(cat)}</Chip>
-                      ))}
-                      {(c.flags || []).length > 0 && <Chip tone={isSecurity(c) ? "red" : "amber"}>⚑ {c.flags.length}</Chip>}
-                    </div>
-                  </button>
-                ))}
+                {filtered.map((c) => {
+                  const level = c.priority?.level || "normal";
+                  return (
+                    <button key={c.case_id} onClick={() => openCase(c.case_id)} aria-current={selectedId === c.case_id}
+                      className={`block w-full border-b border-border p-4 text-left transition-colors hover:bg-foreground/[0.03] ${
+                        selectedId === c.case_id ? "bg-primary/5" : ""}`}>
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="font-medium">{c.client_display_name}</span>
+                        <span className="shrink-0 text-xs text-muted-foreground">{timeAgo(c.created_at)}</span>
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{c.confirmed_plain_language_request}</p>
+                      <p className={`mt-2 flex items-center gap-2 text-xs font-medium ${PRIORITY_TEXT[level]}`}>
+                        <span className={`h-2 w-2 flex-none rounded-full ${PRIORITY_DOT[level]}`} />{c.priority?.reason || statusLabel(c.status)}
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        {(c.categories || []).slice(0, 2).map((cat) => (
+                          <Chip key={cat} tone={cat === "fraud_or_security" ? "red" : "muted"}>{prettyCategory(cat)}</Chip>
+                        ))}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </section>
 
             {/* Detail */}
             <section className="flex-1 overflow-y-auto bg-background">
               {!selectedId && (
-                <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
+                <div className="flex h-full flex-col items-center justify-center p-8 text-center text-muted-foreground">
                   <MessageSquareQuote className="h-8 w-8 opacity-40" />
                   <p className="mt-3 text-lg font-medium text-foreground">Select a request</p>
-                  <p className="mt-1 max-w-xs text-sm">Open a request to see the AI prep brief, act on it, and move it along.</p>
+                  <p className="mt-1 max-w-xs text-sm">Open a request to see what the client asked, what to do next, and who should handle it.</p>
                 </div>
               )}
-              {selectedId && detailLoading && <p className="p-8 text-sm text-muted-foreground">Loading case…</p>}
+              {selectedId && detailLoading && <p className="p-8 text-sm text-muted-foreground">Loading request…</p>}
               {selectedId && detail && !detailLoading && (
                 <CaseDetail
-                  detail={detail} candidates={candidates} candMeta={candMeta} assigning={assigning} onAssign={doAssign}
+                  key={selectedId} detail={detail} row={cases.find((c) => c.case_id === selectedId)} snapshot={snapshot}
+                  candidates={candidates} candMeta={candMeta} assigning={assigning} onAssign={doAssign}
                   brief={brief} briefLoading={briefLoading}
                   onLoadBrief={() => selectedId && loadBrief(selectedId)}
-                  onRegenerateBrief={() => selectedId && loadBrief(selectedId)}
+                  onRegenerateBrief={() => selectedId && loadBrief(selectedId, true)}
                   plan={plan} planLoading={planLoading} planStage={planStage}
                   onRegeneratePlan={() => selectedId && loadPlan(selectedId)}
                   onApprove={async () => { await doAction("approve"); }}
                   onAction={doAction} actionBusy={actionBusy} hc={hc}
+                  error={actionError} onDismissError={() => setActionError(null)}
+                  onOpenCase={(id) => openCase(id)} initialTab={initialTab}
                 />
               )}
             </section>
@@ -312,450 +320,31 @@ export default function DashboardPage() {
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="mt-6">
-      <h3 className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">{title}</h3>
-      <div className="mt-2">{children}</div>
-    </div>
-  );
-}
-
-function PrepBrief({ brief, loading, onRegenerate }: { brief: Brief | null; loading: boolean; onRegenerate: () => void }) {
-  return (
-    <div className="mt-6 overflow-hidden rounded-2xl border border-primary/30 bg-primary/[0.03]">
-      <div className="flex items-center justify-between border-b border-primary/15 px-4 py-2.5">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-primary" />
-          <span className="text-sm font-semibold">Prep brief</span>
-          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">Prepared with Amazon Bedrock</span>
-        </div>
-        <button onClick={onRegenerate} disabled={loading}
-          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50">
-          <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} /> {loading ? "Generating…" : "Regenerate"}
-        </button>
-      </div>
-      <div className="p-4">
-        {loading && <p className="text-sm text-muted-foreground">Asking the model to prepare you for this conversation…</p>}
-        {!loading && !brief && <p className="text-sm text-muted-foreground">Prep brief unavailable right now. Try Regenerate.</p>}
-        {!loading && brief && (
-          <div className="space-y-4">
-            <p className="text-sm font-medium text-foreground">{brief.headline}</p>
-            {brief.talking_points?.length > 0 && (
-              <div>
-                <p className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">Talking points</p>
-                <ul className="mt-1.5 space-y-1.5">
-                  {brief.talking_points.map((t, i) => (
-                    <li key={i} className="flex gap-2 text-sm"><span className="mt-1.5 h-1 w-1 flex-none rounded-full bg-primary" />{t}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {brief.confirm?.length > 0 && (
-              <div>
-                <p className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">Confirm with the client</p>
-                <ul className="mt-1.5 space-y-1">
-                  {brief.confirm.map((t, i) => (
-                    <li key={i} className="flex gap-2 text-sm"><CheckCircle2 className="mt-0.5 h-3.5 w-3.5 flex-none text-primary/70" />{t}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {brief.cautions?.length > 0 && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-                <p className="text-[11px] font-mono uppercase tracking-wider text-amber-700">Compliance cautions</p>
-                <ul className="mt-1.5 space-y-1">
-                  {brief.cautions.map((t, i) => <li key={i} className="text-sm text-amber-800">• {t}</li>)}
-                </ul>
-              </div>
-            )}
-            {brief.note && <p className="text-xs text-muted-foreground">{brief.note}</p>}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ActionBar({ onAction, busy, assigned }: { onAction: (a: AdvisorAction, t?: string) => void; busy: boolean; assigned: boolean }) {
-  const [open, setOpen] = useState<AdvisorAction | null>(null);
-  const [text, setText] = useState("");
-  const prompts: Partial<Record<AdvisorAction, string>> = {
-    note: "Add an internal note…",
-    clarify: "What should we ask the client? This goes back to them and moves the case to ‘Awaiting client’.",
-    schedule: "Meeting details (optional), e.g. ‘Phone, Thu 2pm’.",
-    resolve: "Outcome / resolution summary…",
-  };
-  const submit = () => { if (open) { onAction(open, text.trim() || undefined); setOpen(null); setText(""); } };
-  return (
-    <div className="mt-6 rounded-2xl border border-border bg-muted/20 p-3">
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" variant="outline" disabled={busy} onClick={() => onAction("claim")}><Hand className="mr-1 h-3.5 w-3.5" />Claim</Button>
-        <Button size="sm" variant="outline" disabled={busy} onClick={() => setOpen(open === "note" ? null : "note")}><StickyNote className="mr-1 h-3.5 w-3.5" />Note</Button>
-        <Button size="sm" variant="outline" disabled={busy} onClick={() => setOpen(open === "clarify" ? null : "clarify")}><Send className="mr-1 h-3.5 w-3.5" />Request clarification</Button>
-        <Button size="sm" variant="outline" disabled={busy} onClick={() => setOpen(open === "schedule" ? null : "schedule")}><CalendarCheck className="mr-1 h-3.5 w-3.5" />Mark scheduled</Button>
-        <Button size="sm" disabled={busy} onClick={() => setOpen(open === "resolve" ? null : "resolve")}><CheckCheck className="mr-1 h-3.5 w-3.5" />Resolve</Button>
-      </div>
-      {open && (
-        <div className="mt-3">
-          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} placeholder={prompts[open]}
-            className="w-full rounded-lg border border-border bg-background p-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30" />
-          <div className="mt-2 flex gap-2">
-            <Button size="sm" disabled={busy} onClick={submit}>{busy ? "Working…" : "Submit"}</Button>
-            <Button size="sm" variant="ghost" onClick={() => { setOpen(null); setText(""); }}>Cancel</Button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Activity({ history }: { history: any[] }) {
-  if (!history?.length) return null;
-  const items = [...history].reverse();
-  return (
-    <Section title="Activity">
-      <ol className="space-y-2.5 border-l border-border pl-4">
-        {items.map((h, i) => (
-          <li key={i} className="relative">
-            <span className="absolute -left-[21px] top-1 h-2 w-2 rounded-full bg-primary/50" />
-            <div className="text-sm">{HISTORY_LABELS[h.event] || prettyStatus(h.event)}</div>
-            {h.details?.text && <div className="text-xs text-muted-foreground">“{h.details.text}”</div>}
-            <div className="text-[11px] text-muted-foreground">{timeAgo(h.at)}</div>
-          </li>
-        ))}
-      </ol>
-    </Section>
-  );
-}
-
-function Compliance({ detail, hc }: { detail: any; hc: any }) {
-  const defaults = [
-    "Client identity confirmed",
-    "No investment / tax advice given",
-    "Suitability considered",
-    "Account confirmed with the client",
-  ];
-  const [checked, setChecked] = useState<boolean[]>(defaults.map(() => false));
-  const flags: string[] = detail.flags || [];
-  const complianceFlags = flags.filter((f) => ["client_term_did_not_match_account_type", "possible_unauthorized_access"].includes(f));
-  return (
-    <Section title="Compliance">
-      <div className="rounded-2xl border border-border bg-card p-4">
-        <div className="flex items-center gap-2 text-sm font-medium"><ShieldCheck className="h-4 w-4 text-primary" /> Advisor checklist</div>
-        <ul className="mt-3 space-y-2">
-          {defaults.map((label, i) => (
-            <li key={i}>
-              <label className="flex cursor-pointer items-center gap-2 text-sm">
-                <input type="checkbox" checked={checked[i]} onChange={() => setChecked((c) => c.map((v, j) => (j === i ? !v : v)))}
-                  className="h-4 w-4 accent-[#1677ff]" />
-                <span className={checked[i] ? "text-muted-foreground line-through" : ""}>{label}</span>
-              </label>
-            </li>
-          ))}
-        </ul>
-        {complianceFlags.length > 0 && (
-          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
-            System flags to resolve: {complianceFlags.map((f) => f.replace(/_/g, " ")).join("; ")}.
-          </div>
-        )}
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border pt-3 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <span className={`h-1.5 w-1.5 rounded-full ${hc?.live_model ? "bg-emerald-500" : "bg-muted-foreground"}`} />
-            Language model: {hc ? (hc.live_model ? "Amazon Bedrock (live)" : `simulated (${hc.ai_mode})`) : "…"}
-          </span>
-          <span>Bedrock Guardrail: configured</span>
-          <span>Synthetic data · simulated access control</span>
-        </div>
-      </div>
-    </Section>
-  );
-}
-
-const PIPELINE_STEPS = [
-  { label: "Understand", icon: Brain },
-  { label: "Classify", icon: Layers },
-  { label: "Prepare action", icon: ClipboardList },
-  { label: "Compliance check", icon: ShieldCheck },
-  { label: "Draft response", icon: PenLine },
-];
-
-function AgentPipeline({ stage, done }: { stage: number; done: boolean }) {
-  const completed = done ? PIPELINE_STEPS.length : stage;
-  return (
-    <div className="flex items-center justify-between gap-1 rounded-2xl border border-border bg-muted/20 p-3">
-      {PIPELINE_STEPS.map((s, i) => {
-        const isDone = i < completed;
-        const isRunning = !done && i === completed;
-        return (
-          <React.Fragment key={s.label}>
-            <div className="flex flex-1 flex-col items-center gap-1.5 text-center">
-              <div className={`flex h-9 w-9 items-center justify-center rounded-full border transition-all duration-300 ${
-                isDone ? "border-primary bg-primary text-white shadow-[0_0_14px_rgba(22,119,255,0.4)]"
-                : isRunning ? "border-primary bg-primary/10 text-primary shadow-[0_0_14px_rgba(22,119,255,0.3)]"
-                : "border-border bg-background text-muted-foreground"}`}>
-                {isDone ? <Check className="h-4 w-4" /> : isRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <s.icon className="h-4 w-4" />}
-              </div>
-              <span className={`text-[10px] leading-tight ${isDone || isRunning ? "text-foreground" : "text-muted-foreground"}`}>{s.label}</span>
-            </div>
-            {i < PIPELINE_STEPS.length - 1 && <div className={`mb-4 h-px flex-1 transition-colors duration-300 ${i < completed ? "bg-primary" : "bg-border"}`} />}
-          </React.Fragment>
-        );
-      })}
-    </div>
-  );
-}
-
-function CopyCard({ title, text }: { title: string; text: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => { try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* clipboard blocked */ } };
-  return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <div className="flex items-center justify-between">
-        <p className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">{title}</p>
-        <button onClick={copy} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-          {copied ? <Check className="h-3 w-3 text-primary" /> : <Copy className="h-3 w-3" />}{copied ? "Copied" : "Copy"}
-        </button>
-      </div>
-      <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">{text}</p>
-    </div>
-  );
-}
-
-function ComplianceBadge({ status }: { status: string }) {
-  const map: Record<string, { cls: string; icon: any; label: string }> = {
-    pass: { cls: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: CheckCircle2, label: "Pass" },
-    review: { cls: "bg-amber-50 text-amber-700 border-amber-200", icon: Clock, label: "Review" },
-    flag: { cls: "bg-red-50 text-red-600 border-red-200", icon: AlertTriangle, label: "Flag" },
-  };
-  const m = map[status] || map.review;
-  return <span className={`inline-flex flex-none items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${m.cls}`}><m.icon className="h-3 w-3" />{m.label}</span>;
-}
-
-function ActionPacket({ plan, loading, stage, onRegenerate, onApprove }: { plan: ActionPlan | null; loading: boolean; stage: number; onRegenerate: () => void; onApprove: () => Promise<void> }) {
-  const [approving, setApproving] = useState(false);
-  const [approved, setApproved] = useState(false);
-  useEffect(() => { setApproved(false); }, [plan]);
-  const approve = async () => { setApproving(true); try { await onApprove(); setApproved(true); } finally { setApproving(false); } };
-  const actionTitle = (plan?.action_type || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-  return (
-    <div className="mt-5 overflow-hidden rounded-2xl border border-primary/30 bg-primary/[0.03]">
-      <div className="flex items-center justify-between border-b border-primary/15 px-4 py-2.5">
-        <div className="flex items-center gap-2">
-          <Workflow className="h-4 w-4 text-primary" />
-          <span className="text-sm font-semibold">Agent prepared this action</span>
-          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">Prepared by Amazon Bedrock</span>
-        </div>
-        <button onClick={onRegenerate} disabled={loading} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50">
-          <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} /> {loading ? "Working…" : "Regenerate"}
-        </button>
-      </div>
-      <div className="space-y-4 p-4">
-        <AgentPipeline stage={stage} done={!loading && !!plan} />
-        {loading && <p className="text-center text-sm text-muted-foreground">Agents are gathering facts, running compliance checks, and drafting the next step…</p>}
-        {!loading && !plan && <p className="text-sm text-muted-foreground">Couldn't prepare this action right now. Try Regenerate.</p>}
-        {!loading && plan && (
-          <>
-            <div className="rounded-xl border border-border bg-card p-4">
-              <span className="rounded-md bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">{actionTitle}</span>
-              <p className="mt-2 text-sm font-medium">{plan.headline}</p>
-              {plan.prepared_fields?.length > 0 && (
-                <dl className="mt-3 grid grid-cols-1 gap-x-8 gap-y-2.5 sm:grid-cols-2">
-                  {plan.prepared_fields.map((f, i) => (
-                    <div key={i} className="flex flex-col">
-                      <dt className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">{f.label}</dt>
-                      <dd className="text-sm">{f.value ? f.value : <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">— to confirm</span>}</dd>
-                    </div>
-                  ))}
-                </dl>
-              )}
-            </div>
-            {plan.compliance_checks?.length > 0 && (
-              <div className="rounded-xl border border-border bg-card p-4">
-                <div className="flex items-center gap-2 text-sm font-medium"><ShieldCheck className="h-4 w-4 text-primary" /> Compliance checks , auto-run</div>
-                <ul className="mt-3 space-y-2.5">
-                  {plan.compliance_checks.map((c, i) => (
-                    <li key={i} className="flex items-start gap-2">
-                      <ComplianceBadge status={c.status} />
-                      <div><span className="text-sm font-medium">{c.item}</span>{c.note && <p className="text-xs text-muted-foreground">{c.note}</p>}</div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            <div className="grid gap-3">
-              {plan.draft_client_message && <CopyCard title="Draft message to client" text={plan.draft_client_message} />}
-              {plan.draft_advisor_followup && <CopyCard title="Advisor follow-up" text={plan.draft_advisor_followup} />}
-            </div>
-            <div className="flex flex-wrap items-center gap-3 pt-1">
-              {approved ? (
-                <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
-                  <CheckCircle2 className="h-4 w-4" /> Approved. Nothing was actually sent , synthetic demo.
-                </div>
-              ) : (
-                <Button onClick={approve} disabled={approving} className="px-5">{approving ? "Approving…" : "Approve & send"}</Button>
-              )}
-              <span className="text-xs text-muted-foreground">You approve; the agent did the prep. Nothing is executed.</span>
-            </div>
-            {plan.note && <p className="text-xs text-muted-foreground">{plan.note}</p>}
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function CaseDetail({ detail, candidates, candMeta, assigning, onAssign, brief, briefLoading, onLoadBrief, onRegenerateBrief, plan, planLoading, planStage, onRegeneratePlan, onApprove, onAction, actionBusy, hc }: any) {
-  const [tab, setTab] = useState<"action" | "brief">("action");
-  if (detail._error) return <p className="p-8 text-sm text-red-600">{detail._error}</p>;
-  const security = detail.categories?.includes("fraud_or_security");
-  const assigned = !!detail.routing?.assigned_advisor_id;
-  const ac = detail.account_context;
-  return (
-    <div className="mx-auto max-w-2xl p-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-semibold">{detail.client_display_name}</h2>
-          <p className="font-mono text-xs text-muted-foreground">{detail.case_id} · {prettyStatus(detail.status)}</p>
-        </div>
-        <StatusBadge status={detail.status} />
-      </div>
-
-      {/* Tabs , agentic prepared action (default) | AI prep brief */}
-      <div className="mt-5 inline-flex rounded-xl border border-border bg-muted/40 p-1 text-sm">
-        <button onClick={() => setTab("action")}
-          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium transition-colors ${tab === "action" ? "bg-background text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-          <Workflow className="h-4 w-4" /> Prepared action
-        </button>
-        <button onClick={() => { setTab("brief"); if (!brief && !briefLoading) onLoadBrief?.(); }}
-          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium transition-colors ${tab === "brief" ? "bg-background text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-          <Sparkles className="h-4 w-4" /> Prep brief
-        </button>
-      </div>
-
-      {tab === "action"
-        ? <ActionPacket plan={plan} loading={planLoading} stage={planStage} onRegenerate={onRegeneratePlan} onApprove={onApprove} />
-        : <PrepBrief brief={brief} loading={briefLoading} onRegenerate={onRegenerateBrief} />}
-
-      {/* Advisor actions */}
-      <ActionBar onAction={onAction} busy={actionBusy} assigned={assigned} />
-
-      <Section title="Client's original words">
-        <blockquote className="rounded-lg border-l-2 border-primary bg-muted/40 p-3 text-sm italic">“{detail.original_words}”</blockquote>
-      </Section>
-      <Section title="Confirmed request"><p className="text-sm">{detail.confirmed_plain_language_request}</p></Section>
-      {detail.staff_summary && <Section title="Staff summary"><p className="text-sm text-muted-foreground">{detail.staff_summary}</p></Section>}
-
-      {ac && (
-        <Section title="Account context · record-backed">
-          <div className="rounded-lg border border-border p-4 text-sm">
-            <div className="flex flex-wrap gap-x-8 gap-y-1">
-              <div><span className="text-muted-foreground">Type: </span>{prettyStatus(ac.account_type || "")}</div>
-              <div><span className="text-muted-foreground">Account: </span>{ac.masked_identifier}</div>
-              {typeof ac.balance === "number" && <div><span className="text-muted-foreground">Balance: </span>${ac.balance.toLocaleString()} <span className="text-xs text-muted-foreground">as of {ac.balance_as_of}</span></div>}
-            </div>
-            {ac.account_source_id && <div className="mt-1 text-xs text-muted-foreground">Source: {ac.account_source_id}</div>}
-            {(ac.relevant_events || []).length > 0 && (
-              <ul className="mt-3 space-y-1 border-t border-border pt-3 text-xs text-muted-foreground">
-                {ac.relevant_events.map((e: any, i: number) => <li key={i}>• {prettyStatus(e.type)} · {e.date} <span className="opacity-60">({e.source_id})</span></li>)}
-              </ul>
-            )}
-          </div>
-        </Section>
-      )}
-
-      {(detail.conflicts || []).length > 0 && (
-        <Section title="Flagged conflicts">
-          {detail.conflicts.map((c: any, i: number) => (
-            <p key={i} className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{c.statement} <span className="text-xs opacity-70">({c.source_id})</span></p>
-          ))}
-        </Section>
-      )}
-
-      <div className="mt-6 flex flex-wrap gap-1.5">
-        {(detail.categories || []).map((c: string) => <Chip key={c} tone={c === "fraud_or_security" ? "red" : "muted"}>{prettyCategory(c)}</Chip>)}
-        {(detail.flags || []).map((f: string) => <Chip key={f} tone={security ? "red" : "amber"}>{f.replace(/_/g, " ")}</Chip>)}
-      </div>
-
-      {(detail.unresolved_questions || []).length > 0 && (
-        <Section title="Unresolved questions">
-          <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-            {detail.unresolved_questions.map((q: string, i: number) => <li key={i}>{q}</li>)}
-          </ul>
-        </Section>
-      )}
-
-      <Section title="Routing">
-        <div className="rounded-lg border border-border p-4 text-sm">
-          <div><span className="text-muted-foreground">Destination: </span><span className={security ? "font-medium text-red-600" : "font-medium"}>{prettyStatus(detail.routing?.destination || candMeta.destination || "")}</span></div>
-          {(detail.routing?.reason || candMeta.reason) && <p className="mt-1 text-xs text-muted-foreground">{detail.routing?.reason || candMeta.reason}</p>}
-          {detail.routing?.assigned_advisor_id && <p className="mt-2 text-sm text-emerald-600">✓ Assigned to {detail.routing.assigned_advisor_id}</p>}
-        </div>
-      </Section>
-
-      <Section title={security ? "Specialist review" : "Recommended advisors"}>
-        {security ? (
-          <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            This request involves a possible security concern. It is routed to <b>security specialist review</b>, not a general advisor.
-          </p>
-        ) : candidates.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No candidate advisors returned.</p>
-        ) : (
-          <div className="space-y-3">
-            {candidates.map((a: Candidate) => (
-              <div key={a.advisor_id} className="flex items-start justify-between gap-4 rounded-lg border border-border p-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{a.display_name}</span>
-                    <span className="font-mono text-xs text-muted-foreground">{a.advisor_id}</span>
-                    {a.available ? <Chip>available</Chip> : <Chip tone="amber">full</Chip>}
-                  </div>
-                  <div className="mt-1 flex flex-wrap gap-1">{(a.specialties || []).map((s) => <Chip key={s}>{prettyCategory(s)}</Chip>)}</div>
-                  <p className="mt-1.5 text-xs text-muted-foreground">{a.reason}</p>
-                </div>
-                <Button size="sm" disabled={!!assigning || assigned} onClick={() => onAssign(a.advisor_id, a.reason)}>
-                  {assigning === a.advisor_id ? "Assigning…" : assigned ? "Assigned" : "Assign"}
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
-      </Section>
-
-      {/* 4 , Compliance */}
-      <Compliance detail={detail} hc={hc} />
-
-      {/* 2 , Activity timeline */}
-      <Activity history={detail.history || []} />
-    </div>
-  );
-}
-
-function PipelineBoard({ cases, overrides, onOpen }: { cases: CaseRow[]; overrides: Record<string, Lifecycle>; onOpen: (id: string) => void }) {
+function PipelineBoard({ cases, onOpen }: { cases: CaseRow[]; onOpen: (id: string) => void }) {
   const cols = useMemo(() => {
-    const m: Record<Lifecycle, CaseRow[]> = { "New / In review": [], "Awaiting client": [], "Assigned": [], "Scheduled": [], "Resolved": [] };
-    cases.forEach((c) => m[lifecycleOf(c, overrides[c.case_id])].push(c));
+    const m = Object.fromEntries(PIPELINE_COLS.map((c) => [c, [] as CaseRow[]])) as Record<Lifecycle, CaseRow[]>;
+    cases.forEach((c) => m[c.lifecycle || "new"].push(c));
     return m;
-  }, [cases, overrides]);
+  }, [cases]);
   return (
     <div className="h-screen overflow-auto p-8">
-      <h1 className="text-2xl font-semibold">My pipeline</h1>
+      <h1 className="text-2xl font-semibold">Pipeline</h1>
       <p className="mt-1 text-sm text-muted-foreground">Every request, by where it is in the advisor workflow.</p>
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {PIPELINE_COLS.map((col) => (
           <div key={col} className="rounded-2xl border border-border bg-muted/20 p-3">
             <div className="flex items-center justify-between px-1">
-              <span className="text-xs font-semibold">{col}</span>
-              <span className="rounded-full bg-background px-2 py-0.5 text-[11px] text-muted-foreground">{cols[col].length}</span>
+              <span className="text-sm font-semibold">{LIFECYCLE_LABELS[col]}</span>
+              <span className="rounded-full bg-background px-2 py-0.5 text-xs tabular-nums text-muted-foreground">{cols[col].length}</span>
             </div>
             <div className="mt-3 space-y-2">
-              {cols[col].length === 0 && <p className="px-1 py-6 text-center text-xs text-muted-foreground/60">—</p>}
+              {cols[col].length === 0 && <p className="px-1 py-6 text-center text-xs text-muted-foreground">Nothing here</p>}
               {cols[col].map((c) => (
                 <button key={c.case_id} onClick={() => onOpen(c.case_id)}
                   className="block w-full rounded-xl border border-border bg-card p-3 text-left transition-colors hover:border-primary/40">
                   <div className="text-sm font-medium">{c.client_display_name}</div>
-                  <div className="font-mono text-[11px] text-muted-foreground">{c.case_id}</div>
-                  {(c.categories || [])[0] && <div className="mt-1.5"><Chip tone={c.categories?.includes("fraud_or_security") ? "red" : "muted"}>{prettyCategory(c.categories[0])}</Chip></div>}
+                  <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{c.confirmed_plain_language_request}</p>
+                  {(c.categories || [])[0] && <div className="mt-2"><Chip tone={c.categories?.includes("fraud_or_security") ? "red" : "muted"}>{prettyCategory(c.categories[0])}</Chip></div>}
                 </button>
               ))}
             </div>
@@ -775,11 +364,51 @@ function Tile({ big, label, tone }: { big: string; label: string; tone?: string 
   );
 }
 
+function median(values: number[]) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+}
+
+const CAPACITY_INPUTS = [
+  { key: "requests", label: "Unclear requests per advisor per week" },
+  { key: "minutes", label: "Minutes saved per request" },
+  { key: "advisors", label: "Advisors" },
+  { key: "weeks", label: "Working weeks per year" },
+] as const;
+
+// A formula, not a result: every input is editable so nobody has to take our word for the total.
+function CapacityModel() {
+  const [inputs, setInputs] = useState({ requests: 5, minutes: 10, advisors: 32500, weeks: 50 });
+  const hours = Math.round((inputs.requests * inputs.minutes * inputs.advisors * inputs.weeks) / 60);
+  return (
+    <div className="mt-4 rounded-2xl border border-border bg-card p-5">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {CAPACITY_INPUTS.map((f) => (
+          <label key={f.key} className="block text-sm text-muted-foreground">
+            {f.label}
+            <input type="number" min={0} value={inputs[f.key]}
+              onChange={(e) => setInputs((v) => ({ ...v, [f.key]: Math.max(0, Number(e.target.value) || 0) }))}
+              className="mt-1.5 w-full rounded-lg border border-border bg-background px-3 py-2 text-lg font-medium tabular-nums text-foreground outline-none focus:ring-2 focus:ring-primary/30" />
+          </label>
+        ))}
+      </div>
+      <div className="mt-5 border-t border-border pt-4">
+        <div className="text-3xl font-semibold tracking-tight tabular-nums text-primary">{hours.toLocaleString()} advisor hours a year</div>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Requests × minutes × advisors × weeks ÷ 60. The first two inputs are assumptions, not measurements. A pilot would measure them.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function ImpactView({ impact }: { impact: any }) {
+  const intakes: { turns: number; seconds_to_confirm: number }[] = impact.intakes;
   return (
     <div className="h-screen overflow-y-auto p-8">
       <h1 className="text-2xl font-semibold">Impact</h1>
-      <p className="mt-1 text-sm text-muted-foreground">Live from the request queue · plus illustrative scale figures.</p>
+      <p className="mt-1 text-sm text-muted-foreground">Live from the request queue, plus a capacity model you can change.</p>
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Tile big={String(impact.total)} label="Total requests in queue" tone="text-primary" />
         <Tile big={`${impact.clarifyPct}%`} label="Needed clarification before routing" />
@@ -815,12 +444,25 @@ function ImpactView({ impact }: { impact: any }) {
           </div>
         </div>
       </div>
-      <h2 className="mt-10 text-sm font-mono uppercase tracking-wider text-muted-foreground">Why it matters , at scale</h2>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Tile big="61.2M" label="Americans are 65+ , the clients who struggle most with financial terms." />
+      <h2 className="mt-10 text-sm font-mono uppercase tracking-wider text-muted-foreground">Measured in this workspace</h2>
+      {intakes.length === 0 ? (
+        <p className="mt-4 rounded-2xl border border-border bg-card p-5 text-sm text-muted-foreground">
+          No live intakes yet. Send a request from client intake and its turns and time to confirmation appear here.
+        </p>
+      ) : (
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Tile big={String(median(intakes.map((i) => i.turns)))} label="Median client turns to a confirmed request" tone="text-primary" />
+          <Tile big={`${median(intakes.map((i) => i.seconds_to_confirm))}s`} label="Median time from first message to confirmation" tone="text-primary" />
+          <Tile big={String(intakes.length)} label={`Live intake${intakes.length === 1 ? "" : "s"} measured. Seeded demo cases are excluded.`} />
+        </div>
+      )}
+      <h2 className="mt-10 text-sm font-mono uppercase tracking-wider text-muted-foreground">Advisor capacity model</h2>
+      <CapacityModel />
+      <h2 className="mt-10 text-sm font-mono uppercase tracking-wider text-muted-foreground">Why it matters at scale</h2>
+      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Tile big="61.2M" label="Americans are 65+, the clients who struggle most with financial terms." />
         <Tile big="<50%" label="of an advisor's time goes to direct client work today (Kitces)." />
-        <Tile big="$2.6T" label="assets & 32,000+ advisors at LPL Financial alone." />
-        <Tile big="~$80M/yr" label="illustrative recovered advisor capacity at LPL scale (model, not measured)." tone="text-primary" />
+        <Tile big="$2.6T" label="assets & about 32,500 advisors at LPL Financial alone." />
       </div>
     </div>
   );

@@ -731,7 +731,7 @@ def _stub_brief(case: dict) -> dict:
     cautions = ["This is a service request, not advice; no transaction is authorized.",
                 "Confirm the client's identity before discussing account details."]
     if "client_term_did_not_match_account_type" in (case.get("flags") or []):
-        cautions.append("Client used a term that did not match their records , confirm the account explicitly.")
+        cautions.append("Client used a term that did not match their records; confirm the account explicitly.")
     return {
         "headline": case.get("staff_summary") or case.get("confirmed_plain_language_request") or "Client service request.",
         "talking_points": points, "confirm": confirm, "cautions": cautions,
