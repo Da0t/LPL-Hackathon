@@ -43,6 +43,7 @@ COHERENT_ALLOWED_ORIGINS=$COHERENT_PUBLIC_ORIGIN
 COHERENT_SECURE_COOKIES=1
 EOF
 chmod 640 /etc/coherent/backend.env
+chgrp ec2-user /etc/coherent /etc/coherent/portal-aws.json /etc/coherent/backend.env
 
 cat > /etc/systemd/system/coherent-api.service <<'EOF'
 [Unit]
