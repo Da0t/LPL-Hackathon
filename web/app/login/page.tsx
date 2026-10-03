@@ -6,7 +6,6 @@ import { motion, useReducedMotion } from "motion/react";
 import { ArrowRight } from "lucide-react";
 import { BrandLogo } from "@/components/brand-logo";
 import { CoherentMark } from "@/components/coherent-logo";
-import TranslationStage from "@/components/translation-stage";
 import { portalApi } from "@/lib/portal";
 import "../workspace/portal.css";
 
@@ -68,9 +67,6 @@ export default function Login() {
             Say what you need in your own words. Coherent checks it against your accounts and gets it to the right
             person.
           </motion.p>
-          <motion.div variants={rise} className="login-stage">
-            <TranslationStage variant="login" />
-          </motion.div>
         </motion.div>
         <small>Coherent · LPL hackathon · Fictional records only</small>
       </section>

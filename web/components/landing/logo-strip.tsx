@@ -1,7 +1,7 @@
 import React from "react";
 import { InfiniteSlider } from "@/components/ui/infinite-slider";
 import { ProgressiveBlur } from "@/components/ui/progressive-blur";
-import { LPLLogo, AWSLogo, BedrockLogo, TranscribeLogo, ClaudeLogo } from "@/components/brand-logos";
+import { LPLLogo, AWSLogo, BedrockLogo, TranscribeLogo } from "@/components/brand-logos";
 
 export default function LogoStrip() {
   return (
@@ -16,7 +16,6 @@ export default function LogoStrip() {
               <LPLLogo height={30} className="opacity-90 transition-opacity hover:opacity-100" />
               <AWSLogo height={32} className="opacity-90 transition-opacity hover:opacity-100" />
               <BedrockLogo height={32} className="opacity-90 transition-opacity hover:opacity-100" />
-              <ClaudeLogo height={28} className="opacity-90 transition-opacity hover:opacity-100" />
               <TranscribeLogo height={32} className="opacity-90 transition-opacity hover:opacity-100" />
             </InfiniteSlider>
             <div className="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-background" />
