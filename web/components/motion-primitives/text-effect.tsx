@@ -129,13 +129,19 @@ const AnimationComponent: React.FC<{
                 {segment}
             </motion.span>
         ) : per === 'word' ? (
-            <motion.span
-                aria-hidden='true'
-                variants={variants}
-                className='inline-block whitespace-pre'
-            >
-                {segment}
-            </motion.span>
+            /^\s+$/.test(segment) ? (
+                // A plain inline space so lines can break here and the space
+                // collapses at a line start instead of indenting the next line.
+                <span aria-hidden='true'>{' '}</span>
+            ) : (
+                <motion.span
+                    aria-hidden='true'
+                    variants={variants}
+                    className='inline-block whitespace-pre'
+                >
+                    {segment}
+                </motion.span>
+            )
         ) : (
             <motion.span className='inline-block whitespace-pre'>
                 {segment.split('').map((char, charIndex) => (

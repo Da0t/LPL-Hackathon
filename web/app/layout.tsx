@@ -9,7 +9,7 @@ const geistSans = Geist({subsets: ["latin"], variable: "--font-geist-sans"});
 const geistMono = Geist_Mono({subsets: ["latin"], variable: "--font-geist-mono"});
 
 export const metadata: Metadata = {
-    title: 'Coherent — Your words. The right advisor.',
+    title: 'Coherent — Plain-language intake, routed to the right advisor',
     description: 'Coherent helps wealth-management clients describe what they need in plain language and routes a clear, confirmed request to the right advisor. AI intake and triage powered by Amazon Bedrock, built for LPL Financial.',
     generator: 'Coherent',
     icons: {

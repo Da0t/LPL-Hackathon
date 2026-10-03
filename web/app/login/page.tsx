@@ -2,11 +2,20 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowRight, LockKeyhole } from "lucide-react";
+import { motion, useReducedMotion } from "motion/react";
+import { ArrowRight } from "lucide-react";
 import { BrandLogo } from "@/components/brand-logo";
 import { portalApi } from "@/lib/portal";
 import "../workspace/portal.css";
+
 type DevUser = { email: string; display_name: string; role: string };
+
+const ease = [0.2, 0.7, 0.2, 1] as const;
+const rise = {
+  hidden: { opacity: 0, y: 14 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease } },
+};
+
 export default function Login() {
   const [email, setEmail] = useState(""),
     [password, setPassword] = useState(""),
@@ -14,6 +23,8 @@ export default function Login() {
     [error, setError] = useState(""),
     [devUsers, setDevUsers] = useState<DevUser[]>([]);
   const router = useRouter();
+  const reduce = useReducedMotion();
+
   const signIn = async (email: string, password: string) => {
     setBusy(true);
     setError("");
@@ -27,58 +38,39 @@ export default function Login() {
       setBusy(false);
     }
   };
+
   // Populated only when the backend runs with COHERENT_DEV_LOGIN=1.
   useEffect(() => {
     portalApi("/auth/dev-users")
       .then((r) => setDevUsers(r.users || []))
       .catch(() => {});
   }, []);
+
+  const container = {
+    hidden: {},
+    visible: { transition: { staggerChildren: reduce ? 0 : 0.07, delayChildren: reduce ? 0 : 0.1 } },
+  };
+
   return (
     <main className="portal login-page">
-      <section className="login-story">
-        <Link href="/">
-          <BrandLogo height={34} />
-        </Link>
-        <div>
-          <p className="portal-eyebrow">YOUR FINANCIAL LIFE, CONNECTED</p>
-          <h1>
-            A clearer view.
-            <br />A better conversation.
-          </h1>
-          <p>
-            Your accounts, your information, and the next steps that matter—all
-            in one place.
-          </p>
-          <div className="login-art">
-            <div>
-              <span>Everything in context</span>
-              <strong>Your financial picture</strong>
-              <div className="art-bars">
-                {[38, 52, 44, 66, 60, 79, 72, 96].map((h, i) => (
-                  <i key={i} style={{ height: h }} />
-                ))}
-              </div>
-            </div>
-            <div className="art-note">
-              <LockKeyhole size={20} /> Built around you.
-            </div>
-          </div>
-        </div>
-        <small>Coherent · LPL hackathon · Fictional records only</small>
-      </section>
       <section className="login-form-area">
-        <form
+        <motion.form
+          initial={reduce ? false : "hidden"}
+          animate="visible"
+          variants={container}
           onSubmit={(e) => {
             e.preventDefault();
             signIn(email, password);
           }}
         >
-          <div className="login-symbol">
-            <LockKeyhole size={25} />
-          </div>
-          <h2>Welcome back.</h2>
-          <p>Sign in to your Coherent workspace.</p>
-          <label>
+          <motion.div variants={rise} className="login-mark">
+            <Link href="/" aria-label="Coherent home">
+              <BrandLogo height={30} />
+            </Link>
+          </motion.div>
+          <motion.h2 variants={rise}>Welcome back.</motion.h2>
+          <motion.p variants={rise}>Sign in to your Coherent workspace.</motion.p>
+          <motion.label variants={rise}>
             Email address
             <input
               type="email"
@@ -88,8 +80,8 @@ export default function Login() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
-          </label>
-          <label>
+          </motion.label>
+          <motion.label variants={rise}>
             Password
             <input
               type="password"
@@ -98,19 +90,24 @@ export default function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
-          </label>
+          </motion.label>
           {error && (
             <p className="portal-error" role="alert">
               {error}
             </p>
           )}
-          <button className="portal-primary" disabled={busy}>
+          <motion.button variants={rise} className="portal-primary" disabled={busy}>
             {busy ? "Signing in…" : "Sign in"}
             <ArrowRight size={18} />
-          </button>
+          </motion.button>
           {devUsers.length > 0 && (
-            <div className="dev-login">
-              <span>Development sign-in · no password</span>
+            <motion.div
+              initial={reduce ? false : { opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, ease }}
+              className="dev-login"
+            >
+              <span>Development sign-in, no password</span>
               {devUsers.map((u) => (
                 <button
                   key={u.email}
@@ -123,14 +120,14 @@ export default function Login() {
                   <small>{u.role === "staff" ? "Advisor workspace" : "Client portal"}</small>
                 </button>
               ))}
-            </div>
+            </motion.div>
           )}
-          <p className="login-footnote">
+          <motion.p variants={rise} className="login-footnote">
             Access is provided by your advisor’s team.
             <br />
             Contact your administrator if you need help signing in.
-          </p>
-        </form>
+          </motion.p>
+        </motion.form>
       </section>
     </main>
   );
