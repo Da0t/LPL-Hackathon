@@ -13,7 +13,7 @@ tool use. The typed client flow must work before voice is attempted.
 | --- | --- | --- |
 | Bedrock intake + triage adapter (Converse API, native tool use) | **Required, runs** | `backend/aws/bedrock_agent.py` |
 | Region/model/config from env (no creds in code) | **Required, runs** | `backend/aws/config.py` |
-| Bedrock Guardrails (blocks investment/tax advice, masks PII) | **Optional, recommended** | `infra/guardrail.json` |
+| Bedrock Guardrails (blocks full SSNs and payment card numbers in intake) | **Optional, tested** | `infra/guardrail.json` |
 | Least-privilege IAM policy | **Required to deploy** | `infra/iam_policy.json` |
 | Amazon Transcribe streaming (voice) + financial custom vocabulary | **Built, vocabulary live** | `backend/aws/transcribe.py` |
 
@@ -92,22 +92,25 @@ profile ID, and the optional guardrail ID. It grants only `bedrock:InvokeModel`
 (+ stream) on the single model, optional `bedrock:ApplyGuardrail`, and optional
 `transcribe:StartStreamTranscription`. No wildcards on the model resource.
 
-## 5. Optional Guardrail (recommended, strong "Best Use of AWS" story)
+## 5. Optional Guardrail
 
-The product promise is that the assistant never gives investment/tax advice and
-never invents facts. A Guardrail enforces the first part at the platform level.
+The versioned Guardrail blocks full SSNs and payment card numbers from the Bedrock
+intake/triage adapter. It does not make investment or tax determinations. The
+earlier denied-topic policy also blocked normal Roth-account requests, and masking
+bank numbers corrupted four-digit account identifiers, so those rules were removed
+after live checks. The application still relies on grounded tools, deterministic
+field checks, and human review for advice and account accuracy.
 
 ```bash
-aws bedrock create-guardrail --region us-east-1 \
-  --cli-input-json file://infra/guardrail.json
-# Note the returned guardrailId, then publish a version:
-aws bedrock create-guardrail-version --region us-east-1 \
-  --guardrail-identifier <guardrailId>
-# Export BEDROCK_GUARDRAIL_ID / BEDROCK_GUARDRAIL_VERSION to turn it on.
+python -m scripts.provision_guardrail
+# This writes ignored var/guardrail-aws.json. Export its ID/version locally,
+# or run scripts.deploy_aws to configure them on the hosted EC2 backend.
 ```
 
-When set, every Converse call includes `guardrailConfig`; a blocked turn raises
-`GUARDRAIL_BLOCKED`, which the backend turns into a "talk to a person" response.
+When set, the `backend/aws/bedrock_agent.py` Converse calls include `guardrailConfig`;
+a blocked turn raises `GUARDRAIL_BLOCKED`, which the backend turns into a
+"talk to a person" response. Other advisor agent calls have their own deterministic
+record auditor and compliance checks; they do not inherit this Guardrail setting.
 
 ## 6. Live smoke test (the command to record and rerun)
 

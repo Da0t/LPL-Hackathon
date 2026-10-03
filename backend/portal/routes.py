@@ -1,6 +1,7 @@
 """Authenticated portal APIs. No client identifier from the browser is trusted."""
 
 import secrets
+import os
 from datetime import date
 from typing import Literal
 from fastapi import APIRouter, Request, Response
@@ -45,7 +46,7 @@ def login(body: Login, request: Request, response: Response):
         auth["AccessToken"],
         max_age=auth["ExpiresIn"],
         httponly=True,
-        secure=request.url.scheme == "https",
+        secure=os.getenv("COHERENT_SECURE_COOKIES") == "1" or request.url.scheme == "https",
         samesite="strict",
         path="/",
     )

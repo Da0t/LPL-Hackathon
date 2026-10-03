@@ -112,6 +112,16 @@ def signin(c, user=0):
     c.cookies.set(COOKIE, token("user-" + str(user)))
 
 
+def test_hosted_login_marks_cookie_secure(setup, monkeypatch):
+    c, portal, _ = setup
+    monkeypatch.setenv("COHERENT_SECURE_COOKIES", "1")
+    monkeypatch.setattr(portal, "login", lambda *_: {"AccessToken": "demo-token", "ExpiresIn": 3600})
+    response = c.post("/auth/login", json={"email": "client@example.com", "password": "demo"})
+    assert response.status_code == 200
+    assert "secure" in response.headers["set-cookie"].lower()
+    assert "httponly" in response.headers["set-cookie"].lower()
+
+
 def test_seed_reconciles_and_transfers_are_paired():
     profiles = make_profiles()
     assert len(profiles) == 3
