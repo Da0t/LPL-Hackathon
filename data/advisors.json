@@ -1,0 +1,99 @@
+{
+  "meta": {
+    "version": "1",
+    "synthetic_only": true,
+    "description": "Fictional advisor directory. No entry represents a real LPL advisor or mirrors a live LPL system. capacity is the number of new cases the advisor can still take. region and note are optional additions. License and state eligibility are not modeled; staff must verify them.",
+    "specialist_queues": [
+      {
+        "destination": "security_specialist_review",
+        "display_name": "Security specialist review queue",
+        "handles": ["fraud_or_security"],
+        "note": "A queue, not an advisor. Fraud or unauthorized-access cases go here instead of to a planning advisor."
+      }
+    ]
+  },
+  "advisors": [
+    {
+      "advisor_id": "ADV-01",
+      "display_name": "Taylor Morgan",
+      "specialties": ["investment_planning", "rollover_or_transfer"],
+      "active": true,
+      "available": true,
+      "meeting_mode": ["video"],
+      "capacity": 2,
+      "region": "South"
+    },
+    {
+      "advisor_id": "ADV-02",
+      "display_name": "Priya Raman",
+      "specialties": ["beneficiary_or_estate", "account_service"],
+      "active": true,
+      "available": true,
+      "meeting_mode": ["phone", "in_person"],
+      "capacity": 4,
+      "region": "West"
+    },
+    {
+      "advisor_id": "ADV-03",
+      "display_name": "Jordan Lee",
+      "specialties": ["retirement_income", "withdrawal_or_distribution"],
+      "active": true,
+      "available": true,
+      "meeting_mode": ["phone", "video"],
+      "capacity": 3,
+      "region": "West"
+    },
+    {
+      "advisor_id": "ADV-04",
+      "display_name": "Samuel Ortiz",
+      "specialties": ["retirement_income", "rollover_or_transfer"],
+      "active": true,
+      "available": true,
+      "meeting_mode": ["phone", "in_person"],
+      "capacity": 1,
+      "region": "West"
+    },
+    {
+      "advisor_id": "ADV-05",
+      "display_name": "Helen Park",
+      "specialties": ["withdrawal_or_distribution", "retirement_income", "beneficiary_or_estate"],
+      "active": true,
+      "available": false,
+      "meeting_mode": ["phone", "video"],
+      "capacity": 0,
+      "region": "Midwest",
+      "note": "At capacity; not taking new cases."
+    },
+    {
+      "advisor_id": "ADV-06",
+      "display_name": "Marcus Bell",
+      "specialties": ["investment_planning", "retirement_income"],
+      "active": true,
+      "available": true,
+      "meeting_mode": ["video"],
+      "capacity": 5,
+      "region": "East"
+    },
+    {
+      "advisor_id": "ADV-07",
+      "display_name": "Dana Whitfield",
+      "specialties": ["beneficiary_or_estate", "investment_planning"],
+      "active": true,
+      "available": true,
+      "meeting_mode": ["in_person", "video", "phone"],
+      "capacity": 2,
+      "region": "West"
+    },
+    {
+      "advisor_id": "ADV-08",
+      "display_name": "Chris Avery",
+      "specialties": ["account_service", "rollover_or_transfer"],
+      "active": false,
+      "available": false,
+      "meeting_mode": ["phone"],
+      "capacity": 0,
+      "region": "East",
+      "note": "Inactive; must never be offered as a candidate."
+    }
+  ]
+}

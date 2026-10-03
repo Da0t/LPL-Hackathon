@@ -1,0 +1,140 @@
+{
+  "meta": {
+    "version": "1",
+    "synthetic_only": true,
+    "description": "Optional seed cases so the staff queue is populated after a reset. CASE-1042 and CASE-SEC-1 are copied unchanged from contracts/demo_fixture_v1.json. These are example triage outputs, not answers for the intake agent: live intake must interpret each request with the model."
+  },
+  "cases": [
+    {
+      "case_id": "CASE-1042",
+      "client_id": "CLIENT-017",
+      "client_display_name": "Mara Ellis",
+      "created_at": "2026-10-02T20:00:00Z",
+      "status": "submitted",
+      "input_mode": "voice",
+      "original_words": "I need six thousand dollars from the Roth thing from my old job.",
+      "confirmed_plain_language_request": "I want to speak with an advisor about using $6,000 from my retirement account from my former employer.",
+      "staff_summary": "Client requests discussion of a possible $6,000 distribution from a rollover IRA for care expenses.",
+      "intent": "discuss_possible_withdrawal",
+      "amount_requested": 6000,
+      "currency": "USD",
+      "selected_account_id": "ACCT-201",
+      "account_match_status": "client_confirmed",
+      "categories": ["withdrawal_or_distribution", "retirement_income"],
+      "unresolved_questions": ["Desired timing", "Potential tax implications for advisor review"],
+      "flags": ["client_term_did_not_match_account_type"],
+      "account_context": {
+        "account_type": "rollover_ira",
+        "masked_identifier": "****4821",
+        "balance": 84000,
+        "balance_as_of": "2026-10-01",
+        "account_source_id": "ACCOUNT-RECORD-201",
+        "relevant_events": [
+          {"type": "rollover", "date": "2023-06-12", "source_id": "EVENT-09"}
+        ]
+      },
+      "routing": {
+        "destination": "retirement_advisor_review",
+        "recommended_advisor_ids": ["ADV-03"],
+        "assigned_advisor_id": null,
+        "staff_decision": null
+      }
+    },
+    {
+      "case_id": "CASE-SEC-1",
+      "client_id": "CLIENT-022",
+      "client_display_name": "Evan Brooks",
+      "created_at": "2026-10-02T20:10:00Z",
+      "status": "submitted",
+      "input_mode": "text",
+      "original_words": "I don't recognize a sign-in alert on my account.",
+      "confirmed_plain_language_request": "I need help reviewing an account sign-in I do not recognize.",
+      "staff_summary": "Client reports a possible unauthorized sign-in and requests account-access review.",
+      "intent": "review_account_access",
+      "amount_requested": null,
+      "currency": null,
+      "selected_account_id": null,
+      "account_match_status": "not_needed",
+      "categories": ["fraud_or_security", "account_service"],
+      "unresolved_questions": ["Time and device of the alert"],
+      "flags": ["possible_unauthorized_access"],
+      "account_context": null,
+      "routing": {
+        "destination": "security_specialist_review",
+        "recommended_advisor_ids": [],
+        "assigned_advisor_id": null,
+        "staff_decision": null
+      }
+    },
+    {
+      "case_id": "CASE-1040",
+      "client_id": "CLIENT-022",
+      "client_display_name": "Evan Brooks",
+      "created_at": "2026-10-02T18:35:00Z",
+      "status": "submitted",
+      "input_mode": "text",
+      "original_words": "Can I put more money into my Roth IRA this year?",
+      "confirmed_plain_language_request": "I want to ask an advisor whether I can add more money to my Roth retirement account this year.",
+      "staff_summary": "Client asks about making an additional current-year contribution to a Roth IRA.",
+      "intent": "discuss_contribution",
+      "amount_requested": null,
+      "currency": null,
+      "selected_account_id": "ACCT-301",
+      "account_match_status": "client_confirmed",
+      "categories": ["investment_planning", "account_service"],
+      "unresolved_questions": ["How much the client wants to add", "Contribution eligibility for advisor review"],
+      "flags": [],
+      "account_context": {
+        "account_type": "roth_ira",
+        "masked_identifier": "****6205",
+        "balance": 51750,
+        "balance_as_of": "2026-10-01",
+        "account_source_id": "ACCOUNT-RECORD-301",
+        "relevant_events": [
+          {"type": "contribution", "date": "2026-01-15", "source_id": "EVENT-22"}
+        ]
+      },
+      "routing": {
+        "destination": "advisor_review",
+        "recommended_advisor_ids": ["ADV-01", "ADV-06"],
+        "assigned_advisor_id": null,
+        "staff_decision": null
+      }
+    },
+    {
+      "case_id": "CASE-1041",
+      "client_id": "CLIENT-031",
+      "client_display_name": "Lena Marchetti",
+      "created_at": "2026-10-02T19:20:00Z",
+      "status": "staff_review",
+      "input_mode": "voice",
+      "original_words": "I want my daughter to be the one who gets my retirement account if something happens to me.",
+      "confirmed_plain_language_request": "I want to talk with someone about updating who receives my retirement account if I pass away.",
+      "staff_summary": "Client requests review of the beneficiary designation on a traditional IRA.",
+      "intent": "update_beneficiary",
+      "amount_requested": null,
+      "currency": null,
+      "selected_account_id": "ACCT-401",
+      "account_match_status": "client_confirmed",
+      "categories": ["beneficiary_or_estate", "account_service"],
+      "unresolved_questions": ["Whether the client also wants to review the joint account", "Paperwork required for the change"],
+      "flags": [],
+      "account_context": {
+        "account_type": "traditional_ira",
+        "masked_identifier": "****3390",
+        "balance": 142500,
+        "balance_as_of": "2026-10-01",
+        "account_source_id": "ACCOUNT-RECORD-401",
+        "relevant_events": [
+          {"type": "beneficiary_update", "date": "2018-09-20", "source_id": "EVENT-31"}
+        ]
+      },
+      "routing": {
+        "destination": "estate_and_beneficiary_review",
+        "recommended_advisor_ids": ["ADV-07", "ADV-02"],
+        "assigned_advisor_id": null,
+        "staff_decision": null
+      }
+    }
+  ]
+}
