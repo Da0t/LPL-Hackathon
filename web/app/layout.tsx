@@ -1,12 +1,19 @@
 import React from "react"
 import type {Metadata} from 'next'
-import {Geist, Geist_Mono} from 'next/font/google'
+import {Geist, Geist_Mono, Newsreader} from 'next/font/google'
 import {Analytics} from '@vercel/analytics/next'
 import './globals.css'
 import {HeroHeader} from "@/components/header";
 
 const geistSans = Geist({subsets: ["latin"], variable: "--font-geist-sans"});
 const geistMono = Geist_Mono({subsets: ["latin"], variable: "--font-geist-mono"});
+// Newsreader italic is reserved for one job: the client's own spoken words.
+const newsreader = Newsreader({
+    subsets: ["latin"],
+    style: ["italic", "normal"],
+    weight: ["400", "500"],
+    variable: "--font-newsreader",
+});
 
 export const metadata: Metadata = {
     title: 'Coherent — Your words. The right advisor.',
@@ -24,7 +31,7 @@ export default function RootLayout({
     children: React.ReactNode
 }>) {
     return (
-        <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
+        <html lang="en" className={`${geistSans.variable} ${geistMono.variable} ${newsreader.variable}`}>
         <body className="font-sans antialiased">
         <HeroHeader/>
         {children}

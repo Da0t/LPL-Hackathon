@@ -774,20 +774,20 @@
   background: #fff;
 }
 .login-story {
-  padding: 50px 60px;
+  padding: 40px 56px 32px;
   background: #eef4ff;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 55px;
+  gap: 28px;
   overflow: hidden;
 }
 .login-story h1 {
-  font-size: 49px;
-  line-height: 1.15;
-  letter-spacing: -2px;
-  font-weight: 450;
-  margin: 14px 0 22px;
+  font-size: 42px;
+  line-height: 1.1;
+  letter-spacing: -1.8px;
+  font-weight: 500;
+  margin: 0 0 14px;
 }
 .login-story > div > p:not(.portal-eyebrow) {
   font-size: 16px;
@@ -798,54 +798,13 @@
   font-size: 10px;
   color: #8b9fba;
 }
-.login-art {
-  margin: 36px 10px 28px 20px;
-  position: relative;
-  max-width: 350px;
+.login-story h1 span,
+.login-story h1 em {
+  font-style: normal;
 }
-.login-art > div:first-child {
-  border: 1px solid #dce5f6;
-  background: #ffffffcc;
-  border-radius: 16px;
-  box-shadow: 0 15px 45px #3866ad12;
-  padding: 24px;
-  transform: rotate(-4deg);
-}
-.login-art span {
-  font-size: 11px;
-  color: #8a9ab1;
-  display: block;
-}
-.login-art strong {
-  font-size: 18px;
-  font-weight: 500;
-  display: block;
-  margin: 6px 0 18px;
-}
-.art-bars {
-  height: 110px;
-  display: flex;
-  gap: 10px;
-  align-items: flex-end;
-}
-.art-bars i {
-  width: 30px;
-  background: linear-gradient(#5296ff, #d5e6ff);
-  border-radius: 4px 4px 0 0;
-}
-.art-note {
-  background: white;
-  border: 1px solid #dce6f8;
-  position: absolute;
-  right: -28px;
-  bottom: -18px;
-  padding: 15px 20px;
-  border-radius: 10px;
-  display: flex;
-  gap: 10px;
-  color: #1677ff;
-  font-size: 12px;
-  box-shadow: 0 5px 15px #17395910;
+.login-stage {
+  margin: 26px 0 0;
+  max-width: 440px;
 }
 .login-form-area {
   display: flex;
@@ -857,16 +816,10 @@
   width: 100%;
   max-width: 380px;
 }
-.login-symbol {
-  width: 55px;
-  height: 55px;
-  background: #f0f5fd;
-  border: 1px solid #e0e9f9;
-  color: #1677ff;
-  display: grid;
+.login-mark {
+  display: inline-grid;
   place-items: center;
-  border-radius: 14px;
-  margin-bottom: 25px;
+  margin-bottom: 22px;
 }
 .login-form-area h2 {
   font-size: 34px;
@@ -899,6 +852,21 @@
 .dev-login .portal-secondary {
   width: 100%;
   justify-content: space-between;
+  transition: transform 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+}
+.dev-login .portal-secondary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: #9fc0ff;
+}
+.dev-login .portal-secondary:active:not(:disabled) {
+  transform: translateY(0);
+}
+.login-form-area .portal-primary {
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+.login-form-area .portal-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px -12px rgba(22, 119, 255, 0.7);
 }
 .dev-login small {
   font-size: 11px;
