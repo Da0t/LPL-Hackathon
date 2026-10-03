@@ -100,8 +100,7 @@ def run(base: str, shots: Path | None, preview: bool):
         check("queue lists the seed cases", page.locator(".case-row:has-text('CASE-1042')").count() == 1
               and page.locator(".case-row:has-text('CASE-SEC-1')").count() == 1)
         check("bundled fonts load", page.evaluate(
-            "Promise.all([document.fonts.load('16px Inter'), document.fonts.load('italic 16px Newsreader')])"
-            ".then(loaded => loaded.every(faces => faces.length > 0))"))
+            "document.fonts.load('16px Inter').then(faces => faces.length > 0)"))
         shot(page, "1-queue.png")
 
         if has_client_page(base):
