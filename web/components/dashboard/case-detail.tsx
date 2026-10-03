@@ -2,7 +2,8 @@
 
 import React, { useState } from "react";
 import {
-  CheckCircle2, Hand, StickyNote, Send, CalendarCheck, CheckCheck, PenLine, X, AlertTriangle, Sparkles, Workflow,
+  CheckCircle2, Hand, StickyNote, CalendarCheck, CheckCheck, PenLine, X, AlertTriangle, Sparkles, Workflow,
+  ArrowLeft, ShieldAlert, UserCheck, UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -58,7 +59,7 @@ function PrepBrief({ brief, loading, onRegenerate }: { brief: Brief | null; load
           )}
           {brief.cautions?.length > 0 && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">Compliance cautions</p>
+              <p className="text-xs font-semibold text-amber-800">Compliance cautions</p>
               <ul className="mt-1.5 space-y-1">
                 {brief.cautions.map((t, i) => <li key={i} className="text-sm text-amber-900">• {t}</li>)}
               </ul>
@@ -85,15 +86,15 @@ function ActionBar({ onAction, onDraftReply, busy, replyOpen, resolved }: {
   const toggle = (a: AdvisorAction) => { setText(""); setOpen(open === a ? null : a); };
   const submit = () => { if (open) { onAction(open, text.trim() || undefined); setOpen(null); setText(""); } };
   return (
-    <div className="mt-5 rounded-2xl border border-border bg-muted/20 p-3">
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" variant={replyOpen ? "default" : "outline"} disabled={busy || resolved} onClick={() => { setOpen(null); onDraftReply(); }}>
+    <div className="mt-4">
+      <div className="flex flex-wrap gap-2" role="toolbar" aria-label="Request actions">
+        <Button size="sm" variant={replyOpen ? "default" : "secondary"} disabled={busy || resolved} onClick={() => { setOpen(null); onDraftReply(); }}>
           <PenLine className="mr-1.5 h-4 w-4" />Message client
         </Button>
-        <Button size="sm" variant="outline" disabled={busy || resolved} onClick={() => onAction("claim")}><Hand className="mr-1.5 h-4 w-4" />Claim</Button>
-        <Button size="sm" variant="outline" disabled={busy} onClick={() => toggle("note")}><StickyNote className="mr-1.5 h-4 w-4" />Add note</Button>
-        <Button size="sm" variant="outline" disabled={busy || resolved} onClick={() => toggle("schedule")}><CalendarCheck className="mr-1.5 h-4 w-4" />Mark scheduled</Button>
-        <Button size="sm" variant="outline" disabled={busy || resolved} onClick={() => toggle("resolve")}><CheckCheck className="mr-1.5 h-4 w-4" />Resolve</Button>
+        <Button size="sm" variant="secondary" disabled={busy || resolved} onClick={() => onAction("claim")}><Hand className="mr-1.5 h-4 w-4" />Claim</Button>
+        <Button size="sm" variant="secondary" disabled={busy} onClick={() => toggle("note")}><StickyNote className="mr-1.5 h-4 w-4" />Add note</Button>
+        <Button size="sm" variant="secondary" disabled={busy || resolved} onClick={() => toggle("schedule")}><CalendarCheck className="mr-1.5 h-4 w-4" />Mark scheduled</Button>
+        <Button size="sm" variant="secondary" disabled={busy || resolved} onClick={() => toggle("resolve")}><CheckCheck className="mr-1.5 h-4 w-4" />Resolve</Button>
       </div>
       {resolved && <p className="mt-2 text-xs text-muted-foreground">This request is resolved. You can still add a note.</p>}
       {open && form && (
@@ -105,6 +106,62 @@ function ActionBar({ onAction, onDraftReply, busy, replyOpen, resolved }: {
             <Button size="sm" variant="ghost" onClick={() => { setOpen(null); setText(""); }}>Cancel</Button>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// The one thing this request needs from whoever opened it. Triage steps come first: a request nobody
+// owns, or a security concern that has not reached the specialists, outranks everything else on the page.
+function NextAction({ security, escalated, top, candidateCount, assigning, actionBusy, onAssign, onAction, onShowTab }: {
+  security: boolean; escalated: boolean; top?: Candidate; candidateCount: number; assigning: string | null; actionBusy: boolean;
+  onAssign: (advisorId: string, reason: string) => void; onAction: (a: AdvisorAction) => void; onShowTab: (t: CaseTab) => void;
+}) {
+  if (security) {
+    if (escalated) return null;
+    return (
+      <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4">
+        <p className="flex items-center gap-2 text-sm font-semibold text-red-800"><ShieldAlert className="h-4 w-4 text-red-600" />Possible security issue</p>
+        <p className="mt-1 text-sm text-red-700">This goes to the security specialist team, not a general advisor. Send it before anything else.</p>
+        <div className="mt-3 flex flex-wrap items-center gap-4">
+          <Button size="sm" variant="destructive" disabled={actionBusy} onClick={() => onAction("escalate")}>
+            {actionBusy ? "Sending…" : "Send to the security team"}
+          </Button>
+          <button onClick={() => onShowTab("plan")} className="text-sm font-medium text-red-700 underline-offset-2 hover:underline">See the security review</button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-5 rounded-xl border border-primary/30 bg-primary/[0.04] p-4">
+      <p className="flex items-center gap-2 text-sm font-semibold"><UserPlus className="h-4 w-4 text-primary" />No advisor is handling this yet</p>
+      {top ? (
+        <div className="mt-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+          <div className="min-w-0 flex-1 basis-64">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground">Recommended</span>
+              <span className="text-sm font-medium">{top.display_name}</span>
+              {top.available ? <Chip tone="green">Available</Chip> : <Chip tone="amber">At capacity</Chip>}
+              {top.existing_client_relationship && <Chip>Knows this client</Chip>}
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">{top.reason}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            {candidateCount > 1 && (
+              <button onClick={() => onShowTab("assign")} className="text-sm font-medium text-primary underline-offset-2 hover:underline">
+                Compare all {candidateCount}
+              </button>
+            )}
+            <Button size="sm" disabled={!!assigning} onClick={() => onAssign(top.advisor_id, top.reason)}>
+              {assigning === top.advisor_id ? "Assigning…" : `Assign to ${top.display_name.split(" ")[0]}`}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <p className="mt-1 text-sm text-muted-foreground">
+          No advisors were recommended for this request.{" "}
+          <button onClick={() => onShowTab("assign")} className="font-medium text-primary underline-offset-2 hover:underline">See where it is routed</button>
+        </p>
       )}
     </div>
   );
@@ -160,10 +217,9 @@ function Overview({ detail, brief, briefLoading, onLoadBrief, onRegenerateBrief,
             resolved={(detail.history || []).some((h: any) => h.event === "request_resolved")} />
         : <div className="mt-5"><PrepBrief brief={brief} loading={briefLoading} onRegenerate={onRegenerateBrief} /></div>}
 
-      <Section title="What the client asked">
+      <Section title="In the client's own words">
         <blockquote className="rounded-lg border-l-2 border-primary bg-muted/40 p-3 text-sm italic">“{detail.original_words}”</blockquote>
-        <p className="mt-3 text-xs text-muted-foreground">Confirmed by the client as</p>
-        <p className="text-sm">{detail.confirmed_plain_language_request}</p>
+        <p className="mt-2 text-xs text-muted-foreground">The client confirmed the plain-language version at the top of this request.</p>
         <div className="mt-3 flex flex-wrap gap-1.5">
           {(detail.categories || []).map((c: string) => <Chip key={c} tone={c === "fraud_or_security" ? "red" : "muted"}>{prettyCategory(c)}</Chip>)}
         </div>
@@ -196,7 +252,7 @@ function Overview({ detail, brief, briefLoading, onLoadBrief, onRegenerateBrief,
 
       {ac && (
         <Section title="Account on record">
-          <div className="rounded-2xl border border-border bg-card p-4">
+          <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <div className="text-sm font-medium">{ac.account_label || sentence(ac.account_type || "")} <span className="font-normal text-muted-foreground">{ac.masked_identifier}</span></div>
               {typeof ac.balance === "number" && (
@@ -227,7 +283,7 @@ function Assign({ detail, candidates, candMeta, assigning, onAssign, onAction, a
   return (
     <>
       <Section title="Where this request is routed">
-        <div className="rounded-2xl border border-border bg-card p-4">
+        <div className="rounded-xl border border-border bg-card p-4">
           <p className={`text-sm font-medium ${security ? "text-red-700" : ""}`}>{sentence(detail.routing?.destination || candMeta.destination || "Not routed yet")}</p>
           {reason && <p className="mt-1 text-sm text-muted-foreground">{reason}</p>}
           {assigned && <p className="mt-3 flex items-center gap-1.5 text-sm font-medium text-emerald-700"><CheckCircle2 className="h-4 w-4" />Assigned to {assignedName}</p>}
@@ -250,7 +306,7 @@ function Assign({ detail, candidates, candMeta, assigning, onAssign, onAction, a
         ) : (
           <div className="space-y-3">
             {candidates.map((a: Candidate) => (
-              <div key={a.advisor_id} className="flex items-start justify-between gap-4 rounded-2xl border border-border bg-card p-4">
+              <div key={a.advisor_id} className="flex items-start justify-between gap-4 rounded-xl border border-border bg-card p-4">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-sm font-medium">{a.display_name}</span>
@@ -275,7 +331,7 @@ function Assign({ detail, candidates, candMeta, assigning, onAssign, onAction, a
 
 export function CaseDetail({
   detail, row, snapshot, candidates, candMeta, assigning, onAssign, brief, briefLoading, onLoadBrief, onRegenerateBrief,
-  plan, planLoading, onRegeneratePlan, onSendPrepared, onAction, actionBusy, hc, error, onDismissError, onOpenCase, initialTab,
+  plan, planLoading, onRegeneratePlan, onSendPrepared, onAction, actionBusy, hc, error, onDismissError, onOpenCase, initialTab, onBack,
 }: {
   detail: any; row?: CaseRow; snapshot: ClientSnapshot | null; candidates: Candidate[];
   candMeta: { destination?: string; reason?: string }; assigning: string | null;
@@ -286,6 +342,8 @@ export function CaseDetail({
   onAction: (a: AdvisorAction, t?: string, c?: SentCompliance) => void;
   actionBusy: boolean; hc: any; error: string | null; onDismissError: () => void;
   onOpenCase: (id: string) => void; initialTab?: CaseTab;
+  /** Returns to the queue on screens too narrow to show both. */
+  onBack?: () => void;
 }) {
   const [tab, setTab] = useState<CaseTab>(initialTab || "overview");
   const [replyOpen, setReplyOpen] = useState(false);
@@ -296,27 +354,39 @@ export function CaseDetail({
   const assignedName = snapshot?.assigned_advisor?.display_name
     || candidates.find((c) => c.advisor_id === assignedId)?.display_name || "an advisor";
   const priority = row?.priority;
-  const resolved = (detail.history || []).some((h: any) => h.event === "request_resolved");
+  const history: any[] = detail.history || [];
+  const resolved = history.some((h) => h.event === "request_resolved");
+  const escalated = history.some((h) => h.event === "escalated_to_security");
+  const needsTriage = !resolved && (security ? !escalated : !assignedId);
+  const showTab = (t: CaseTab) => setTab(t);
 
   return (
-    <div className="mx-auto max-w-3xl p-6 lg:p-8">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight">{detail.client_display_name}</h2>
-          <p className="mt-1 flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
-            <span>{statusLabel(detail.status)}</span>
-            {assignedId && <span>· {assignedName}</span>}
-            <span>· Received {timeAgo(detail.created_at)}</span>
-            {row?.intake && <span>· Intake took {row.intake.turns} turn{row.intake.turns === 1 ? "" : "s"}, {row.intake.seconds_to_confirm}s</span>}
-            <span className="text-xs">· {detail.case_id}</span>
-          </p>
-        </div>
+    <div className="mx-auto max-w-3xl px-5 pb-16 pt-4 lg:px-8 lg:pt-8">
+      {onBack && (
+        <button onClick={onBack} className="-ml-1.5 mb-3 flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm text-muted-foreground hover:text-foreground lg:hidden">
+          <ArrowLeft className="h-4 w-4" /> Requests
+        </button>
+      )}
+      <h2 className="text-2xl font-semibold tracking-tight">{detail.client_display_name}</h2>
+      <p className="mt-1.5 text-[15px] leading-relaxed text-foreground/85">{detail.confirmed_plain_language_request}</p>
+      <div className="mt-3 flex flex-wrap items-center gap-1.5">
         {priority && (
-          <span className={`flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-sm ${PRIORITY_TEXT[priority.level]}`}>
-            <span className={`h-2 w-2 rounded-full ${PRIORITY_DOT[priority.level]}`} />{priority.reason}
+          <span className={`flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-card px-2 py-0.5 text-xs font-medium ${PRIORITY_TEXT[priority.level]}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${PRIORITY_DOT[priority.level]}`} />{priority.reason}
           </span>
         )}
+        {!assignedId && <Chip>{statusLabel(detail.status)}</Chip>}
+        {assignedId ? (
+          <Chip tone="green"><UserCheck className="-mt-0.5 mr-1 inline h-3 w-3" />{assignedName}</Chip>
+        ) : !security && !resolved ? (
+          <span className="whitespace-nowrap rounded-md border border-dashed border-primary/40 px-2 py-0.5 text-xs text-primary">Unassigned</span>
+        ) : null}
       </div>
+      <p className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+        <span>Received {timeAgo(detail.created_at)}</span>
+        {row?.intake && <span>Intake took {row.intake.turns} turn{row.intake.turns === 1 ? "" : "s"} and {row.intake.seconds_to_confirm}s</span>}
+        <span className="tabular-nums">{detail.case_id}</span>
+      </p>
 
       {error && (
         <div role="alert" className="mt-4 flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
@@ -325,18 +395,24 @@ export function CaseDetail({
         </div>
       )}
 
+      {needsTriage && (
+        <NextAction security={!!security} escalated={escalated} top={candidates[0]} candidateCount={candidates.length}
+          assigning={assigning} actionBusy={actionBusy} onAssign={onAssign} onAction={onAction} onShowTab={showTab} />
+      )}
+
       <ActionBar onAction={onAction} onDraftReply={() => setReplyOpen((v) => !v)} busy={actionBusy} replyOpen={replyOpen} resolved={resolved} />
       {replyOpen && !resolved && (
         <ReplyPanel caseId={detail.case_id} busy={actionBusy} onClose={() => setReplyOpen(false)}
           onSend={(text, compliance) => onAction("clarify", text, compliance)} />
       )}
 
-      <div role="tablist" className="mt-6 flex gap-1 overflow-x-auto border-b border-border">
+      <div role="tablist" className="sticky top-0 z-10 -mx-1 mt-6 flex gap-1 overflow-x-auto border-b border-border bg-background px-1">
         {TABS.map((t) => (
           <button key={t.key} role="tab" aria-selected={tab === t.key} onClick={() => setTab(t.key)}
             className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
               tab === t.key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
             {t.key === "plan" && security ? "Security review" : t.label}
+            {t.key === "assign" && needsTriage && <span aria-label="needs attention" className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-primary align-middle" />}
           </button>
         ))}
       </div>
