@@ -1,16 +1,37 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap");
+/* Fonts are bundled so the page looks the same without internet access. */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("fonts/inter.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Newsreader";
+  font-style: normal;
+  font-weight: 400 500;
+  font-display: swap;
+  src: url("fonts/newsreader.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Newsreader";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/newsreader-italic.woff2") format("woff2");
+}
 
 :root {
-  --ink: #203d35;
-  --muted: #596960;
-  --green: #234e44;
-  --light: #eef2e8;
-  --paper: #faf9f5;
-  --line: #d7ddd1;
-  --accent: #caddaa;
+  --ink: #0f0e0d;
+  --muted: #57544e;
+  --green: #0f0e0d;
+  --light: #f2f1f0;
+  --paper: #fafaf9;
+  --line: #e5e5e3;
+  --accent: #e6e2ff;
   --white: #fff;
-  --error: #8e2c23;
-  font-family: "DM Sans", system-ui, sans-serif;
+  --error: #b3261e;
+  font-family: "Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   color: var(--ink);
   background: var(--paper);
   font-synthesis: none;
@@ -61,7 +82,7 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 summary:focus-visible {
-  outline: 3px solid #887126;
+  outline: 3px solid #0f0e0d;
   outline-offset: 4px;
 }
 button.primary {
@@ -73,7 +94,7 @@ button.primary {
   gap: 24px;
 }
 button.primary:not(:disabled):hover {
-  background: #153c32;
+  background: #33312e;
 }
 .secondary {
   background: white;
@@ -133,7 +154,7 @@ button.primary:not(:disabled):hover {
   border-bottom: 1px solid var(--line);
 }
 .brand {
-  font-family: Manrope, system-ui, sans-serif;
+  font-family: "Newsreader", "Iowan Old Style", Georgia, serif;
   font-weight: 800;
   font-size: 30px;
   letter-spacing: -1.6px;
@@ -144,7 +165,7 @@ button.primary:not(:disabled):hover {
   gap: 8px;
 }
 .brand-dot {
-  color: #83916c;
+  color: #adaba5;
   margin-left: -8px;
 }
 .brand-icon {
@@ -170,7 +191,7 @@ button.primary:not(:disabled):hover {
 }
 .demo-badge span {
   font-size: 9px;
-  color: #69874b;
+  color: #1ea33a;
   margin-right: 5px;
 }
 main {
@@ -224,13 +245,13 @@ main {
   font-weight: 700;
   letter-spacing: 0.13em;
   text-transform: uppercase;
-  color: #5b7151;
+  color: #706d66;
   margin: 0 0 14px;
 }
 h1,
 h2,
 h3 {
-  font-family: Manrope, system-ui, sans-serif;
+  font-family: "Newsreader", "Iowan Old Style", Georgia, serif;
   line-height: 1.15;
   font-weight: 600;
   margin-top: 0;
@@ -260,7 +281,7 @@ h1 {
   align-items: center;
 }
 .promise span {
-  color: #537a42;
+  color: #165020;
 }
 .promise span:nth-child(2) {
   margin-left: 12px;
@@ -273,7 +294,7 @@ h1 {
 }
 .welcome-panel {
   padding: 34px;
-  box-shadow: 0 14px 35px #243e3410;
+  box-shadow: 0 14px 35px #0f0e0d0a;
 }
 .small-icon {
   display: inline-grid;
@@ -303,7 +324,7 @@ input,
 select,
 textarea {
   width: 100%;
-  border: 1px solid #abb8a9;
+  border: 1px solid #cccac6;
   background: #fff;
   border-radius: 8px;
   color: var(--ink);
@@ -318,7 +339,7 @@ textarea {
 }
 textarea::placeholder,
 input::placeholder {
-  color: #69746a;
+  color: #706d66;
   opacity: 1;
 }
 textarea:focus,
@@ -368,7 +389,7 @@ select:focus {
 }
 .words-panel textarea {
   min-height: 150px;
-  background: #fdfdfa;
+  background: #ffffff;
   font-size: 20px;
 }
 .words-panel .fine {
@@ -437,7 +458,7 @@ hr {
   text-align: left;
   min-width: 220px;
   background: white;
-  border: 1px solid #afbda5;
+  border: 1px solid #cccac6;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -507,7 +528,7 @@ details p {
   gap: 24px;
 }
 .original-panel {
-  background: #eff2e9;
+  background: #f2f1f0;
 }
 .original-panel blockquote {
   margin: 0;
@@ -544,8 +565,8 @@ details p {
   margin-top: 24px;
 }
 .notice {
-  background: #eef2e8;
-  border-left: 3px solid #80976a;
+  background: #f2f1f0;
+  border-left: 3px solid #0f0e0d;
   border-radius: 4px;
   padding: 12px 16px;
   font-size: 15px;
@@ -592,7 +613,7 @@ details p {
   color: var(--muted);
 }
 .case-number strong {
-  font-family: Manrope, system-ui, sans-serif;
+  font-family: "Newsreader", "Iowan Old Style", Georgia, serif;
   letter-spacing: 0.05em;
   font-size: 26px;
 }
@@ -614,7 +635,7 @@ details p {
 }
 .site-footer span span {
   padding: 0 10px;
-  color: #a4aea0;
+  color: #adaba5;
 }
 @media (min-width: 1000px) and (max-height: 850px) {
   .site-header {
@@ -900,4 +921,47 @@ details p {
   .review-panel label:not(:first-child) {
     margin-top: 8px;
   }
+}
+
+/* ---------- Shared SamePage look (matches the staff page) ----------
+   Warm ivory and ink, Inter for the interface, a serif for titles and the client's own
+   words. Sizes above are unchanged so the large, readable type for clients stays. */
+body {
+  letter-spacing: -0.006em;
+  -webkit-font-smoothing: antialiased;
+}
+h1,
+h2,
+h3,
+.brand,
+.case-number strong {
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+.case-number strong {
+  letter-spacing: 0;
+}
+.eyebrow {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+}
+.demo-badge {
+  letter-spacing: 0;
+}
+button {
+  border-radius: 6px;
+  font-weight: 500;
+}
+.panel {
+  border-radius: 10px;
+}
+.brand-icon,
+.small-icon {
+  border-radius: 8px;
+}
+.original-panel blockquote {
+  font-family: "Newsreader", "Iowan Old Style", Georgia, serif;
+  font-style: italic;
+  letter-spacing: -0.01em;
 }
