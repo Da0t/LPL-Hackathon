@@ -2,33 +2,18 @@
 @font-face {
   font-family: "Inter";
   font-style: normal;
-  font-weight: 400 700;
+  font-weight: 300 700;
   font-display: swap;
   src: url("fonts/inter.woff2") format("woff2");
 }
-@font-face {
-  font-family: "Newsreader";
-  font-style: normal;
-  font-weight: 400 500;
-  font-display: swap;
-  src: url("fonts/newsreader.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Newsreader";
-  font-style: italic;
-  font-weight: 400;
-  font-display: swap;
-  src: url("fonts/newsreader-italic.woff2") format("woff2");
-}
-
 :root {
-  --ink: #0f0e0d;
-  --muted: #57544e;
-  --green: #0f0e0d;
-  --light: #f2f1f0;
-  --paper: #fafaf9;
-  --line: #e5e5e3;
-  --accent: #e6e2ff;
+  --ink: #1f1f1d;
+  --muted: #55534e;
+  --green: #1f1f1d;
+  --light: #f4f2f0;
+  --paper: #f4f2f0;
+  --line: #e0dcd6;
+  --accent: #e4f222;
   --white: #fff;
   --error: #b3261e;
   font-family: "Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -154,7 +139,7 @@ button.primary:not(:disabled):hover {
   border-bottom: 1px solid var(--line);
 }
 .brand {
-  font-family: "Newsreader", "Iowan Old Style", Georgia, serif;
+  font-family: "Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   font-weight: 800;
   font-size: 30px;
   letter-spacing: -1.6px;
@@ -251,7 +236,7 @@ main {
 h1,
 h2,
 h3 {
-  font-family: "Newsreader", "Iowan Old Style", Georgia, serif;
+  font-family: "Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   line-height: 1.15;
   font-weight: 600;
   margin-top: 0;
@@ -613,7 +598,7 @@ details p {
   color: var(--muted);
 }
 .case-number strong {
-  font-family: "Newsreader", "Iowan Old Style", Georgia, serif;
+  font-family: "Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   letter-spacing: 0.05em;
   font-size: 26px;
 }
@@ -924,8 +909,9 @@ details p {
 }
 
 /* ---------- Shared SamePage look (matches the staff page) ----------
-   Warm ivory and ink, Inter for the interface, a serif for titles and the client's own
-   words. Sizes above are unchanged so the large, readable type for clients stays. */
+   After Ramp: warm off-white canvas, white cards, near-black text, a yellow primary
+   action, and regular-weight display type. Inter stands in for Ramp's commercial
+   Lausanne. Sizes above are unchanged so the large, readable type for clients stays. */
 body {
   letter-spacing: -0.006em;
   -webkit-font-smoothing: antialiased;
@@ -933,13 +919,16 @@ body {
 h1,
 h2,
 h3,
-.brand,
-.case-number strong {
+.brand {
   font-weight: 400;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.035em;
+}
+.brand {
+  font-weight: 600;
 }
 .case-number strong {
-  letter-spacing: 0;
+  font-weight: 500;
+  letter-spacing: -0.02em;
 }
 .eyebrow {
   text-transform: none;
@@ -953,15 +942,28 @@ button {
   border-radius: 6px;
   font-weight: 500;
 }
+button.primary,
+button.primary:not(:disabled):hover {
+  background: #e4f222;
+  color: #1f1f1d;
+}
+button.primary:not(:disabled):hover {
+  background: #d5e31a;
+}
 .panel {
-  border-radius: 10px;
+  border-radius: 12px;
+  border-color: transparent;
 }
 .brand-icon,
 .small-icon {
   border-radius: 8px;
 }
 .original-panel blockquote {
-  font-family: "Newsreader", "Iowan Old Style", Georgia, serif;
-  font-style: italic;
-  letter-spacing: -0.01em;
+  font-weight: 300;
+  letter-spacing: -0.03em;
+}
+.definitions details,
+.original-panel,
+.notice {
+  background: #fff;
 }
