@@ -50,18 +50,25 @@ export default function DashboardPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [hc, setHc] = useState<any>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true); setError(null);
-    try { setCases((await getCases()).cases || []); }
-    catch (e) { setError(e instanceof ApiError ? e.message : "Could not load the request queue."); }
+  const load = useCallback(async (quiet = false) => {
+    if (!quiet) { setLoading(true); setError(null); }
+    try { setCases((await getCases()).cases || []); if (quiet) setError(null); }
+    catch (e) { if (!quiet) setError(e instanceof ApiError ? e.message : "Could not load the request queue."); }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
+  // New requests and client replies arrive from elsewhere, so keep the queue current while the tab is visible.
+  useEffect(() => {
+    const tick = () => { if (document.visibilityState === "visible") load(true); };
+    const timer = setInterval(tick, 15000);
+    document.addEventListener("visibilitychange", tick);
+    return () => { clearInterval(timer); document.removeEventListener("visibilitychange", tick); };
+  }, [load]);
   useEffect(() => { health().then(setHc).catch(() => setHc(null)); }, []);
 
-  const loadBrief = useCallback(async (id: string) => {
+  const loadBrief = useCallback(async (id: string, refresh = false) => {
     setBrief(null); setBriefLoading(true);
-    try { setBrief(await getBrief(id)); } catch { setBrief(null); } finally { setBriefLoading(false); }
+    try { setBrief(await getBrief(id, refresh)); } catch { setBrief(null); } finally { setBriefLoading(false); }
   }, []);
 
   // Reloads the case without touching the brief, so acting on a case does not re-run the briefing agent.
@@ -98,7 +105,7 @@ export default function DashboardPage() {
   const doAssign = async (advisor_id: string, reason: string) => {
     if (!selectedId) return;
     setAssigning(advisor_id); setActionError(null);
-    try { await assignCase(selectedId, advisor_id, reason || "Assigned by staff."); await Promise.all([load(), refreshCase(selectedId, false)]); }
+    try { await assignCase(selectedId, advisor_id, reason || "Assigned by staff."); await Promise.all([load(true), refreshCase(selectedId, false)]); }
     catch (e) { setActionError(e instanceof ApiError ? e.message : "The assignment did not go through. Try again."); }
     finally { setAssigning(null); }
   };
@@ -108,7 +115,7 @@ export default function DashboardPage() {
     setActionBusy(true); setActionError(null);
     try {
       await caseAction(selectedId, action, text, compliance);
-      await Promise.all([load(), refreshCase(selectedId, false)]);
+      await Promise.all([load(true), refreshCase(selectedId, false)]);
     } catch (e) { setActionError(e instanceof ApiError ? e.message : "That did not go through. Try again."); }
     finally { setActionBusy(false); }
   };
@@ -284,7 +291,7 @@ export default function DashboardPage() {
                 <CaseDetail
                   key={selectedId} detail={detail} row={cases.find((c) => c.case_id === selectedId)} snapshot={snapshot}
                   candidates={candidates} candMeta={candMeta} assigning={assigning} onAssign={doAssign}
-                  brief={brief} briefLoading={briefLoading} onRegenerateBrief={() => selectedId && loadBrief(selectedId)}
+                  brief={brief} briefLoading={briefLoading} onRegenerateBrief={() => selectedId && loadBrief(selectedId, true)}
                   onAction={doAction} actionBusy={actionBusy} hc={hc}
                   error={actionError} onDismissError={() => setActionError(null)}
                   onOpenCase={(id) => openCase(id)} initialTab={initialTab}
@@ -436,9 +443,9 @@ function ImpactView({ impact }: { impact: any }) {
       )}
       <h2 className="mt-10 text-sm font-mono uppercase tracking-wider text-muted-foreground">Advisor capacity model</h2>
       <CapacityModel />
-      <h2 className="mt-10 text-sm font-mono uppercase tracking-wider text-muted-foreground">Why it matters , at scale</h2>
+      <h2 className="mt-10 text-sm font-mono uppercase tracking-wider text-muted-foreground">Why it matters at scale</h2>
       <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Tile big="61.2M" label="Americans are 65+ , the clients who struggle most with financial terms." />
+        <Tile big="61.2M" label="Americans are 65+, the clients who struggle most with financial terms." />
         <Tile big="<50%" label="of an advisor's time goes to direct client work today (Kitces)." />
         <Tile big="$2.6T" label="assets & about 32,500 advisors at LPL Financial alone." />
       </div>

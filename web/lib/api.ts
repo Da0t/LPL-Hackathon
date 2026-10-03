@@ -113,6 +113,16 @@ export const confirmIntake = (
 export const getDemoClients = () =>
   call<{ clients: { client_id: string; display_name: string }[] }>("/demo/clients", { role: "client" });
 
+// ---- The client's own requests after intake ----
+export type MyRequest = {
+  case_id: string; created_at: string; request: string; lifecycle: Lifecycle; awaiting_reply: boolean;
+  messages: { from: "advisor" | "client"; text: string; at: string }[];
+};
+export const getMyRequests = (clientId: string) =>
+  call<{ requests: MyRequest[] }>("/my/requests", { role: "client", clientId });
+export const replyToRequest = (clientId: string, caseId: string, text: string) =>
+  call<MyRequest>(`/my/requests/${encodeURIComponent(caseId)}/reply`, { method: "POST", role: "client", clientId, body: { text } });
+
 // ---- Staff ----
 export const getCases = () => call<{ cases: CaseRow[] }>("/staff/cases", { role: "staff" });
 export const getCase = (id: string) => call<any>(`/staff/cases/${encodeURIComponent(id)}`, { role: "staff" });
@@ -127,10 +137,12 @@ export type Brief = {
   case_id: string; ai_mode: string; note: string | null;
   headline: string; talking_points: string[]; confirm: string[]; cautions: string[];
 };
-export const getBrief = (id: string) =>
-  call<Brief>(`/staff/cases/${encodeURIComponent(id)}/brief`, { method: "POST", role: "staff" });
+// Agent endpoints reuse their last answer for an unchanged case; `refresh` asks for a new one.
+export const getBrief = (id: string, refresh = false) =>
+  call<Brief>(`/staff/cases/${encodeURIComponent(id)}/brief`, { method: "POST", role: "staff", body: { refresh } });
 
-export type AdvisorAction = "claim" | "note" | "clarify" | "schedule" | "resolve";
+export type AdvisorAction = "claim" | "note" | "clarify" | "schedule" | "resolve" | "escalate";
+// The server re-checks a message itself before sending; only `override` is honoured from here.
 export type SentCompliance = { verdict: "pass" | "needs_changes"; override: boolean };
 export const caseAction = (id: string, action: AdvisorAction, text?: string, compliance?: SentCompliance) =>
   call<{ case_id: string; status: string; event: { event: string; at: string; details: Record<string, unknown> } }>(
@@ -156,8 +168,8 @@ export const complianceReview = (id: string, draft?: string) =>
 // ---- Advisor agents: next-steps planner + fraud investigator ----
 export type PlanStep = { title: string; detail: string; owner: "advisor" | "client" | "operations" };
 export type NextSteps = { case_id: string; ai_mode: string; note: string | null; summary: string; steps: PlanStep[] };
-export const getNextSteps = (id: string) =>
-  call<NextSteps>(`/staff/cases/${encodeURIComponent(id)}/next-steps`, { method: "POST", role: "staff", body: {} });
+export const getNextSteps = (id: string, refresh = false) =>
+  call<NextSteps>(`/staff/cases/${encodeURIComponent(id)}/next-steps`, { method: "POST", role: "staff", body: { refresh } });
 
 export type TimelineEntry = {
   date: string; type: string; label: string; detail: string; account: string | null; source_id: string; highlight: boolean;
@@ -166,8 +178,8 @@ export type Investigation = {
   case_id: string; ai_mode: string; note: string | null;
   risk_level: "low" | "medium" | "high"; reasons: string[]; recommended_steps: string[]; timeline: TimelineEntry[];
 };
-export const getInvestigation = (id: string) =>
-  call<Investigation>(`/staff/cases/${encodeURIComponent(id)}/investigation`, { method: "POST", role: "staff", body: {} });
+export const getInvestigation = (id: string, refresh = false) =>
+  call<Investigation>(`/staff/cases/${encodeURIComponent(id)}/investigation`, { method: "POST", role: "staff", body: { refresh } });
 
 // ---- Client snapshot (records only, no model) ----
 export type AdvisorRef = { advisor_id: string; display_name: string };

@@ -17,9 +17,9 @@ export function NextStepsPanel({ caseId }: { caseId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<Record<number, boolean>>({});
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (refresh = false) => {
     setLoading(true); setError(null); setDone({});
-    try { setPlan(await getNextSteps(caseId)); }
+    try { setPlan(await getNextSteps(caseId, refresh)); }
     catch (e) { setError(e instanceof ApiError ? e.message : "Could not prepare the plan."); }
     finally { setLoading(false); }
   }, [caseId]);
@@ -27,7 +27,7 @@ export function NextStepsPanel({ caseId }: { caseId: string }) {
 
   const finished = plan ? plan.steps.filter((_, i) => done[i]).length : 0;
   return (
-    <AgentCard title="Next steps" agent="Planning agent" loading={loading} onRefresh={load}>
+    <AgentCard title="Next steps" agent="Planning agent" loading={loading} onRefresh={() => load(true)}>
       {loading && <p className="text-sm text-muted-foreground">Working out what has to happen next…</p>}
       {error && <p className="text-sm text-red-600">{error}</p>}
       {!loading && plan && (

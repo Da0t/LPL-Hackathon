@@ -197,8 +197,10 @@ function Overview({ detail, brief, briefLoading, onRegenerateBrief }: any) {
   );
 }
 
-function Assign({ detail, candidates, candMeta, assigning, onAssign, security, assignedName }: any) {
-  const assigned = !!detail.routing?.assigned_advisor_id;
+function Assign({ detail, candidates, candMeta, assigning, onAssign, onAction, actionBusy, security, assignedName }: any) {
+  const assignedId = detail.routing?.assigned_advisor_id;
+  const assigned = !!assignedId;
+  const escalated = (detail.history || []).some((h: any) => h.event === "escalated_to_security");
   // Routing reasons arrive with raw category codes in quotes; show the category's name instead.
   const reason = (detail.routing?.reason || candMeta.reason || "").replace(/'([a-z_]+)'/g, (_: string, c: string) => `“${prettyCategory(c)}”`);
   return (
@@ -212,9 +214,16 @@ function Assign({ detail, candidates, candMeta, assigning, onAssign, security, a
       </Section>
       <Section title={security ? "Specialist review" : "Recommended advisors"}>
         {security ? (
-          <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            This request involves a possible security concern. It goes to the <b>security specialist team</b>, not a general advisor.
-          </p>
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            <p>This request involves a possible security concern. It goes to the <b>security specialist team</b>, not a general advisor.</p>
+            {escalated ? (
+              <p className="mt-3 flex items-center gap-1.5 font-medium text-emerald-700"><CheckCircle2 className="h-4 w-4" />Sent to the security specialist team</p>
+            ) : (
+              <Button size="sm" className="mt-3" disabled={actionBusy} onClick={() => onAction("escalate")}>
+                {actionBusy ? "Sending…" : "Send to the security team"}
+              </Button>
+            )}
+          </div>
         ) : candidates.length === 0 ? (
           <p className="text-sm text-muted-foreground">No advisors were recommended for this request.</p>
         ) : (
@@ -230,8 +239,9 @@ function Assign({ detail, candidates, candMeta, assigning, onAssign, security, a
                   <div className="mt-1.5 flex flex-wrap gap-1">{(a.specialties || []).map((s) => <Chip key={s}>{prettyCategory(s)}</Chip>)}</div>
                   <p className="mt-2 text-sm text-muted-foreground">{a.reason}</p>
                 </div>
-                <Button size="sm" className="shrink-0" disabled={!!assigning || assigned} onClick={() => onAssign(a.advisor_id, a.reason)}>
-                  {assigning === a.advisor_id ? "Assigning…" : detail.routing?.assigned_advisor_id === a.advisor_id ? "Assigned" : "Assign"}
+                <Button size="sm" className="shrink-0" variant={assigned && assignedId !== a.advisor_id ? "outline" : "default"}
+                  disabled={!!assigning || assignedId === a.advisor_id} onClick={() => onAssign(a.advisor_id, a.reason)}>
+                  {assigning === a.advisor_id ? "Assigning…" : assignedId === a.advisor_id ? "Assigned" : assigned ? "Reassign" : "Assign"}
                 </Button>
               </div>
             ))}
@@ -316,7 +326,7 @@ export function CaseDetail({
       {tab === "client" && <ClientSnapshotPanel snapshot={snapshot} onOpenCase={onOpenCase} />}
       {tab === "assign" && (
         <Assign detail={detail} candidates={candidates} candMeta={candMeta} assigning={assigning} onAssign={onAssign}
-          security={security} assignedName={assignedName} />
+          onAction={onAction} actionBusy={actionBusy} security={security} assignedName={assignedName} />
       )}
       {tab === "compliance" && (
         <>

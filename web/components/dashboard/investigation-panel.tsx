@@ -16,16 +16,16 @@ export function InvestigationPanel({ caseId }: { caseId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (refresh = false) => {
     setLoading(true); setError(null);
-    try { setInv(await getInvestigation(caseId)); }
+    try { setInv(await getInvestigation(caseId, refresh)); }
     catch (e) { setError(e instanceof ApiError ? e.message : "Could not run the security review."); }
     finally { setLoading(false); }
   }, [caseId]);
   useEffect(() => { load(); }, [load]);
 
   return (
-    <AgentCard title="Security review" agent="Investigation agent" loading={loading} onRefresh={load} refreshLabel="Re-run">
+    <AgentCard title="Security review" agent="Investigation agent" loading={loading} onRefresh={() => load(true)} refreshLabel="Re-run">
       {loading && <p className="text-sm text-muted-foreground">Checking the account records…</p>}
       {error && <p className="text-sm text-red-600">{error}</p>}
       {!loading && inv && (

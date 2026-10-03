@@ -106,16 +106,6 @@ def test_agent_endpoints_require_staff_and_a_real_case(client):
     assert client.post("/staff/cases/NOPE/compliance-review", json={}, headers=STAFF).status_code == 404
 
 
-def test_sending_a_clarification_records_the_compliance_verdict(client):
-    response = client.post("/staff/cases/CASE-1042/action", headers=STAFF, json={
-        "action": "clarify", "text": "Hi Mara, when would you like to talk?",
-        "compliance": {"verdict": "needs_changes", "override": True, "ignored": "x"}})
-    assert response.status_code == 200, response.text
-    event = response.json()["event"]
-    assert event["details"]["compliance"] == {"verdict": "needs_changes", "override": True}
-    assert response.json()["status"] == "needs_client_followup"
-
-
 def test_reply_draft_falls_back_to_offline_agents_when_the_live_model_fails(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
 

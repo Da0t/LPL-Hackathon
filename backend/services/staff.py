@@ -19,6 +19,8 @@ log = logging.getLogger("samepage.staff")
 class StaffService:
     def __init__(self, store: Store):
         self.store = store
+        self._agent_cache: dict[tuple[str, str], tuple[Any, dict[str, Any], str | None]] = {}
+        self._verdicts: dict[tuple[str, str], str] = {}  # (case_id, message text) -> compliance verdict
 
     def _case(self, case_id: str) -> dict[str, Any]:
         case = self.store.get_case(case_id)
@@ -79,21 +81,25 @@ class StaffService:
 
     # ---- advisor workspace (additive; brief is read-only, actions use history) ----
 
-    def brief(self, case_id: str, ai_mode: str = "mock") -> dict[str, Any]:
+    def _cached(self, kind: str, case: dict[str, Any], ai_mode: str, refresh: bool,
+                produce: Callable[[], tuple[dict[str, Any], str | None]]) -> tuple[dict[str, Any], str | None]:
+        """Reuse an agent's last answer for a case until the case changes or the advisor regenerates.
+        A live-mode fallback is never kept, so the model is tried again on the next view."""
+        slot, version = (kind, case["case_id"]), case.get("updated_at")
+        hit = self._agent_cache.get(slot)
+        if hit and hit[0] == version and not refresh:
+            return hit[1], hit[2]
+        result, note = produce()
+        if ai_mode != "bedrock" or note is None:
+            self._agent_cache[slot] = (version, result, note)
+        return result, note
+
+    def brief(self, case_id: str, ai_mode: str = "mock", refresh: bool = False) -> dict[str, Any]:
         """Read-only Bedrock-generated advisor prep brief. Never mutates the case."""
         case = self._case(case_id)
         from backend.aws import bedrock_agent as ba  # local import keeps layering light
-        note = None
-        if ai_mode == "bedrock":
-            try:
-                raw = ba.advisor_brief(case)
-            except Exception as exc:  # noqa: BLE001 , fall back so the demo never dead-ends
-                log.warning("advisor_brief fell back to offline: %s", exc)
-                raw = ba._stub_brief(case)
-                note = "Generated offline (model temporarily unavailable)."
-        else:
-            raw = ba._stub_brief(case)
-            note = "Deterministic brief (set SAMEPAGE_AI_MODE=bedrock for the live model)."
+        raw, note = self._cached("brief", case, ai_mode, refresh, lambda: self._run_agent(
+            ai_mode, lambda: ba.advisor_brief(case), lambda: ba._stub_brief(case), "brief"))
         return {"case_id": case_id, "ai_mode": ai_mode, "note": note, **raw}
 
     def _agent_facts(self, case: dict[str, Any]) -> dict[str, Any]:
@@ -115,11 +121,13 @@ class StaffService:
             log.warning("%s fell back to offline: %s", what, exc)
             return offline(), "Generated offline (model temporarily unavailable)."
 
-    def next_steps(self, case_id: str, ai_mode: str = "mock") -> dict[str, Any]:
+    def next_steps(self, case_id: str, ai_mode: str = "mock", refresh: bool = False) -> dict[str, Any]:
         """Next-steps planner agent. Never mutates the case."""
-        facts = self._agent_facts(self._case(case_id))
+        case = self._case(case_id)
+        facts = self._agent_facts(case)
         from backend.aws import advisor_agents as aa
-        result, note = self._run_agent(ai_mode, lambda: aa.plan_next_steps(facts), lambda: aa.stub_plan_next_steps(facts), "plan")
+        result, note = self._cached("plan", case, ai_mode, refresh, lambda: self._run_agent(
+            ai_mode, lambda: aa.plan_next_steps(facts), lambda: aa.stub_plan_next_steps(facts), "plan"))
         return {"case_id": case_id, "ai_mode": ai_mode, "note": note, **result}
 
     def _timeline(self, case: dict[str, Any]) -> list[dict[str, Any]]:
@@ -136,15 +144,15 @@ class StaffService:
                         "source_id": case["case_id"], "highlight": True})
         return sorted(entries, key=lambda t: t["date"])
 
-    def investigation(self, case_id: str, ai_mode: str = "mock") -> dict[str, Any]:
+    def investigation(self, case_id: str, ai_mode: str = "mock", refresh: bool = False) -> dict[str, Any]:
         """Fraud investigator agent for security cases. The timeline is record-built; never mutates the case."""
         case = self._case(case_id)
         if "fraud_or_security" not in case.get("categories", []):
             raise ApiError(400, "NOT_A_SECURITY_CASE", "The investigation is only available for security cases.")
         facts, timeline = self._agent_facts(case), self._timeline(case)
         from backend.aws import advisor_agents as aa
-        result, note = self._run_agent(ai_mode, lambda: aa.investigate_security(facts, timeline),
-                                       lambda: aa.stub_investigate_security(facts, timeline), "assessment")
+        result, note = self._cached("investigation", case, ai_mode, refresh, lambda: self._run_agent(
+            ai_mode, lambda: aa.investigate_security(facts, timeline), lambda: aa.stub_investigate_security(facts, timeline), "assessment"))
         return {"case_id": case_id, "ai_mode": ai_mode, "note": note, "timeline": timeline, **result}
 
     def client_snapshot(self, case_id: str) -> dict[str, Any]:
@@ -181,17 +189,11 @@ class StaffService:
         facts = self._agent_facts(self._case(case_id))
         instruction = (instruction or "").strip() or None
         from backend.aws import advisor_agents as aa
-        note = None
-        if ai_mode == "bedrock":
-            try:
-                result = run_reply_workflow(facts, instruction, aa.draft_reply, aa.compliance_review)
-            except Exception as exc:  # noqa: BLE001 , fall back so the demo never dead-ends
-                log.warning("reply workflow fell back to offline: %s", exc)
-                result = run_reply_workflow(facts, instruction, aa.stub_draft_reply, aa.stub_compliance_review)
-                note = "Generated offline (model temporarily unavailable)."
-        else:
-            result = run_reply_workflow(facts, instruction, aa.stub_draft_reply, aa.stub_compliance_review)
-            note = "Deterministic agents (set SAMEPAGE_AI_MODE=bedrock for the live model)."
+        result, note = self._run_agent(
+            ai_mode,
+            lambda: run_reply_workflow(facts, instruction, aa.draft_reply, aa.compliance_review),
+            lambda: run_reply_workflow(facts, instruction, aa.stub_draft_reply, aa.stub_compliance_review), "agents")
+        self._verdicts[(case_id, result["draft"].strip())] = result["review"]["verdict"]
         return {"case_id": case_id, "ai_mode": ai_mode, "note": note, **result}
 
     def compliance_review(self, case_id: str, draft: str | None = None, ai_mode: str = "mock") -> dict[str, Any]:
@@ -199,18 +201,15 @@ class StaffService:
         facts = self._agent_facts(self._case(case_id))
         draft = (draft or "").strip() or None
         from backend.aws import advisor_agents as aa
-        note = None
-        if ai_mode == "bedrock":
-            try:
-                result = aa.compliance_review(facts, draft)
-            except Exception as exc:  # noqa: BLE001
-                log.warning("compliance_review fell back to offline: %s", exc)
-                result = aa.stub_compliance_review(facts, draft)
-                note = "Reviewed offline (model temporarily unavailable)."
-        else:
-            result = aa.stub_compliance_review(facts, draft)
-            note = "Deterministic review (set SAMEPAGE_AI_MODE=bedrock for the live model)."
+        result, note = self._run_agent(ai_mode, lambda: aa.compliance_review(facts, draft),
+                                       lambda: aa.stub_compliance_review(facts, draft), "review")
+        if draft:
+            self._verdicts[(case_id, draft)] = result["verdict"]
         return {"case_id": case_id, "ai_mode": ai_mode, "note": note, **result}
+
+    def _message_verdict(self, case_id: str, text: str, ai_mode: str) -> str:
+        """The reviewer's verdict on exactly this text: the one already given, or a fresh review."""
+        return self._verdicts.get((case_id, text)) or self.compliance_review(case_id, text, ai_mode)["verdict"]
 
     _ACTIONS = {
         "claim": "advisor_claimed",
@@ -218,25 +217,38 @@ class StaffService:
         "clarify": "clarification_requested",
         "schedule": "meeting_scheduled",
         "resolve": "request_resolved",
+        "escalate": "escalated_to_security",
     }
 
-    def action(self, case_id: str, action: str, text: str | None = None, compliance: dict[str, Any] | None = None) -> dict[str, Any]:
+    def action(self, case_id: str, action: str, text: str | None = None, compliance: dict[str, Any] | None = None,
+               ai_mode: str = "mock") -> dict[str, Any]:
         """Record an advisor action as a history event. 'clarify' moves the case to
         needs_client_followup; others keep the status and are derived from history.
-        ``compliance`` is the reviewer's verdict on a sent message and whether the advisor overrode it."""
+        A 'clarify' message is checked by the compliance reviewer here, whatever the browser
+        claims: a flagged message is refused unless ``compliance.override`` is set, and the
+        verdict and any override are recorded on the event."""
         event_name = self._ACTIONS.get(action)
         if not event_name:
             raise ApiError(400, "INVALID_ACTION", f"Unknown advisor action {action!r}.")
         if action in ("note", "clarify", "resolve") and not (text or "").strip():
             raise ApiError(400, "MISSING_TEXT", f"The '{action}' action needs text.")
+        if action == "escalate" and "fraud_or_security" not in self._case(case_id).get("categories", []):
+            raise ApiError(400, "NOT_A_SECURITY_CASE", "Only security cases go to the security specialist team.")
+        reviewed = None
+        if action == "clarify":
+            verdict = self._message_verdict(case_id, text.strip(), ai_mode)  # may call the model; outside the lock
+            override = verdict == "needs_changes" and bool((compliance or {}).get("override"))
+            if verdict == "needs_changes" and not override:
+                raise ApiError(409, "COMPLIANCE_REVIEW_FAILED", "The compliance reviewer flagged this message. Revise it, or send it with an override.")
+            reviewed = {"verdict": verdict, "override": override}
         with self.store.lock:
             case = self._case(case_id)
             now = now_iso()
             details: dict[str, Any] = {"by": "advisor-demo"}
             if text:
                 details["text"] = text.strip()
-            if isinstance(compliance, dict) and compliance.get("verdict") in ("pass", "needs_changes"):
-                details["compliance"] = {"verdict": compliance["verdict"], "override": bool(compliance.get("override"))}
+            if reviewed:
+                details["compliance"] = reviewed
             event = {"event": event_name, "at": now, "details": details}
             case.setdefault("history", []).append(event)
             if action == "clarify":

@@ -23,6 +23,8 @@ def lifecycle_of(case: dict[str, Any]) -> str:
         return "awaiting_client"
     if case.get("status") == "assigned" or (case.get("routing") or {}).get("assigned_advisor_id"):
         return "assigned"
+    if "escalated_to_security" in events:
+        return "assigned"  # handed to the specialist team rather than to a named advisor
     return "new"
 
 
@@ -58,12 +60,18 @@ def priority_for(case: dict[str, Any], now: datetime | None = None) -> dict[str,
     now = now or datetime.now(timezone.utc)
     lifecycle = lifecycle_of(case)
     urgency = case.get("urgency") or {}
+    history = case.get("history") or []
     if lifecycle == "resolved":
         level, reason = "done", "Resolved"
     elif "fraud_or_security" in (case.get("categories") or []):
-        level, reason = "urgent", "Possible security issue, review first"
+        if any(h.get("event") == "escalated_to_security" for h in history):
+            level, reason = "normal", "With the security specialist team"
+        else:
+            level, reason = "urgent", "Possible security issue, review first"
     elif urgency.get("level") in ("high", "urgent"):
         level, reason = "urgent", urgency.get("reason") or "Marked urgent"
+    elif history and history[-1].get("event") == "client_replied":
+        level, reason = "high", "The client replied"  # until the advisor acts on it
     elif lifecycle == "awaiting_client":
         level, reason = "low", "Waiting on the client's answer"
     elif lifecycle == "scheduled":
