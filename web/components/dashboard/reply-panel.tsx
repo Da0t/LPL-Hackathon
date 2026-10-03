@@ -51,7 +51,7 @@ export function ReplyPanel({ caseId, busy, onSend, onClose }: {
   };
 
   return (
-    <div className="mt-3 overflow-hidden rounded-2xl border border-primary/30 bg-primary/[0.03]">
+    <div className="mt-3 overflow-hidden rounded-xl border border-primary/30 bg-primary/[0.03]">
       <div className="flex items-center justify-between border-b border-primary/15 px-4 py-2.5">
         <div className="flex flex-wrap items-center gap-2">
           <Sparkles className="h-4 w-4 text-primary" />
@@ -78,7 +78,7 @@ export function ReplyPanel({ caseId, busy, onSend, onClose }: {
         {review && (
           <>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Draft · edit before sending</p>
+              <p className="text-xs font-semibold text-muted-foreground">Draft · edit before sending</p>
               <textarea value={text} onChange={(e) => setText(e.target.value)} rows={6} maxLength={2000}
                 className="mt-1.5 w-full rounded-lg border border-border bg-background p-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30" />
             </div>
@@ -115,7 +115,7 @@ export function ReplyPanel({ caseId, busy, onSend, onClose }: {
 
             {trace.length > 0 && (
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Agent trace</p>
+                <p className="text-xs font-semibold text-muted-foreground">Agent trace</p>
                 <ol className="mt-1.5 space-y-1.5 border-l border-primary/20 pl-4">
                   {trace.map((t, i) => (
                     <li key={i} className="relative text-sm">
