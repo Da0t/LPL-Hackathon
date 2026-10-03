@@ -4,9 +4,9 @@ States: ``draft`` -> ``needs_clarification`` | ``ready_for_client_review`` -> ``
 
 Rules enforced here, independent of the language model:
 * The session binds one synthetic client; every lookup is scoped to it.
-* A model suggestion is a proposal. ``selected_account_id`` becomes set only when
-  the client picks an option carrying an account or chooses an account on the
-  review screen. The model's own guess is exposed as ``candidate_account_id``.
+* A model suggestion is a proposal. ``selected_account_id`` becomes set only when the
+  client picks an option carrying an account or chooses an account on the review
+  screen. The model's own guess is exposed as ``candidate_account_id``.
 * An amount is confirmed only when the client submits it on the review screen.
 * A model or AWS failure preserves the draft and returns a useful message.
 """
@@ -14,10 +14,12 @@ Rules enforced here, independent of the language model:
 from __future__ import annotations
 
 import logging
+import threading
 from typing import Any
 
 from backend.errors import ApiError
 from backend.schemas import (
+    CONFIRM_CLIENT_SUMMARY_DEFAULT,
     MAX_TEXT_CHARS,
     OPTION_NONE_OF_THESE,
     OPTION_TALK_TO_PERSON,
@@ -26,6 +28,7 @@ from backend.schemas import (
 )
 from backend.services.agent_adapter import AdapterError, AdapterTimeout, AgentAdapter
 from backend.services.common import new_session_id, now_iso
+from backend.services.text_rules import mentioned_account_types
 from backend.services.tools import build_tools
 from backend.services.triage import build_case
 from backend.services.validation import validate_intake_output
@@ -48,13 +51,23 @@ class IntakeService:
     def __init__(self, store: Store, adapter: AgentAdapter):
         self.store = store
         self.adapter = adapter
+        self._locks_guard = threading.Lock()
+        self._session_locks: dict[str, threading.Lock] = {}
+
+    def _session_lock(self, session_id: str) -> threading.Lock:
+        """One lock per session so overlapping turns/confirms cannot lose each other's writes."""
+        with self._locks_guard:
+            lock = self._session_locks.get(session_id)
+            if lock is None:
+                lock = self._session_locks[session_id] = threading.Lock()
+            return lock
 
     # ----------------------------------------------------------------- start
 
     def start(self, client_id: str) -> dict[str, Any]:
         client = self.store.get_client(client_id)
         if not client:
-            raise ApiError(404, "client_not_found", f"No synthetic demo client with id {client_id!r}.")
+            raise ApiError(404, "CLIENT_NOT_FOUND", f"No authorized fictional client with id {client_id!r}.")
         now = now_iso()
         session = {
             "session_id": new_session_id(),
@@ -85,7 +98,7 @@ class IntakeService:
     def get_session(self, session_id: str) -> dict[str, Any]:
         session = self.store.get_session(session_id)
         if not session:
-            raise ApiError(404, "session_not_found", f"No intake session {session_id!r}. Start one with POST /intake/start.")
+            raise ApiError(404, "SESSION_NOT_FOUND", f"No intake session {session_id!r}. Start one with POST /intake/start.")
         return session
 
     # --------------------------------------------------------------- context
@@ -109,14 +122,9 @@ class IntakeService:
             "last_selected_option": session["last_selected_option"],
             "turns": [
                 {
-                    "turn_number": t["turn_number"],
-                    "text": t["text"],
-                    "selected_option_id": t.get("selected_option_id"),
-                    "selected_option_label": t.get("selected_option_label"),
-                    "question": t.get("question"),
-                    "suggestions": t.get("suggestions", []),
-                    "candidate_intent": t.get("candidate_intent"),
-                    "uncertainty": t.get("uncertainty"),
+                    "turn_number": t["turn_number"], "text": t["text"], "selected_option_id": t.get("selected_option_id"),
+                    "selected_option_label": t.get("selected_option_label"), "question": t.get("question"),
+                    "suggestions": t.get("suggestions", []), "candidate_intent": t.get("candidate_intent"), "uncertainty": t.get("uncertainty"),
                 }
                 for t in session["turns"]
             ],
@@ -125,41 +133,58 @@ class IntakeService:
     # ------------------------------------------------------------------ turn
 
     def turn(self, session_id: str, text: str, input_mode: str, selected_option_id: str | None) -> dict[str, Any]:
+        with self._session_lock(session_id):
+            return self._turn(session_id, text, input_mode, selected_option_id)
+
+    def _turn(self, session_id: str, text: str, input_mode: str, selected_option_id: str | None) -> dict[str, Any]:
         session = self.get_session(session_id)
         if session["status"] == "submitted":
-            raise ApiError(409, "session_already_submitted", "This request was already confirmed and sent.", {"case_id": session["case_id"]})
+            raise ApiError(409, "SESSION_ALREADY_SUBMITTED", "This request was already confirmed and sent.", {"case_id": session["case_id"]})
 
         text = (text or "").strip()
         if len(text) > MAX_TEXT_CHARS:
-            raise ApiError(400, "text_too_long", f"Text must be {MAX_TEXT_CHARS} characters or fewer.")
+            raise ApiError(400, "INVALID_TURN", f"Text must be {MAX_TEXT_CHARS} characters or fewer.")
         selected_option_id = (selected_option_id or "").strip() or None
         if not text and not selected_option_id:
-            raise ApiError(400, "empty_turn", "Send some text, a selected_option_id, or both.")
+            raise ApiError(400, "INVALID_TURN", "Send some text, a selected_option_id, or both.")
 
-        # Validate the option against what the client was actually shown.
         selected_option: dict[str, Any] | None = None
         if selected_option_id:
             shown = {s["id"]: s for s in session["last_suggestions"]}
-            if selected_option_id in shown:
+            if selected_option_id in RESERVED_OPTION_IDS:
+                selected_option = None  # reserved semantics always win over a model-supplied id
+            elif selected_option_id in shown:
                 selected_option = shown[selected_option_id]
-            elif selected_option_id not in RESERVED_OPTION_IDS:
+            else:
                 raise ApiError(
-                    400,
-                    "invalid_option",
+                    400, "INVALID_OPTION",
                     f"selected_option_id {selected_option_id!r} is not one of the options shown on the last turn.",
                     {"valid_option_ids": list(shown) + list(RESERVED_OPTION_IDS)},
                 )
 
         mode = normalize_input_mode(input_mode)
         if text:
+            if text != session["transcript"]:
+                if session["client_requested_person"] and selected_option_id != OPTION_TALK_TO_PERSON:
+                    session["client_requested_person"] = False  # the client kept talking; resume clarification
+                selected = session.get("selected_account_id")
+                if selected and not selected_option:
+                    # The client changed their words after picking an account. If the new words name a
+                    # different account type they own, demote the pick to a proposal so it is re-confirmed.
+                    owned = {a["account_id"]: a for a in self.store.accounts_for_client(session["client_id"])}
+                    picked_type = (owned.get(selected) or {}).get("account_type")
+                    named = mentioned_account_types(text)
+                    owned_types = {a.get("account_type") for a in owned.values()}
+                    if named and picked_type not in named and any(t in owned_types for t in named):
+                        session["candidate_account_id"] = selected
+                        session["selected_account_id"] = None
             session["transcript"] = text
             if mode not in session["input_modes"]:
                 session["input_modes"].append(mode)
         transcript = session["transcript"]
         if not transcript:
-            raise ApiError(400, "empty_turn", "Please describe what you need help with before choosing an option.")
+            raise ApiError(400, "INVALID_TURN", "Please describe what you need help with before choosing an option.")
 
-        # Deterministic handling of the client's explicit choice.
         if selected_option:
             session["last_selected_option"] = {"id": selected_option["id"], "label": selected_option["label"], "account_id": selected_option.get("account_id")}
             if selected_option.get("account_id"):
@@ -177,19 +202,18 @@ class IntakeService:
 
         degraded = False
         message: str | None = None
+        validated: dict[str, Any] | None = None
         try:
             raw = self.adapter.intake_turn(session["client_id"], transcript, selected_option_id, tools)
             validated = validate_intake_output(raw, owned_ids, self.store.glossary_lookup)
         except AdapterTimeout as exc:
             degraded, message = True, DEGRADED_MESSAGE
             session["adapter_errors"] += 1
-            log.warning("intake adapter timeout (session %s): %s", session_id, exc)
-            validated = None
+            log.warning("intake adapter timeout (session %s): %s", session_id, exc.code)
         except AdapterError as exc:
-            degraded, message = True, DEGRADED_MESSAGE
+            degraded, message = True, (exc.user_message or DEGRADED_MESSAGE)
             session["adapter_errors"] += 1
-            log.warning("intake adapter error (session %s): %s", session_id, type(exc.__cause__ or exc).__name__)
-            validated = None
+            log.warning("intake adapter error (session %s): %s", session_id, exc.code)
 
         turn_number = len(session["turns"]) + 1
         if validated is not None:
@@ -209,45 +233,29 @@ class IntakeService:
                     session["offered_account_ids"].append(suggestion["account_id"])
             if validated["candidate_account_id"] and validated["candidate_account_id"] not in session["offered_account_ids"]:
                 session["offered_account_ids"].append(validated["candidate_account_id"])
-            suggestions = validated["suggestions"]
-            question = validated["question"]
-            definitions = validated["definitions"]
-            uncertainty = validated["uncertainty"]
+            suggestions, question, definitions, uncertainty = validated["suggestions"], validated["question"], validated["definitions"], validated["uncertainty"]
         else:
             # Preserve the draft: keep the last options so the client can still pick one.
-            suggestions = session["last_suggestions"]
-            question = session["last_question"]
-            definitions = []
-            uncertainty = None
+            suggestions, question, definitions, uncertainty = session["last_suggestions"], session["last_question"], [], None
 
         if session["client_requested_person"]:
             status = "ready_for_client_review"
-        elif degraded:
-            status = "needs_clarification"
-        elif question:
+        elif degraded or question:
             status = "needs_clarification"
         else:
             status = "ready_for_client_review"
         session["status"] = status
-
         if not session["proposed_plain_language_request"] and status == "ready_for_client_review":
             session["proposed_plain_language_request"] = _fallback_proposal(transcript)
 
         now = now_iso()
         session["turns"].append(
             {
-                "turn_number": turn_number,
-                "text": transcript,
-                "input_mode": mode,
-                "selected_option_id": selected_option_id,
+                "turn_number": turn_number, "text": transcript, "input_mode": mode, "selected_option_id": selected_option_id,
                 "selected_option_label": (session["last_selected_option"] or {}).get("label") if selected_option_id else None,
-                "suggestions": suggestions,
-                "question": question,
-                "uncertainty": uncertainty,
-                "candidate_intent": session["candidate_intent"],
-                "candidate_account_id": session["candidate_account_id"],
-                "degraded": degraded,
-                "at": now,
+                "suggestions": suggestions, "question": question, "uncertainty": uncertainty,
+                "candidate_intent": session["candidate_intent"], "candidate_account_id": session["candidate_account_id"],
+                "degraded": degraded, "at": now,
             }
         )
         session["updated_at"] = now
@@ -272,45 +280,40 @@ class IntakeService:
 
     # --------------------------------------------------------------- confirm
 
-    def confirm(
-        self,
-        session_id: str,
-        confirmed_plain_language_request: str,
-        selected_account_id: str | None,
-        amount_requested: float | None,
-    ) -> dict[str, Any]:
+    def confirm(self, session_id: str, confirmed_plain_language_request: str, selected_account_id: str | None, amount_requested: float | None) -> dict[str, Any]:
+        with self._session_lock(session_id):
+            return self._confirm(session_id, confirmed_plain_language_request, selected_account_id, amount_requested)
+
+    def _confirm(self, session_id: str, confirmed_plain_language_request: str, selected_account_id: str | None, amount_requested: float | None) -> dict[str, Any]:
         session = self.get_session(session_id)
         if session["status"] == "submitted":
-            raise ApiError(409, "session_already_submitted", "This request was already confirmed and sent.", {"case_id": session["case_id"]})
+            raise ApiError(409, "SESSION_ALREADY_SUBMITTED", "This request was already confirmed and sent.", {"case_id": session["case_id"]})
         if not session["transcript"].strip():
-            raise ApiError(409, "nothing_to_confirm", "Describe your request with at least one turn before confirming.")
+            raise ApiError(409, "NOTHING_TO_CONFIRM", "Describe your request with at least one turn before confirming.")
         wording = (confirmed_plain_language_request or "").strip()
         if not wording:
-            raise ApiError(400, "empty_confirmation", "confirmed_plain_language_request cannot be empty.")
+            raise ApiError(400, "MISSING_CONFIRMATION", "Confirm the request in your own words.")
 
         selected_account = None
         if selected_account_id:
             owned = {a["account_id"]: a for a in self.store.accounts_for_client(session["client_id"])}
             if selected_account_id not in owned:
                 log.warning("confirm refused: session %s (client %s) asked for account %s", session_id, session["client_id"], selected_account_id)
-                raise ApiError(403, "account_not_authorized", "That account is not part of this client's authorized records.")
+                raise ApiError(403, "ACCOUNT_MISMATCH", "That account is not part of this client's authorized records.")
             selected_account = owned[selected_account_id]
 
         if amount_requested is not None:
             if amount_requested <= 0:
-                raise ApiError(400, "invalid_amount", "amount_requested must be greater than zero.")
+                raise ApiError(400, "INVALID_AMOUNT", "amount_requested must be greater than zero.")
             if float(amount_requested).is_integer():
                 amount_requested = int(amount_requested)
 
         case = build_case(
-            store=self.store,
-            adapter=self.adapter,
-            session=session,
-            confirmed_plain_language_request=wording,
-            selected_account=selected_account,
-            amount_requested=amount_requested,
+            store=self.store, adapter=self.adapter, session=session,
+            confirmed_plain_language_request=wording, selected_account=selected_account, amount_requested=amount_requested,
         )
-        self.store.save_case(case)
+        client_summary = case.pop("_client_summary", None) or CONFIRM_CLIENT_SUMMARY_DEFAULT
+        self.store.insert_case(case)
 
         now = now_iso()
         session["status"] = "submitted"
@@ -321,9 +324,9 @@ class IntakeService:
         return {
             "case_id": case["case_id"],
             "status": case["status"],
-            "client_summary": case["confirmed_plain_language_request"],
+            "client_summary": client_summary,
             "next_step": (
-                "Your request has been sent to our team for review. A staff member will read your words and your "
-                "confirmed request before deciding who should contact you. Nothing has been changed on your accounts."
+                "A staff member will read your words and your confirmed request before deciding who should contact you. "
+                "Nothing has been changed on your accounts."
             ),
         }

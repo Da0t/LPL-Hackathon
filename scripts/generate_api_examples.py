@@ -22,16 +22,17 @@ from backend.main import create_app  # noqa: E402
 from backend.settings import REPO_ROOT, Settings  # noqa: E402
 
 STAFF = {"X-Demo-Role": "staff"}
-CLIENT = {"X-Demo-Role": "client"}
-ROTH_THING = "I need six thousand dollars for my husband's care. It's in the Roth thing from my old job."
-SECURITY = "Someone moved money out of my brokerage account and I didn't do it."
+CLIENT = {"X-Demo-Role": "client", "X-Demo-Client-Id": "CLIENT-017"}
+CLIENT_22 = {"X-Demo-Role": "client", "X-Demo-Client-Id": "CLIENT-022"}
+ROTH_THING = "I need six thousand dollars from the Roth thing from my old job."
+SECURITY = "I don't recognize a sign-in alert on my account."
 
 OUT = ROOT / "docs" / "API_EXAMPLES.md"
 
 
 def block(title: str, method: str, path: str, request_body, response, headers: dict[str, str] | None = None, note: str | None = None) -> str:
     lines = [f"### {title}", ""]
-    header_note = f" with header `X-Demo-Role: {headers['X-Demo-Role']}`" if headers else ""
+    header_note = (" with headers " + ", ".join(f"`{k}: {v}`" for k, v in headers.items())) if headers else ""
     lines.append(f"`{method} {path}`{header_note}")
     lines.append("")
     if note:
@@ -46,7 +47,7 @@ def block(title: str, method: str, path: str, request_body, response, headers: d
 def main() -> None:
     tmp = Path(tempfile.mkdtemp())
     settings = Settings(
-        agent_mode="mock", db_path=":memory:", data_dir=REPO_ROOT / "data",
+        ai_mode="mock", db_path=":memory:", data_dir=REPO_ROOT / "data",
         fallback_data_dir=REPO_ROOT / "backend" / "fixtures", default_demo_role="client",
         adapter_timeout_s=10.0, client_frontend_dir=tmp / "client", staff_frontend_dir=tmp / "staff",
     )
@@ -84,17 +85,17 @@ def main() -> None:
                               "Only values in this body count as confirmed. An amount the client said but did not confirm is never inferred."))
 
         # Second case: security routing.
-        sid2 = c.post("/intake/start", json={"client_id": "CLIENT-031"}, headers=CLIENT).json()["session_id"]
-        t = c.post(f"/intake/{sid2}/turn", json={"text": SECURITY, "input_mode": "text"}, headers=CLIENT).json()
-        sec = c.post(f"/intake/{sid2}/confirm", json={"confirmed_plain_language_request": t["proposed_plain_language_request"], "selected_account_id": "ACCT-222"}, headers=CLIENT).json()
+        sid2 = c.post("/intake/start", json={"client_id": "CLIENT-022"}, headers=CLIENT_22).json()["session_id"]
+        t = c.post(f"/intake/{sid2}/turn", json={"text": SECURITY, "input_mode": "text"}, headers=CLIENT_22).json()
+        sec = c.post(f"/intake/{sid2}/confirm", json={"confirmed_plain_language_request": t["proposed_plain_language_request"]}, headers=CLIENT_22).json()
 
         sections.append(block("Staff queue", "GET", "/staff/cases", None, c.get("/staff/cases", headers=STAFF), STAFF,
                               "Optional filters: `?status=submitted` and `?category=fraud_or_security`. Fields after `confirmed_plain_language_request` are additive."))
         sections.append(block("Case document (two-page equivalent)", "GET", "/staff/cases/{case_id}", None, c.get(f"/staff/cases/{case_id}", headers=STAFF), STAFF,
                               "Opening a `submitted` case moves it to `staff_review`. `account_context` comes only from records with source ids; `conversation` and `history` are additive."))
         sections.append(block("Advisor candidates", "GET", "/staff/cases/{case_id}/candidates", None, c.get(f"/staff/cases/{case_id}/candidates", headers=STAFF), STAFF,
-                              "At most three. The existing active advisor is first; `eligibility_check` is always `manual_verification_required`."))
-        body = {"advisor_id": "ADV-01", "staff_reason": "Existing advisor with retirement and distribution specialty; available this week."}
+                              "At most three. The client's existing active advisor is first when there is one; `existing_client_relationship`, `meeting_mode`, and `capacity` are the optional version-two fields; `eligibility_check` is always `manual_verification_required`."))
+        body = {"advisor_id": "ADV-03", "staff_reason": "Retirement-income specialty, available, offers phone meetings."}
         sections.append(block("Assign (human decision)", "POST", "/staff/cases/{case_id}/assign", body, c.post(f"/staff/cases/{case_id}/assign", json=body, headers=STAFF), STAFF,
                               "No message, transaction, or appointment is created. The reason is recorded in the case history."))
         sections.append(block("Security case candidates route to the specialist queue", "GET", "/staff/cases/{case_id}/candidates", None,
@@ -103,16 +104,17 @@ def main() -> None:
         # Errors
         sections.append(block("Error: staff endpoint without the staff role", "GET", "/staff/cases", None, c.get("/staff/cases"), None))
         sections.append(block("Error: option id not shown on the last turn", "POST", "/intake/{session_id}/turn", {"text": "", "selected_option_id": "opt-99"},
-                              c.post(f"/intake/{sid2}/turn", json={"text": "", "selected_option_id": "opt-99"}, headers=CLIENT), CLIENT))
+                              c.post(f"/intake/{_fresh_session_with_turn(c)}/turn", json={"text": "", "selected_option_id": "opt-99"}, headers=CLIENT), CLIENT))
         other_sid = _fresh_session_with_turn(c)
-        body = {"confirmed_plain_language_request": "Money from my Roth IRA", "selected_account_id": "ACCT-211"}
+        body = {"confirmed_plain_language_request": "Money from my Roth IRA", "selected_account_id": "ACCT-301"}
         sections.append(block("Error: another client's account", "POST", "/intake/{session_id}/confirm", body,
                               c.post(f"/intake/{other_sid}/confirm", json=body, headers=CLIENT), CLIENT))
 
     intro = f"""# SamePage API examples (generated)
 
 Generated by `python scripts/generate_api_examples.py` from a real run of the backend in
-**mock** mode against the fallback fixtures. Every value is synthetic. Field names are the
+**mock** mode against the fallback fixtures (a copy of Agent 4's `data/`). Every value is synthetic.
+The queue starts with Agent 4's four seed cases, so the first live case is `CASE-1043`. Field names are the
 frozen version-one contract from `SAMEPAGE_PRODUCT_SPEC.md`; fields noted as *additive*
 are extra and safe to ignore.
 
@@ -120,7 +122,8 @@ Conventions:
 
 - Base URL `http://127.0.0.1:8000`. Pages: `/client`, `/staff`. Interactive docs: `/docs`.
 - Demo role switcher (simulated access control, not authentication): header `X-Demo-Role: client`
-  for `/intake/*`, `X-Demo-Role: staff` for `/staff/*` and `/demo/reset`. Missing header = `client`.
+  plus `X-Demo-Client-Id` for `/intake/*`, `X-Demo-Role: staff` for `/staff/*` and `/demo/reset`.
+  Missing role header = `client`. A mismatched `X-Demo-Client-Id` is refused.
 - `text` in a turn is the **whole editable transcript** so far. Send `""` with a `selected_option_id`
   for a selection-only turn. Reserved option ids: `none_of_these`, `talk_to_person`.
 - Errors are `{{"error_code", "message"}}` (plus `details` when useful).

@@ -1,74 +1,89 @@
-[
-  {
-    "event_id": "EVENT-09",
-    "account_id": "ACCT-201",
-    "type": "rollover",
-    "date": "2023-06-12",
-    "source_id": "EVENT-09",
-    "description": "Rollover received from the Harbor Lights Manufacturing 401(k) plan."
+{
+  "meta": {
+    "version": "1",
+    "synthetic_only": true,
+    "description": "Fictional dated account events. source_id is the citation staff see next to each fact. client_id is an optional addition."
   },
-  {
-    "event_id": "EVENT-10",
-    "account_id": "ACCT-201",
-    "type": "service_request",
-    "date": "2025-02-03",
-    "source_id": "EVENT-10",
-    "description": "Client asked about the timing of required minimum distributions."
-  },
-  {
-    "event_id": "EVENT-12",
-    "account_id": "ACCT-202",
-    "type": "contribution",
-    "date": "2026-01-15",
-    "source_id": "EVENT-12",
-    "description": "Deposit of $5,000 from a linked bank account."
-  },
-  {
-    "event_id": "EVENT-14",
-    "account_id": "ACCT-203",
-    "type": "contribution",
-    "date": "2024-04-10",
-    "source_id": "EVENT-14",
-    "description": "Annual IRA contribution."
-  },
-  {
-    "event_id": "EVENT-21",
-    "account_id": "ACCT-211",
-    "type": "contribution",
-    "date": "2026-03-30",
-    "source_id": "EVENT-21",
-    "description": "Roth IRA contribution recorded for tax year 2025."
-  },
-  {
-    "event_id": "EVENT-22",
-    "account_id": "ACCT-211",
-    "type": "service_request",
-    "date": "2025-11-02",
-    "source_id": "EVENT-22",
-    "description": "Client asked how Roth IRA contribution limits work."
-  },
-  {
-    "event_id": "EVENT-31",
-    "account_id": "ACCT-221",
-    "type": "beneficiary_update",
-    "date": "2019-08-20",
-    "source_id": "EVENT-31",
-    "description": "Primary beneficiary recorded as spouse."
-  },
-  {
-    "event_id": "EVENT-32",
-    "account_id": "ACCT-222",
-    "type": "login_alert",
-    "date": "2026-09-28",
-    "source_id": "EVENT-32",
-    "description": "Online access from a device not previously seen on this account."
-  },
-  {
-    "event_id": "EVENT-33",
-    "account_id": "ACCT-222",
-    "type": "outgoing_transfer",
-    "date": "2026-09-29",
-    "source_id": "EVENT-33",
-    "description": "Outgoing transfer of $2,400 to an external account."
-  }
-]
+  "events": [
+    {
+      "source_id": "EVENT-09",
+      "account_id": "ACCT-201",
+      "client_id": "CLIENT-017",
+      "type": "rollover",
+      "date": "2023-06-12",
+      "summary": "Fictional rollover from former workplace plan"
+    },
+    {
+      "source_id": "EVENT-14",
+      "account_id": "ACCT-201",
+      "client_id": "CLIENT-017",
+      "type": "service_request",
+      "date": "2025-04-09",
+      "summary": "Fictional contact-information update"
+    },
+    {
+      "source_id": "EVENT-17",
+      "account_id": "ACCT-202",
+      "client_id": "CLIENT-017",
+      "type": "deposit",
+      "date": "2026-02-18",
+      "summary": "Fictional deposit from a linked bank account"
+    },
+    {
+      "source_id": "EVENT-21",
+      "account_id": "ACCT-301",
+      "client_id": "CLIENT-022",
+      "type": "account_opened",
+      "date": "2019-03-04",
+      "summary": "Fictional Roth IRA opened"
+    },
+    {
+      "source_id": "EVENT-22",
+      "account_id": "ACCT-301",
+      "client_id": "CLIENT-022",
+      "type": "contribution",
+      "date": "2026-01-15",
+      "summary": "Fictional contribution recorded for the current year"
+    },
+    {
+      "source_id": "EVENT-24",
+      "account_id": "ACCT-302",
+      "client_id": "CLIENT-022",
+      "type": "security_alert",
+      "date": "2026-10-02",
+      "summary": "Fictional sign-in alert from a device not seen before on this client's online profile"
+    },
+    {
+      "source_id": "EVENT-25",
+      "account_id": "ACCT-303",
+      "client_id": "CLIENT-022",
+      "type": "transfer",
+      "date": "2019-02-28",
+      "summary": "Fictional transfer in from another firm"
+    },
+    {
+      "source_id": "EVENT-31",
+      "account_id": "ACCT-401",
+      "client_id": "CLIENT-031",
+      "type": "beneficiary_update",
+      "date": "2018-09-20",
+      "summary": "Fictional primary beneficiary designation recorded"
+    },
+    {
+      "source_id": "EVENT-33",
+      "account_id": "ACCT-401",
+      "client_id": "CLIENT-031",
+      "type": "service_request",
+      "date": "2024-11-05",
+      "summary": "Fictional mailing-address update"
+    },
+    {
+      "source_id": "EVENT-35",
+      "account_id": "ACCT-402",
+      "client_id": "CLIENT-031",
+      "type": "account_opened",
+      "date": "2015-05-11",
+      "summary": "Fictional joint account opened with spouse as co-owner"
+    }
+  ]
+}

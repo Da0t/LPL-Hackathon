@@ -1,4 +1,5 @@
-"""Shared fixtures for backend tests. Everything runs offline against the mock adapter."""
+"""Shared fixtures for backend tests. Everything runs offline against the mock adapter
+and the fallback fixtures (a copy of Agent 4's data/, which extends the frozen fixture)."""
 
 from __future__ import annotations
 
@@ -13,17 +14,26 @@ from backend.services.agent_adapter import AgentAdapter
 from backend.settings import REPO_ROOT, Settings
 
 STAFF = {"X-Demo-Role": "staff"}
-CLIENT = {"X-Demo-Role": "client"}
 
-ROTH_THING = "I need six thousand dollars for my husband's care. It's in the Roth thing from my old job."
-CLEAR_ROTH = "I have a question about my Roth IRA. Can I still contribute this year?"
-BENEFICIARY = "I want to change who gets my IRA when I die. My daughter should be on it."
-SECURITY = "Someone moved money out of my brokerage account and I didn't do it."
+
+def client_headers(client_id: str = "CLIENT-017") -> dict[str, str]:
+    return {"X-Demo-Role": "client", "X-Demo-Client-Id": client_id}
+
+
+CLIENT = client_headers("CLIENT-017")
+
+# The team's canonical demo phrases (DEMO_SCRIPT.md, data/README.md).
+ROTH_THING = "I need six thousand dollars from the Roth thing from my old job."
+CLEAR_ROTH = "Can I put more money into my Roth IRA this year?"
+BENEFICIARY = "I want my daughter to be the one who gets my retirement account if something happens to me."
+SECURITY = "I don't recognize a sign-in alert on my account."
+
+SEED_CASE_IDS = {"CASE-1040", "CASE-1041", "CASE-1042", "CASE-SEC-1"}
 
 
 def make_settings(tmp_path: Path, **overrides: Any) -> Settings:
     base = dict(
-        agent_mode="mock",
+        ai_mode="mock",
         db_path=":memory:",
         data_dir=tmp_path / "no-such-data-dir",
         fallback_data_dir=REPO_ROOT / "backend" / "fixtures",
@@ -56,35 +66,34 @@ def client(app):
 def make_client_with_adapter(tmp_path: Path, intake_fn, triage_fn) -> TestClient:
     adapter = AgentAdapter(intake_fn, triage_fn, timeout_s=2.0)
     adapter.name = "test-adapter"
-    app = create_app(make_settings(tmp_path), adapter=adapter)
-    return TestClient(app)
+    return TestClient(create_app(make_settings(tmp_path), adapter=adapter))
 
 
 # ------------------------------------------------------------- helpers
 
 
 def start(client: TestClient, client_id: str = "CLIENT-017") -> str:
-    response = client.post("/intake/start", json={"client_id": client_id}, headers=CLIENT)
+    response = client.post("/intake/start", json={"client_id": client_id}, headers=client_headers(client_id))
     assert response.status_code == 200, response.text
     return response.json()["session_id"]
 
 
-def turn(client: TestClient, session_id: str, text: str = "", option: str | None = None, mode: str = "text") -> dict[str, Any]:
+def turn(client: TestClient, session_id: str, text: str = "", option: str | None = None, mode: str = "text", client_id: str = "CLIENT-017") -> dict[str, Any]:
     payload: dict[str, Any] = {"text": text, "input_mode": mode}
     if option:
         payload["selected_option_id"] = option
-    response = client.post(f"/intake/{session_id}/turn", json=payload, headers=CLIENT)
+    response = client.post(f"/intake/{session_id}/turn", json=payload, headers=client_headers(client_id))
     assert response.status_code == 200, response.text
     return response.json()
 
 
-def confirm(client: TestClient, session_id: str, wording: str, account_id: str | None = None, amount: float | None = None, expect: int = 200) -> dict[str, Any]:
+def confirm(client: TestClient, session_id: str, wording: str, account_id: str | None = None, amount: float | None = None, expect: int = 200, client_id: str = "CLIENT-017") -> dict[str, Any]:
     payload: dict[str, Any] = {"confirmed_plain_language_request": wording}
     if account_id is not None:
         payload["selected_account_id"] = account_id
     if amount is not None:
         payload["amount_requested"] = amount
-    response = client.post(f"/intake/{session_id}/confirm", json=payload, headers=CLIENT)
+    response = client.post(f"/intake/{session_id}/confirm", json=payload, headers=client_headers(client_id))
     assert response.status_code == expect, response.text
     return response.json()
 

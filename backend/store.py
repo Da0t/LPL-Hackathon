@@ -1,10 +1,11 @@
 """Local SQLite repository for SamePage (Agent 2).
 
-Reference data (clients, accounts, events, advisors, glossary) is loaded from
-Agent 4's ``data/`` directory when all five files are present and valid, and
-from ``backend/fixtures/`` otherwise. The backend never writes to those files.
-Application state (intake sessions, cases, assignments) lives in SQLite so the
-client and staff pages share one source of truth across requests.
+Reference data (clients, accounts, events, advisors, glossary, optional seed
+cases) is loaded from Agent 4's ``data/`` directory when the five required
+files are present and valid, and from ``backend/fixtures/`` otherwise. The
+backend never writes to those files. Application state (intake sessions, live
+cases, assignments) lives in SQLite so the client and staff pages share one
+source of truth across requests and processes.
 
 The adapter (Agent 1) never touches this module directly; it only receives the
 authorized tool callbacks built in ``backend/services/tools.py``.
@@ -20,10 +21,13 @@ import threading
 from pathlib import Path
 from typing import Any, Iterable
 
+from backend.services.text_rules import account_type_label
+
 log = logging.getLogger("samepage.store")
 
 SEED_FILES: tuple[str, ...] = ("clients", "accounts", "events", "advisors", "glossary")
-FIRST_CASE_NUMBER = 1042  # matches the example CASE-1042 in the product spec
+OPTIONAL_SEED_FILES: tuple[str, ...] = ("cases",)
+FIRST_CASE_NUMBER = 1042  # the frozen fixture's CASE-1042; live cases continue after the highest seed
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS clients  (client_id TEXT PRIMARY KEY, doc TEXT NOT NULL);
@@ -31,6 +35,8 @@ CREATE TABLE IF NOT EXISTS accounts (account_id TEXT PRIMARY KEY, client_id TEXT
 CREATE TABLE IF NOT EXISTS events   (event_id TEXT PRIMARY KEY, account_id TEXT NOT NULL, doc TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS advisors (advisor_id TEXT PRIMARY KEY, doc TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS glossary (key TEXT PRIMARY KEY, doc TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS meta     (key TEXT PRIMARY KEY, doc TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS counters (name TEXT PRIMARY KEY, value INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS sessions (
     session_id TEXT PRIMARY KEY,
     client_id  TEXT NOT NULL,
@@ -46,6 +52,7 @@ CREATE TABLE IF NOT EXISTS cases (
     status     TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
+    seeded     INTEGER NOT NULL DEFAULT 0,
     doc        TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS assignments (
@@ -60,6 +67,8 @@ CREATE INDEX IF NOT EXISTS idx_accounts_client ON accounts(client_id);
 CREATE INDEX IF NOT EXISTS idx_events_account ON events(account_id);
 CREATE INDEX IF NOT EXISTS idx_cases_created ON cases(created_at);
 """
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 class SeedDataError(RuntimeError):
@@ -84,8 +93,7 @@ def _as_list(value: Any) -> list[Any]:
     if isinstance(value, (list, tuple, set)):
         return list(value)
     if isinstance(value, str):
-        parts = [p.strip() for p in re.split(r"[,;/|]", value) if p.strip()]
-        return parts
+        return [p.strip() for p in re.split(r"[,;/|]", value) if p.strip()]
     return [value]
 
 
@@ -104,15 +112,20 @@ def _as_bool(value: Any, default: bool = True) -> bool:
     return default
 
 
-def _as_number(value: Any) -> float | None:
+def _as_number(value: Any) -> float | int | None:
     if value is None or value == "":
         return None
-    if isinstance(value, (int, float)):
-        return float(value)
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value) if value.is_integer() else value
     try:
-        return float(str(value).replace(",", "").replace("$", "").strip())
+        parsed = float(str(value).replace(",", "").replace("$", "").strip())
     except ValueError:
         return None
+    return int(parsed) if parsed.is_integer() else parsed
 
 
 def _mask(value: Any) -> str:
@@ -129,7 +142,8 @@ def normalize_client(raw: dict[str, Any]) -> dict[str, Any]:
     return {
         "client_id": str(_first(raw, "client_id", "id")),
         "display_name": str(_first(raw, "display_name", "name", "full_name", default="Client")),
-        "preferred_contact_channel": _first(raw, "preferred_contact_channel", "contact_preference", "meeting_preference", "preferred_channel"),
+        "preferred_contact_channel": _first(raw, "preferred_contact_channel", "contact_preference", "preferred_channel"),
+        "meeting_preference": _first(raw, "meeting_preference", "preferred_meeting_mode", "meeting_mode"),
         "existing_advisor_id": _first(raw, "existing_advisor_id", "advisor_id", "primary_advisor_id"),
         "state": _first(raw, "state", "region"),
         "demo_scenario": _first(raw, "demo_scenario", "scenario", "notes"),
@@ -138,32 +152,40 @@ def normalize_client(raw: dict[str, Any]) -> dict[str, Any]:
 
 def normalize_account(raw: dict[str, Any]) -> dict[str, Any]:
     account_id = str(_first(raw, "account_id", "id"))
-    masked = _first(raw, "masked_identifier", "masked_id", "masked_number", "last4", "last_four")
+    account_type = str(_first(raw, "account_type", "type", default="unknown")).strip().lower().replace(" ", "_")
+    label = _first(raw, "label", "name", "account_name", "display_name")
+    if not label:
+        label = account_type_label(account_type)
+        label = label[0].upper() + label[1:]
     return {
         "account_id": account_id,
         "client_id": str(_first(raw, "client_id", "owner_client_id", "owner_id", "client")),
-        "account_type": str(_first(raw, "account_type", "type", default="unknown")).strip().lower().replace(" ", "_"),
-        "label": str(_first(raw, "label", "name", "account_name", "display_name", default=account_id)),
+        "account_type": account_type,
+        "label": str(label),
         "familiar_label": _first(raw, "familiar_label", "nickname", "plain_label"),
-        "masked_identifier": _mask(masked),
+        "masked_identifier": _mask(_first(raw, "masked_identifier", "masked_id", "masked_number", "last4", "last_four")),
         "ownership": _first(raw, "ownership", "relationship", "registration"),
         "former_employer": _first(raw, "former_employer", "employer", "plan_sponsor"),
         "balance": _as_number(_first(raw, "balance", "balance_snapshot", "current_balance")),
+        "currency": str(_first(raw, "currency", default="USD")),
         "balance_as_of": _first(raw, "balance_as_of", "as_of", "balance_date", "snapshot_date"),
-        "source_id": _first(raw, "source_id", "source", "record_id", default=f"SNAP-{account_id}"),
+        "source_id": str(_first(raw, "source_id", "source", "record_id", default=f"ACCOUNT-RECORD-{account_id}")),
         "status": str(_first(raw, "status", default="open")).lower(),
     }
 
 
 def normalize_event(raw: dict[str, Any]) -> dict[str, Any]:
     event_id = _first(raw, "event_id", "id", "source_id")
+    text = _first(raw, "summary", "description", "note", "details")
     return {
         "event_id": str(event_id),
         "account_id": str(_first(raw, "account_id", "account")),
+        "client_id": _first(raw, "client_id"),
         "type": str(_first(raw, "type", "event_type", "kind", default="event")).strip().lower().replace(" ", "_"),
         "date": str(_first(raw, "date", "event_date", "occurred_at", "timestamp", default="")),
         "source_id": str(_first(raw, "source_id", "source", default=event_id)),
-        "description": _first(raw, "description", "summary", "note", "details"),
+        "summary": text,
+        "description": text,
     }
 
 
@@ -174,14 +196,15 @@ def normalize_advisor(raw: dict[str, Any]) -> dict[str, Any]:
     advisor = {
         "advisor_id": str(_first(raw, "advisor_id", "id")),
         "display_name": str(_first(raw, "display_name", "name", default="Advisor")),
-        "kind": str(_first(raw, "kind", "type", default="advisor")),
+        "kind": str(_first(raw, "kind", default="advisor")),
         "specialties": [str(s).strip().lower().replace(" ", "_") for s in _as_list(_first(raw, "specialties", "specialty_tags", "tags", "specialty"))],
         "region": _first(raw, "region", "state", "state_region"),
-        "meeting_modes": [str(m).strip().lower().replace(" ", "_").replace("-", "_") for m in _as_list(_first(raw, "meeting_modes", "meeting_mode", "modes"))],
+        "meeting_mode": [str(m).strip().lower().replace(" ", "_").replace("-", "_") for m in _as_list(_first(raw, "meeting_mode", "meeting_modes", "modes"))],
         "capacity": int(capacity) if capacity is not None else None,
         "available": _as_bool(available_raw, default=True),
         "active": _as_bool(active_raw, default=True),
         "next_available": _first(raw, "next_available", "next_availability", "next_open_slot"),
+        "note": _first(raw, "note", "notes"),
         "existing_client_ids": [str(c) for c in _as_list(_first(raw, "existing_client_ids", "existing_clients", "client_ids", "clients"))],
     }
     if advisor["capacity"] is not None and advisor["capacity"] <= 0 and available_raw is None:
@@ -194,9 +217,10 @@ def normalize_glossary_entry(raw: dict[str, Any]) -> dict[str, Any]:
     key = str(_first(raw, "key", "id", default=re.sub(r"[^a-z0-9]+", "_", term.lower()).strip("_")))
     return {
         "key": key,
-        "term": term or key.replace("_", " ").title(),
-        "aliases": [str(a) for a in _as_list(_first(raw, "aliases", "synonyms", "also_called"))],
+        "term": term or key.replace("_", " "),
+        "aliases": [str(a) for a in _as_list(_first(raw, "aliases", "also_heard_as", "synonyms", "also_called"))],
         "plain": str(_first(raw, "plain", "definition", "plain_explanation", "explanation", "plain_language", default="")),
+        "source_id": _first(raw, "source_id"),
     }
 
 
@@ -206,31 +230,33 @@ _NORMALIZERS = {
     "events": normalize_event,
     "advisors": normalize_advisor,
     "glossary": normalize_glossary_entry,
+    "cases": lambda raw: dict(raw),
 }
 
 
-def _unwrap_records(name: str, payload: Any) -> list[dict[str, Any]]:
+def _unwrap_records(name: str, payload: Any) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Return (records, meta) from a list or an object such as {"meta": {...}, "<name>": [...]}."""
+    meta: dict[str, Any] = {}
     if isinstance(payload, list):
         records = payload
     elif isinstance(payload, dict):
+        meta = payload.get("meta") if isinstance(payload.get("meta"), dict) else {}
         for key in (name, "items", "data", "records", "entries", "terms"):
             if isinstance(payload.get(key), list):
                 records = payload[key]
                 break
         else:
-            # A dict keyed by id, e.g. {"CLIENT-017": {...}}
             records = []
             for key, value in payload.items():
+                if key == "meta":
+                    continue
                 if isinstance(value, dict):
                     value = dict(value)
                     value.setdefault("id", key)
                     records.append(value)
     else:
         raise ValueError(f"{name}.json must contain a list or an object")
-    return [r for r in records if isinstance(r, dict)]
-
-
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+    return [r for r in records if isinstance(r, dict)], meta
 
 
 def _display_path(path: Path) -> str:
@@ -245,6 +271,11 @@ def normalize_text(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", (value or "").lower()).strip()
 
 
+def case_number(case_id: str) -> int:
+    match = re.search(r"(\d+)\s*$", case_id or "")
+    return int(match.group(1)) if match else 0
+
+
 # --------------------------------------------------------------------------
 # Store
 # --------------------------------------------------------------------------
@@ -256,6 +287,7 @@ class Store:
         self.data_dir = Path(data_dir)
         self.fallback_dir = Path(fallback_dir)
         self.data_source = "unloaded"
+        self.specialist_queues: list[dict[str, Any]] = []
         self._lock = threading.RLock()
         if self.db_path != ":memory:":
             Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -265,74 +297,98 @@ class Store:
             if self.db_path != ":memory:":
                 self._conn.execute("PRAGMA journal_mode=WAL")
             self._conn.executescript(_SCHEMA)
+            self._load_meta()
 
     # ---------------------------------------------------------------- seeding
 
-    def _read_seed_dir(self, directory: Path) -> dict[str, list[dict[str, Any]]] | None:
+    def _read_seed_dir(self, directory: Path) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]] | None:
         if not directory.is_dir():
             return None
         loaded: dict[str, list[dict[str, Any]]] = {}
-        for name in SEED_FILES:
+        metas: dict[str, Any] = {}
+        for name in SEED_FILES + OPTIONAL_SEED_FILES:
             path = directory / f"{name}.json"
+            optional = name in OPTIONAL_SEED_FILES
             if not path.is_file():
+                if optional:
+                    loaded[name] = []
+                    continue
                 log.info("seed file missing: %s", path)
                 return None
             try:
                 payload = json.loads(path.read_text(encoding="utf-8"))
-                records = [_NORMALIZERS[name](r) for r in _unwrap_records(name, payload)]
+                raw_records, meta = _unwrap_records(name, payload)
+                records = [_NORMALIZERS[name](r) for r in raw_records]
             except (OSError, ValueError, KeyError, TypeError) as exc:
+                if optional:
+                    log.warning("optional seed file unusable: %s (%s)", path, exc)
+                    loaded[name] = []
+                    continue
                 log.warning("seed file unusable: %s (%s)", path, exc)
                 return None
-            if not records:
+            if not records and not optional:
                 log.warning("seed file has no records: %s", path)
                 return None
             loaded[name] = records
-        return loaded
+            metas[name] = meta
+        return loaded, metas
 
     def load_seed(self) -> str:
         """Load reference data, preferring Agent 4's data/ directory."""
-        seed = self._read_seed_dir(self.data_dir)
+        result = self._read_seed_dir(self.data_dir)
         source = _display_path(self.data_dir)
-        if seed is None:
-            seed = self._read_seed_dir(self.fallback_dir)
+        if result is None:
+            result = self._read_seed_dir(self.fallback_dir)
             source = f"{_display_path(self.fallback_dir)} (fallback fixtures)"
-            if seed is None:
-                raise SeedDataError(
-                    f"No usable seed data in {self.data_dir} or {self.fallback_dir}"
-                )
+            if result is None:
+                raise SeedDataError(f"No usable seed data in {self.data_dir} or {self.fallback_dir}")
+        seed, metas = result
         self._warn_integrity(seed)
+        queues = (metas.get("advisors") or {}).get("specialist_queues")
+        self.specialist_queues = [q for q in queues if isinstance(q, dict)] if isinstance(queues, list) else []
+
+        from backend.services.case_facts import normalize_seed_case  # local import avoids a cycle
+
+        accounts_by_id = {a["account_id"]: a for a in seed["accounts"]}
+        clients_by_id = {c["client_id"]: c for c in seed["clients"]}
+        events_by_account: dict[str, list[dict[str, Any]]] = {}
+        for event in seed["events"]:
+            events_by_account.setdefault(event["account_id"], []).append(event)
+        seed_cases: list[dict[str, Any]] = []
+        for raw in seed.get("cases", []):
+            try:
+                seed_cases.append(normalize_seed_case(raw, accounts_by_id, clients_by_id, events_by_account))
+            except Exception as exc:  # noqa: BLE001 - one bad seed case must not block startup
+                log.warning("seed case %s skipped: %s", raw.get("case_id"), exc)
+
         with self._lock:
             self._conn.execute("BEGIN")
             try:
-                for table in ("clients", "accounts", "events", "advisors", "glossary"):
+                for table in ("clients", "accounts", "events", "advisors", "glossary", "meta"):
                     self._conn.execute(f"DELETE FROM {table}")
-                self._conn.executemany(
-                    "INSERT INTO clients(client_id, doc) VALUES (?, ?)",
-                    [(c["client_id"], json.dumps(c)) for c in seed["clients"]],
-                )
-                self._conn.executemany(
-                    "INSERT INTO accounts(account_id, client_id, doc) VALUES (?, ?, ?)",
-                    [(a["account_id"], a["client_id"], json.dumps(a)) for a in seed["accounts"]],
-                )
-                self._conn.executemany(
-                    "INSERT OR REPLACE INTO events(event_id, account_id, doc) VALUES (?, ?, ?)",
-                    [(e["event_id"], e["account_id"], json.dumps(e)) for e in seed["events"]],
-                )
-                self._conn.executemany(
-                    "INSERT INTO advisors(advisor_id, doc) VALUES (?, ?)",
-                    [(a["advisor_id"], json.dumps(a)) for a in seed["advisors"]],
-                )
-                self._conn.executemany(
-                    "INSERT OR REPLACE INTO glossary(key, doc) VALUES (?, ?)",
-                    [(g["key"], json.dumps(g)) for g in seed["glossary"]],
-                )
+                self._conn.execute("DELETE FROM cases WHERE seeded = 1")
+                self._conn.executemany("INSERT INTO clients(client_id, doc) VALUES (?, ?)", [(c["client_id"], json.dumps(c)) for c in seed["clients"]])
+                self._conn.executemany("INSERT INTO accounts(account_id, client_id, doc) VALUES (?, ?, ?)", [(a["account_id"], a["client_id"], json.dumps(a)) for a in seed["accounts"]])
+                self._conn.executemany("INSERT OR REPLACE INTO events(event_id, account_id, doc) VALUES (?, ?, ?)", [(e["event_id"], e["account_id"], json.dumps(e)) for e in seed["events"]])
+                self._conn.executemany("INSERT INTO advisors(advisor_id, doc) VALUES (?, ?)", [(a["advisor_id"], json.dumps(a)) for a in seed["advisors"]])
+                self._conn.executemany("INSERT OR REPLACE INTO glossary(key, doc) VALUES (?, ?)", [(g["key"], json.dumps(g)) for g in seed["glossary"]])
+                self._conn.execute("INSERT INTO meta(key, doc) VALUES (?, ?)", ("specialist_queues", json.dumps(self.specialist_queues)))
+                for case in seed_cases:
+                    self._conn.execute(
+                        "INSERT OR IGNORE INTO cases(case_id, case_num, client_id, status, created_at, updated_at, seeded, doc) VALUES (?,?,?,?,?,?,1,?)",
+                        (case["case_id"], case_number(case["case_id"]), case["client_id"], case["status"], case["created_at"], case["updated_at"] or case["created_at"], json.dumps(case)),
+                    )
                 self._conn.execute("COMMIT")
             except Exception:
                 self._conn.execute("ROLLBACK")
                 raise
         self.data_source = source
-        log.info("seed data loaded from %s", source)
+        log.info("seed data loaded from %s (%d seed cases)", source, len(seed_cases))
         return source
+
+    def _load_meta(self) -> None:
+        row = self._conn.execute("SELECT doc FROM meta WHERE key = 'specialist_queues'").fetchone()
+        self.specialist_queues = json.loads(row["doc"]) if row else []
 
     @staticmethod
     def _warn_integrity(seed: dict[str, list[dict[str, Any]]]) -> None:
@@ -351,11 +407,11 @@ class Store:
                 log.warning("client %s references unknown advisor %s", client["client_id"], adv)
 
     def reset_state(self) -> None:
-        """Clear sessions, cases, and assignments; reload reference data."""
+        """Clear sessions, live cases, and assignments; reload reference data and seed cases."""
         with self._lock:
             self._conn.execute("BEGIN")
             try:
-                for table in ("sessions", "cases", "assignments"):
+                for table in ("sessions", "cases", "assignments", "counters"):
                     self._conn.execute(f"DELETE FROM {table}")
                 self._conn.execute("DELETE FROM sqlite_sequence WHERE name='assignments'")
                 self._conn.execute("COMMIT")
@@ -369,6 +425,7 @@ class Store:
             out = {}
             for table in ("clients", "accounts", "events", "advisors", "glossary", "sessions", "cases", "assignments"):
                 out[table] = int(self._conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+            out["seed_cases"] = int(self._conn.execute("SELECT COUNT(*) FROM cases WHERE seeded = 1").fetchone()[0])
             return out
 
     def close(self) -> None:
@@ -425,15 +482,15 @@ class Store:
         wanted = normalize_text(term)
         if not wanted:
             return None
-        for entry in self.list_glossary():
+        entries = self.list_glossary()
+        for entry in entries:
             names = {normalize_text(entry["key"].replace("_", " ")), normalize_text(entry["term"])}
             names.update(normalize_text(a) for a in entry.get("aliases", []))
             if wanted in names:
                 return entry
-        # Prefix/contains match as a second pass ("roth" -> Roth IRA)
-        for entry in self.list_glossary():
+        for entry in entries:
             names = [normalize_text(entry["term"])] + [normalize_text(a) for a in entry.get("aliases", [])]
-            if any(n and (n.startswith(wanted) or wanted.startswith(n)) for n in names):
+            if any(n and len(n) > 2 and (n.startswith(wanted) or wanted.startswith(n)) for n in names):
                 return entry
         return None
 
@@ -442,8 +499,7 @@ class Store:
         haystack = f" {normalize_text(text)} "
         found: list[dict[str, Any]] = []
         for entry in self.list_glossary():
-            names = [entry["term"]] + list(entry.get("aliases", []))
-            for name in names:
+            for name in [entry["term"]] + list(entry.get("aliases", [])):
                 needle = normalize_text(name)
                 if needle and f" {needle} " in haystack:
                     found.append(entry)
@@ -457,10 +513,7 @@ class Store:
             self._conn.execute(
                 "INSERT INTO sessions(session_id, client_id, status, created_at, updated_at, doc) VALUES (?,?,?,?,?,?) "
                 "ON CONFLICT(session_id) DO UPDATE SET status=excluded.status, updated_at=excluded.updated_at, doc=excluded.doc",
-                (
-                    session["session_id"], session["client_id"], session["status"],
-                    session["created_at"], session["updated_at"], json.dumps(session),
-                ),
+                (session["session_id"], session["client_id"], session["status"], session["created_at"], session["updated_at"], json.dumps(session)),
             )
 
     def get_session(self, session_id: str) -> dict[str, Any] | None:
@@ -468,22 +521,44 @@ class Store:
 
     # ----------------------------------------------------------------- cases
 
-    def next_case_id(self) -> str:
+    def allocate_case_id(self) -> str:
+        """Atomically reserve the next case number (after any seeded cases)."""
         with self._lock:
-            row = self._conn.execute("SELECT MAX(case_num) FROM cases").fetchone()
-        current = row[0] if row and row[0] is not None else FIRST_CASE_NUMBER - 1
-        return f"CASE-{int(current) + 1}"
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                row = self._conn.execute("SELECT value FROM counters WHERE name = 'case'").fetchone()
+                highest = int(self._conn.execute("SELECT COALESCE(MAX(case_num), 0) FROM cases").fetchone()[0])
+                current = max(int(row["value"]) if row else 0, highest, FIRST_CASE_NUMBER - 1)
+                nxt = current + 1
+                self._conn.execute(
+                    "INSERT INTO counters(name, value) VALUES ('case', ?) ON CONFLICT(name) DO UPDATE SET value = excluded.value",
+                    (nxt,),
+                )
+                self._conn.execute("COMMIT")
+            except Exception:
+                self._conn.execute("ROLLBACK")
+                raise
+        return f"CASE-{nxt}"
 
-    def save_case(self, case: dict[str, Any]) -> None:
-        case_num = int(case["case_id"].rsplit("-", 1)[-1])
+    @property
+    def lock(self) -> threading.RLock:
+        """Hold this around a read-modify-write of one record so concurrent staff actions cannot clobber each other."""
+        return self._lock
+
+    def insert_case(self, case: dict[str, Any]) -> None:
+        """Insert a brand-new case; a duplicate id fails loudly instead of overwriting."""
         with self._lock:
             self._conn.execute(
-                "INSERT INTO cases(case_id, case_num, client_id, status, created_at, updated_at, doc) VALUES (?,?,?,?,?,?,?) "
+                "INSERT INTO cases(case_id, case_num, client_id, status, created_at, updated_at, seeded, doc) VALUES (?,?,?,?,?,?,0,?)",
+                (case["case_id"], case_number(case["case_id"]), case["client_id"], case["status"], case["created_at"], case.get("updated_at") or case["created_at"], json.dumps(case)),
+            )
+
+    def save_case(self, case: dict[str, Any]) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO cases(case_id, case_num, client_id, status, created_at, updated_at, seeded, doc) VALUES (?,?,?,?,?,?,0,?) "
                 "ON CONFLICT(case_id) DO UPDATE SET status=excluded.status, updated_at=excluded.updated_at, doc=excluded.doc",
-                (
-                    case["case_id"], case_num, case["client_id"], case["status"],
-                    case["created_at"], case["updated_at"], json.dumps(case),
-                ),
+                (case["case_id"], case_number(case["case_id"]), case["client_id"], case["status"], case["created_at"], case.get("updated_at") or case["created_at"], json.dumps(case)),
             )
 
     def get_case(self, case_id: str) -> dict[str, Any] | None:
@@ -502,7 +577,6 @@ class Store:
     def assignments_for_case(self, case_id: str) -> list[dict[str, Any]]:
         with self._lock:
             rows = self._conn.execute(
-                "SELECT case_id, advisor_id, staff_reason, decided_by, created_at FROM assignments WHERE case_id = ? ORDER BY id",
-                (case_id,),
+                "SELECT case_id, advisor_id, staff_reason, decided_by, created_at FROM assignments WHERE case_id = ? ORDER BY id", (case_id,)
             ).fetchall()
         return [dict(row) for row in rows]

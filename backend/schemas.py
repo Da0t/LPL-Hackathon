@@ -1,9 +1,9 @@
 """Pydantic models for the SamePage version-one HTTP contract (Agent 2).
 
-Field names here are the frozen contract from ``SAMEPAGE_PRODUCT_SPEC.md``.
-Fields marked "additive" are extra, backwards-compatible fields that UI agents
-may use but are not required to. Never rename or remove a contract field here
-without notifying Agents 1, 3, and 4.
+Field names follow ``contracts/API_V1.md`` and ``contracts/demo_fixture_v1.json``.
+Fields marked "additive" are extra, backwards-compatible fields that the UI
+agents may use (several are the optional version-two fields proposed in
+``data/CONTRACT_V2_PROPOSAL.md``). Never rename or remove a contract field here.
 """
 
 from __future__ import annotations
@@ -27,44 +27,33 @@ CATEGORY_TAXONOMY: tuple[str, ...] = (
     "other_or_unclear",
 )
 
-SESSION_STATUSES: tuple[str, ...] = (
-    "draft",
-    "needs_clarification",
-    "ready_for_client_review",
-    "submitted",
-)
-
-CASE_STATUSES: tuple[str, ...] = (
-    "submitted",
-    "staff_review",
-    "assigned",
-    "needs_client_followup",
-)
+SESSION_STATUSES: tuple[str, ...] = ("draft", "needs_clarification", "ready_for_client_review", "submitted")
+CASE_STATUSES: tuple[str, ...] = ("submitted", "staff_review", "assigned", "needs_client_followup")
 
 ACCOUNT_MATCH_STATUSES: tuple[str, ...] = (
-    "client_confirmed",   # client confirmed the account the agent proposed
+    "client_confirmed",   # client confirmed an account the agent proposed
     "client_selected",    # client chose an owned account the agent had not proposed
     "unresolved",         # no account selected; staff must resolve
+    "not_needed",         # security/access concern with no single account involved
 )
 
+# Routing destinations. Names match the frozen fixture and Agent 4's seed cases.
+SECURITY_DESTINATION = "security_specialist_review"
 DESTINATIONS: dict[str, str] = {
-    "specialist_security_review": "Security and fraud specialist review queue",
+    SECURITY_DESTINATION: "Security specialist review queue",
     "retirement_advisor_review": "Retirement and distribution advisor review",
-    "estate_planning_advisor_review": "Beneficiary and estate advisor review",
-    "investment_advisor_review": "Investment planning advisor review",
-    "client_service_review": "Client service review",
-    "general_advisor_review": "General advisor review",
+    "estate_and_beneficiary_review": "Beneficiary and estate advisor review",
+    "advisor_review": "Advisor review",
 }
-
 CATEGORY_TO_DESTINATION: dict[str, str] = {
-    "fraud_or_security": "specialist_security_review",
+    "fraud_or_security": SECURITY_DESTINATION,
     "retirement_income": "retirement_advisor_review",
     "withdrawal_or_distribution": "retirement_advisor_review",
     "rollover_or_transfer": "retirement_advisor_review",
-    "beneficiary_or_estate": "estate_planning_advisor_review",
-    "investment_planning": "investment_advisor_review",
-    "account_service": "client_service_review",
-    "other_or_unclear": "general_advisor_review",
+    "beneficiary_or_estate": "estate_and_beneficiary_review",
+    "investment_planning": "advisor_review",
+    "account_service": "advisor_review",
+    "other_or_unclear": "advisor_review",
 }
 
 # Reserved option ids a client UI may send in ``selected_option_id``.
@@ -75,6 +64,8 @@ RESERVED_OPTION_IDS: tuple[str, ...] = (OPTION_NONE_OF_THESE, OPTION_TALK_TO_PER
 MAX_SUGGESTIONS = 3
 MAX_TEXT_CHARS = 4000
 MAX_AMOUNT = 10_000_000
+
+CONFIRM_CLIENT_SUMMARY_DEFAULT = "Your request has been sent for staff review."
 
 
 def normalize_input_mode(value: str | None) -> str:
@@ -123,7 +114,7 @@ class IntakeStartResponse(BaseModel):
     status: str
     # additive
     client_id: str
-    agent_mode: str
+    ai_mode: str
     simulated_access_control: bool = True
 
 
@@ -161,6 +152,21 @@ class IntakeConfirmRequest(BaseModel):
     selected_account_id: str | None = Field(default=None, max_length=64)
     amount_requested: float | None = Field(default=None, gt=0, le=MAX_AMOUNT)
 
+    @field_validator("amount_requested", mode="before")
+    @classmethod
+    def _amount_must_be_a_number(cls, value: Any) -> Any:
+        if isinstance(value, bool):
+            raise ValueError("amount_requested must be a number, not a boolean")
+        if isinstance(value, str):
+            cleaned = value.replace(",", "").replace("$", "").strip()
+            if not cleaned:
+                return None
+            try:
+                return float(cleaned)
+            except ValueError as exc:
+                raise ValueError("amount_requested must be a number") from exc
+        return value
+
 
 class IntakeConfirmResponse(BaseModel):
     case_id: str
@@ -179,25 +185,34 @@ class RelevantEvent(BaseModel):
     type: str
     date: str
     source_id: str
-    description: str | None = None
+    summary: str | None = None      # version-two optional field read by the staff page
+    description: str | None = None  # same text; kept for earlier consumers
 
 
 class AccountContext(BaseModel):
-    account_id: str
     account_type: str
-    account_label: str
     masked_identifier: str
-    ownership: str | None = None
     balance: int | float | None = None
     balance_as_of: str | None = None
-    source_id: str | None = None
+    account_source_id: str | None = None
     relevant_events: list[RelevantEvent] = Field(default_factory=list)
-    conflicts: list[str] = Field(default_factory=list)
+    # additive / version-two optional
+    account_id: str | None = None
+    familiar_label: str | None = None
+    account_label: str | None = None
+    currency: str | None = "USD"
+    ownership: str | None = None
+    source_id: str | None = None
     cautions: list[str] = Field(default_factory=list)
     sources: list[str] = Field(default_factory=list)
 
 
-class StaffDecision(BaseModel):
+class Conflict(BaseModel):
+    statement: str
+    source_id: str | None = None
+
+
+class StaffDecisionDetail(BaseModel):
     advisor_id: str
     staff_reason: str
     decided_at: str
@@ -206,11 +221,14 @@ class StaffDecision(BaseModel):
 
 class Routing(BaseModel):
     destination: str
-    destination_reason: str | None = None
     recommended_advisor_ids: list[str] = Field(default_factory=list)
     assigned_advisor_id: str | None = None
-    staff_decision: StaffDecision | None = None
+    staff_decision: str | None = None  # the staff member's recorded reason (string, as the mock/UI expect)
+    # additive / version-two optional
+    reason: str | None = None
+    staff_decision_detail: StaffDecisionDetail | None = None
     model_recommended_advisor_ids: list[str] = Field(default_factory=list)
+    model_routing_hint: str | None = None
 
 
 class Urgency(BaseModel):
@@ -240,7 +258,7 @@ class HistoryEntry(BaseModel):
 
 
 class TriageInfo(BaseModel):
-    status: Literal["completed", "failed"]
+    status: Literal["completed", "failed", "seeded"]
     adapter: str
     error: str | None = None
     validation_notes: list[str] = Field(default_factory=list)
@@ -249,43 +267,47 @@ class TriageInfo(BaseModel):
 class CaseRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    # contract (contracts/API_V1.md required fields)
     case_id: str
     client_id: str
     client_display_name: str
-    preferred_contact_channel: str | None = None
+    created_at: str
     status: str
     input_mode: str
-    created_at: str
-    client_confirmed_at: str
-    updated_at: str
-
     original_words: str
     confirmed_plain_language_request: str
     staff_summary: str
     intent: str | None = None
-
     amount_requested: int | float | None = None
-    currency: str = "USD"
+    currency: str | None = None
     selected_account_id: str | None = None
     account_match_status: str
-
     categories: list[str]
     unresolved_questions: list[str] = Field(default_factory=list)
     flags: list[str] = Field(default_factory=list)
-    urgency: Urgency = Field(default_factory=Urgency)
-
     account_context: AccountContext | None = None
     routing: Routing
 
+    # additive / version-two optional
+    preferred_contact_channel: str | None = None
+    client_confirmed_at: str | None = None
+    updated_at: str | None = None
+    conflicts: list[Conflict] = Field(default_factory=list)
+    urgency: Urgency = Field(default_factory=Urgency)
+    existing_advisor_id: str | None = None
     conversation: list[ConversationTurn] = Field(default_factory=list)
     history: list[HistoryEntry] = Field(default_factory=list)
     triage: TriageInfo
-    existing_advisor_id: str | None = None
 
 
 # --------------------------------------------------------------------------
 # Staff
 # --------------------------------------------------------------------------
+
+
+class QueueRouting(BaseModel):
+    destination: str
+    assigned_advisor_id: str | None = None
 
 
 class StaffCaseSummary(BaseModel):
@@ -301,8 +323,7 @@ class StaffCaseSummary(BaseModel):
     urgency: Urgency
     clarification_needed: bool
     existing_advisor_id: str | None = None
-    destination: str
-    assigned_advisor_id: str | None = None
+    routing: QueueRouting
 
 
 class StaffCasesResponse(BaseModel):
@@ -315,12 +336,12 @@ class Candidate(BaseModel):
     specialties: list[str]
     available: bool
     reason: str
-    # additive
-    rank: int
-    existing_relationship: bool = False
-    active: bool = True
-    meeting_modes: list[str] = Field(default_factory=list)
+    # additive / version-two optional
+    existing_client_relationship: bool = False
+    meeting_mode: list[str] = Field(default_factory=list)
     capacity: int | None = None
+    rank: int = 0
+    active: bool = True
     region: str | None = None
     kind: str = "advisor"
     eligibility_check: str = "manual_verification_required"
@@ -331,7 +352,7 @@ class CandidatesResponse(BaseModel):
     # additive
     case_id: str
     destination: str
-    destination_reason: str | None = None
+    reason: str | None = None
 
 
 class AssignRequest(BaseModel):
@@ -365,8 +386,9 @@ class DemoClientsResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
-    agent_mode: str
-    agent_adapter: str
+    ai_mode: str
+    adapter: str
+    live_model: bool
     data_source: str
     counts: dict[str, int]
     simulated_access_control: bool = True
@@ -376,3 +398,4 @@ class ResetResponse(BaseModel):
     status: str
     data_source: str
     counts: dict[str, int]
+    server_restart_required: bool = False

@@ -1,6 +1,6 @@
 """HTTP routes for the SamePage version-one contract (Agent 2).
 
-Frozen contract (see SAMEPAGE_PRODUCT_SPEC.md, "API contracts"):
+Frozen contract (contracts/API_V1.md):
 
     POST /intake/start
     POST /intake/{session_id}/turn
@@ -34,13 +34,13 @@ from backend.schemas import (
     ResetResponse,
     StaffCasesResponse,
 )
-from backend.services.auth import require_client, require_staff
+from backend.services.auth import check_demo_client, require_client, require_staff
 
 router = APIRouter()
 
 _ERRORS = {
     400: {"model": ErrorResponse, "description": "Bad request"},
-    403: {"model": ErrorResponse, "description": "Demo role not permitted (simulated access control)"},
+    403: {"model": ErrorResponse, "description": "Demo role or demo client not permitted (simulated access control)"},
     404: {"model": ErrorResponse, "description": "Not found"},
     409: {"model": ErrorResponse, "description": "Conflict with current state"},
     422: {"model": ErrorResponse, "description": "Validation error"},
@@ -60,31 +60,29 @@ def _staff(request: Request):
 
 @router.post("/intake/start", response_model=IntakeStartResponse, responses=_ERRORS, tags=["intake"])
 def intake_start(body: IntakeStartRequest, request: Request, _role: str = Depends(require_client)):
+    check_demo_client(request, body.client_id)
     session = _intake(request).start(body.client_id)
     return IntakeStartResponse(
         session_id=session["session_id"],
         client_display_name=session["client_display_name"],
         status=session["status"],
         client_id=session["client_id"],
-        agent_mode=request.app.state.adapter.name,
+        ai_mode=request.app.state.settings.ai_mode,
     )
 
 
 @router.post("/intake/{session_id}/turn", response_model=IntakeTurnResponse, responses=_ERRORS, tags=["intake"])
 def intake_turn(session_id: str, body: IntakeTurnRequest, request: Request, _role: str = Depends(require_client)):
-    result = _intake(request).turn(session_id, body.text, body.input_mode, body.selected_option_id)
-    return IntakeTurnResponse(**result)
+    service = _intake(request)
+    check_demo_client(request, service.get_session(session_id)["client_id"])
+    return IntakeTurnResponse(**service.turn(session_id, body.text, body.input_mode, body.selected_option_id))
 
 
 @router.post("/intake/{session_id}/confirm", response_model=IntakeConfirmResponse, responses=_ERRORS, tags=["intake"])
 def intake_confirm(session_id: str, body: IntakeConfirmRequest, request: Request, _role: str = Depends(require_client)):
-    result = _intake(request).confirm(
-        session_id,
-        body.confirmed_plain_language_request,
-        body.selected_account_id,
-        body.amount_requested,
-    )
-    return IntakeConfirmResponse(**result)
+    service = _intake(request)
+    check_demo_client(request, service.get_session(session_id)["client_id"])
+    return IntakeConfirmResponse(**service.confirm(session_id, body.confirmed_plain_language_request, body.selected_account_id, body.amount_requested))
 
 
 # ------------------------------------------------------------------- staff
@@ -124,8 +122,9 @@ def health(request: Request):
     adapter = request.app.state.adapter
     return HealthResponse(
         status="ok",
-        agent_mode=request.app.state.settings.agent_mode,
-        agent_adapter=adapter.name,
+        ai_mode=request.app.state.settings.ai_mode,
+        adapter=adapter.name,
+        live_model=bool(adapter.live),
         data_source=store.data_source,
         counts=store.counts(),
     )
@@ -135,10 +134,7 @@ def health(request: Request):
 def demo_clients(request: Request):
     clients = request.app.state.store.list_clients()
     return DemoClientsResponse(
-        clients=[
-            {"client_id": c["client_id"], "display_name": c["display_name"], "demo_scenario": c.get("demo_scenario")}
-            for c in clients
-        ]
+        clients=[{"client_id": c["client_id"], "display_name": c["display_name"], "demo_scenario": c.get("demo_scenario")} for c in clients]
     )
 
 

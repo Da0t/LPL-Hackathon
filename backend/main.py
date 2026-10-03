@@ -2,11 +2,12 @@
 
 Run (one command, port 8000)::
 
-    python -m backend.main                      # mock adapter, offline
-    SAMEPAGE_AGENT_MODE=bedrock python -m backend.main   # live Bedrock via Agent 1's adapter
+    python -m backend.main                            # mock adapter, offline
+    SAMEPAGE_AI_MODE=bedrock python -m backend.main   # live Bedrock via Agent 1's adapter
 
-``uvicorn backend.main:app --port 8000`` also works. ``create_app`` builds an
-isolated application for tests.
+``python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000`` (the
+INTEGRATION_RUNBOOK.md command) also works. ``create_app`` builds an isolated
+application for tests.
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from backend import api
@@ -51,7 +52,7 @@ LANDING = """<!doctype html>
 li{{margin:.3rem 0}}</style></head>
 <body><h1>SamePage</h1>
 <p>Say what you need in your own words; reach the right advisor without guessing which account you meant.</p>
-<p>Language model: <span class="badge">{mode_label}</span> &middot; Data: <code>{data_source}</code></p>
+<p>Language model: <span class="badge">{mode_label}</span> &middot; Data: <code>{data_source}</code> &middot; <code>SAMEPAGE_AI_MODE={ai_mode}</code></p>
 <ul>
 <li><a href="/client">Client intake page</a> (Agent 3)</li>
 <li><a href="/staff">Staff triage page</a> (Agent 4)</li>
@@ -71,9 +72,11 @@ def create_app(settings: Settings | None = None, *, store: Store | None = None, 
         store.reset_state()
     else:
         store.load_seed()
-    adapter = adapter or load_adapter(settings.agent_mode, settings.adapter_timeout_s)
-    if settings.agent_mode == "bedrock" and not adapter.live:
-        raise RuntimeError("SAMEPAGE_AGENT_MODE=bedrock but a non-live adapter was supplied")
+    adapter = adapter or load_adapter(settings.ai_mode, settings.adapter_timeout_s)
+    if settings.ai_mode == "bedrock" and not adapter.live:
+        raise RuntimeError("SAMEPAGE_AI_MODE=bedrock but a non-live adapter was supplied")
+    if not adapter.live:
+        log.warning("SAMEPAGE_AI_MODE=%s: language model is SIMULATED (%s). The judged demo must run with SAMEPAGE_AI_MODE=bedrock.", settings.ai_mode, adapter.name)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -115,20 +118,21 @@ def create_app(settings: Settings | None = None, *, store: Store | None = None, 
 
     @app.exception_handler(RequestValidationError)
     async def _validation_error(_: Request, exc: RequestValidationError):
-        return JSONResponse(
-            status_code=422,
-            content={"error_code": "validation_error", "message": "Request did not match the API contract.", "details": exc.errors()},
-        )
+        errors = exc.errors()
+        details = [{k: v for k, v in e.items() if k in ("type", "loc", "msg")} for e in errors]
+        if any(str(e.get("type", "")).startswith("json") for e in errors):
+            return JSONResponse(status_code=400, content={"error_code": "INVALID_JSON", "message": "Send a JSON object.", "details": details})
+        return JSONResponse(status_code=422, content={"error_code": "VALIDATION_ERROR", "message": "Request did not match the API contract.", "details": details})
 
     @app.exception_handler(StarletteHTTPException)
     async def _http_error(_: Request, exc: StarletteHTTPException):
-        code = {404: "not_found", 405: "method_not_allowed", 403: "forbidden", 401: "unauthorized"}.get(exc.status_code, "http_error")
+        code = {404: "PATH_NOT_FOUND", 405: "METHOD_NOT_ALLOWED", 403: "FORBIDDEN", 401: "UNAUTHORIZED"}.get(exc.status_code, "HTTP_ERROR")
         return JSONResponse(status_code=exc.status_code, content={"error_code": code, "message": str(exc.detail)})
 
     @app.exception_handler(Exception)
     async def _unhandled(_: Request, exc: Exception):
         log.exception("unhandled error: %s", type(exc).__name__)
-        return JSONResponse(status_code=500, content={"error_code": "internal_error", "message": "Something went wrong on our side. Your draft is preserved; please try again."})
+        return JSONResponse(status_code=500, content={"error_code": "INTERNAL_ERROR", "message": "Something went wrong on our side. Your draft is preserved; please try again."})
 
     app.include_router(api.router)
 
@@ -140,17 +144,20 @@ def create_app(settings: Settings | None = None, *, store: Store | None = None, 
         if not directory.is_dir():
             if is_index:
                 return placeholder
-            raise ApiError(404, "not_found", f"{route} page files are not on disk yet ({owner}).")
+            raise ApiError(404, "PATH_NOT_FOUND", f"{route} page files are not on disk yet ({owner}).")
         root = directory.resolve()
-        target = (root / path).resolve() if path else root / "index.html"
+        try:
+            target = (root / path).resolve() if path else root / "index.html"
+        except (ValueError, OSError):
+            raise ApiError(404, "PATH_NOT_FOUND", "File not found.") from None
         if root != target and root not in target.parents:
-            raise ApiError(404, "not_found", "File not found.")
+            raise ApiError(404, "PATH_NOT_FOUND", "File not found.")
         if target.is_dir():
             target = target / "index.html"
         if not target.is_file():
             if is_index:
                 return placeholder
-            raise ApiError(404, "not_found", "File not found.")
+            raise ApiError(404, "PATH_NOT_FOUND", "File not found.")
         return FileResponse(target)
 
     @app.get("/client", include_in_schema=False)
@@ -162,19 +169,29 @@ def create_app(settings: Settings | None = None, *, store: Store | None = None, 
     def client_asset(path: str):
         return serve(settings.client_frontend_dir, "/client", "client", "Agent 3", path)
 
+    @app.get("/intake/{path:path}", include_in_schema=False)
+    def intake_get(path: str):
+        raise ApiError(405, "METHOD_NOT_ALLOWED", "Intake endpoints accept POST only. See /docs.")
+
     @app.get("/staff", include_in_schema=False)
     @app.get("/staff/", include_in_schema=False)
     def staff_index():
         return serve(settings.staff_frontend_dir, "/staff", "staff", "Agent 4")
 
     @app.get("/staff/{path:path}", include_in_schema=False)
-    def staff_asset(path: str):
+    def staff_asset(path: str, request: Request):
+        # API paths that fell through (trailing slash or typo) must not be mistaken for page files.
+        if path.split("/", 1)[0] == "cases":
+            if path.endswith("/"):
+                query = f"?{request.url.query}" if request.url.query else ""
+                return RedirectResponse(url=f"/staff/{path.rstrip('/')}{query}", status_code=307)
+            raise ApiError(404, "PATH_NOT_FOUND", f"No staff API route /staff/{path}. See /docs for the frozen endpoints.")
         return serve(settings.staff_frontend_dir, "/staff", "staff", "Agent 4", path)
 
     @app.get("/", include_in_schema=False)
     def landing():
         mode_label = "Amazon Bedrock (live)" if adapter.live else "Mock adapter (simulated, offline)"
-        return HTMLResponse(LANDING.format(mode_label=mode_label, badge_bg="#1a7f37" if adapter.live else "#8a6d00", data_source=escape(store.data_source)))
+        return HTMLResponse(LANDING.format(mode_label=mode_label, badge_bg="#1a7f37" if adapter.live else "#8a6d00", data_source=escape(store.data_source), ai_mode=escape(settings.ai_mode)))
 
     return app
 
