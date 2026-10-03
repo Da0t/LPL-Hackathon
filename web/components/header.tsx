@@ -19,9 +19,14 @@ export const HeroHeader = () => {
                 <div className="mx-auto max-w-6xl px-6 transition-all duration-300">
                     <div className="relative flex flex-wrap items-center justify-between gap-6 py-3 lg:gap-0 lg:py-4">
                         <div className="flex w-full items-center justify-between gap-12 lg:w-auto">
-                            <Link href="/" aria-label="Coherent home" className="flex items-center gap-2">
-                                <BrandLogo height={30} />
-                            </Link>
+                            {/* The home page's hero is the logo itself, so the bar stays unbranded there. */}
+                            {pathname === '/' ? (
+                                <span aria-hidden="true" />
+                            ) : (
+                                <Link href="/" aria-label="Coherent home" className="flex items-center gap-2">
+                                    <BrandLogo height={30} />
+                                </Link>
+                            )}
                             <button
                                 onClick={() => setMenuState(!menuState)}
                                 aria-label={menuState ? 'Close Menu' : 'Open Menu'}
