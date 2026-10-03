@@ -166,6 +166,20 @@ def test_prep_brief_is_cached_per_case(live, monkeypatch):
     assert len(calls) == 2, "one call per case, not per view"
 
 
+PACKET = {"headline": "H", "action_type": "account_service", "prepared_fields": [], "compliance_checks": [],
+          "draft_client_message": "Hi.", "draft_advisor_followup": "Call."}
+
+
+def test_prepared_action_is_cached_until_regenerated(live, monkeypatch):
+    calls = counting(monkeypatch, ba, "fulfillment_plan", PACKET)
+    url = "/staff/cases/CASE-1041/plan"
+    first = live.post(url, headers=STAFF)
+    assert first.status_code == 200, "a POST with no body is accepted"
+    assert live.post(url, json={}, headers=STAFF).json() == first.json() and len(calls) == 1, "reopening shows the same draft"
+    live.post(url, json={"refresh": True}, headers=STAFF)
+    assert len(calls) == 2, "Regenerate bypasses the cache"
+
+
 def test_an_offline_fallback_is_not_cached_so_the_model_is_retried(live, monkeypatch):
     calls = []
 
@@ -196,6 +210,15 @@ def test_approving_a_prepared_action_sends_its_message_to_the_client(client):
     assert row(client, "CASE-1042")["lifecycle"] == "awaiting_client"
     request = client.get("/my/requests", headers=MARA).json()["requests"][0]
     assert request["awaiting_reply"] is True and [(m["from"], m["text"]) for m in request["messages"]] == [("advisor", draft)]
+
+
+def test_prepared_message_asks_the_client_for_what_is_missing(client):
+    plan = client.post("/staff/cases/CASE-SEC-1/plan", headers=STAFF).json()
+    assert {"label": "Account", "value": ""} in plan["prepared_fields"], "a missing fact is listed, not left out"
+    assert "which account" in plan["draft_client_message"]
+    assert approve(client, "CASE-SEC-1", text=plan["draft_client_message"]).status_code == 200, "the draft still passes compliance"
+    complete = client.post("/staff/cases/CASE-1042/plan", headers=STAFF).json()
+    assert all(f["value"] for f in complete["prepared_fields"]) and "which account" not in complete["draft_client_message"]
 
 
 def test_client_can_answer_an_approved_action(client):

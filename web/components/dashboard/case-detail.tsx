@@ -121,7 +121,7 @@ function Activity({ history }: { history: any[] }) {
             <div className="text-sm font-medium">{HISTORY_LABELS[h.event] || sentence(h.event)}</div>
             {h.details?.text && <div className="text-sm text-muted-foreground">“{h.details.text}”</div>}
             {h.details?.acknowledged_flags?.length > 0 && (
-              <div className="text-xs text-muted-foreground">Flagged checks reviewed: {h.details.acknowledged_flags.join(", ")}</div>
+              <div className="text-xs text-muted-foreground">Checks reviewed: {h.details.acknowledged_flags.join(", ")}</div>
             )}
             {h.details?.compliance && (
               <div className="text-xs text-muted-foreground">
@@ -137,7 +137,7 @@ function Activity({ history }: { history: any[] }) {
   );
 }
 
-function Overview({ detail, brief, briefLoading, onLoadBrief, onRegenerateBrief, plan, planLoading, planStage, onRegeneratePlan, onApprove }: any) {
+function Overview({ detail, brief, briefLoading, onLoadBrief, onRegenerateBrief, plan, planLoading, onRegeneratePlan, onSendPrepared }: any) {
   const [lead, setLead] = useState<"action" | "brief">("action");
   const ac = detail.account_context;
   const flags: string[] = detail.flags || [];
@@ -145,18 +145,18 @@ function Overview({ detail, brief, briefLoading, onLoadBrief, onRegenerateBrief,
     `flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium transition-colors ${active ? "bg-background text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`;
   return (
     <>
-      {/* Prepared action (default) | prep brief, as on main */}
+      {/* Prepared reply (default) | prep brief */}
       <div className="mt-5 inline-flex rounded-xl border border-border bg-muted/40 p-1 text-sm">
         <button onClick={() => setLead("action")} className={leadClass(lead === "action")}>
-          <Workflow className="h-4 w-4" /> Prepared action
+          <Workflow className="h-4 w-4" /> Prepared reply
         </button>
         <button onClick={() => { setLead("brief"); if (!brief && !briefLoading) onLoadBrief(); }} className={leadClass(lead === "brief")}>
           <Sparkles className="h-4 w-4" /> Prep brief
         </button>
       </div>
       {lead === "action"
-        ? <ActionPacket plan={plan} loading={planLoading} stage={planStage} onRegenerate={onRegeneratePlan} onApprove={onApprove}
-            alreadyApproved={(detail.history || []).some((h: any) => h.event === "action_approved")}
+        ? <ActionPacket plan={plan} loading={planLoading} onRegenerate={onRegeneratePlan} onSend={onSendPrepared}
+            sent={(detail.history || []).find((h: any) => h.event === "action_approved") || null}
             resolved={(detail.history || []).some((h: any) => h.event === "request_resolved")} />
         : <div className="mt-5"><PrepBrief brief={brief} loading={briefLoading} onRegenerate={onRegenerateBrief} /></div>}
 
@@ -275,13 +275,14 @@ function Assign({ detail, candidates, candMeta, assigning, onAssign, onAction, a
 
 export function CaseDetail({
   detail, row, snapshot, candidates, candMeta, assigning, onAssign, brief, briefLoading, onLoadBrief, onRegenerateBrief,
-  plan, planLoading, planStage, onRegeneratePlan, onApprove, onAction, actionBusy, hc, error, onDismissError, onOpenCase, initialTab,
+  plan, planLoading, onRegeneratePlan, onSendPrepared, onAction, actionBusy, hc, error, onDismissError, onOpenCase, initialTab,
 }: {
   detail: any; row?: CaseRow; snapshot: ClientSnapshot | null; candidates: Candidate[];
   candMeta: { destination?: string; reason?: string }; assigning: string | null;
   onAssign: (advisorId: string, reason: string) => void; brief: Brief | null; briefLoading: boolean;
   onLoadBrief: () => void; onRegenerateBrief: () => void;
-  plan: ActionPlan | null; planLoading: boolean; planStage: number; onRegeneratePlan: () => void; onApprove: (message?: string, acknowledgedFlags?: string[]) => Promise<boolean>;
+  plan: ActionPlan | null; planLoading: boolean; onRegeneratePlan: () => void;
+  onSendPrepared: (message: string | undefined, reviewedChecks: string[]) => Promise<string | null>;
   onAction: (a: AdvisorAction, t?: string, c?: SentCompliance) => void;
   actionBusy: boolean; hc: any; error: string | null; onDismissError: () => void;
   onOpenCase: (id: string) => void; initialTab?: CaseTab;
@@ -342,7 +343,7 @@ export function CaseDetail({
 
       {tab === "overview" && (
         <Overview detail={detail} brief={brief} briefLoading={briefLoading} onLoadBrief={onLoadBrief} onRegenerateBrief={onRegenerateBrief}
-          plan={plan} planLoading={planLoading} planStage={planStage} onRegeneratePlan={onRegeneratePlan} onApprove={onApprove} />
+          plan={plan} planLoading={planLoading} onRegeneratePlan={onRegeneratePlan} onSendPrepared={onSendPrepared} />
       )}
       {tab === "plan" && (
         <div className="mt-6 space-y-6">

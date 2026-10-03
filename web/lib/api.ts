@@ -158,8 +158,8 @@ export type ActionPlan = {
   compliance_checks: { item: string; status: "pass" | "review" | "flag"; note?: string }[];
   draft_client_message: string; draft_advisor_followup: string;
 };
-export const getPlan = (id: string) =>
-  call<ActionPlan>(`/staff/cases/${encodeURIComponent(id)}/plan`, { method: "POST", role: "staff" });
+export const getPlan = (id: string, refresh = false) =>
+  call<ActionPlan>(`/staff/cases/${encodeURIComponent(id)}/plan`, { method: "POST", role: "staff", body: { refresh } });
 
 // ---- Advisor agents: reply drafter + compliance reviewer ----
 export type ComplianceCheck = { id: string; label: string; status: "pass" | "attention"; evidence: string };

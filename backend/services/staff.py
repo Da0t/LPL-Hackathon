@@ -103,22 +103,13 @@ class StaffService:
             ai_mode, lambda: ba.advisor_brief(case), lambda: ba._stub_brief(case), "brief"))
         return {"case_id": case_id, "ai_mode": ai_mode, "note": note, **raw}
 
-    def plan(self, case_id: str, ai_mode: str = "mock") -> dict[str, Any]:
+    def plan(self, case_id: str, ai_mode: str = "mock", refresh: bool = False) -> dict[str, Any]:
         """Read-only agentic action packet: pre-filled fields + compliance checks +
         client/advisor drafts, for human approval. Never mutates the case."""
         case = self._case(case_id)
         from backend.aws import bedrock_agent as ba
-        note = None
-        if ai_mode == "bedrock":
-            try:
-                raw = ba.fulfillment_plan(case)
-            except Exception as exc:  # noqa: BLE001
-                log.warning("fulfillment_plan fell back to offline: %s", exc)
-                raw = ba._stub_plan(case)
-                note = "Prepared offline (model temporarily unavailable)."
-        else:
-            raw = ba._stub_plan(case)
-            note = "Deterministic plan (set SAMEPAGE_AI_MODE=bedrock for the live agent)."
+        raw, note = self._cached("packet", case, ai_mode, refresh, lambda: self._run_agent(
+            ai_mode, lambda: ba.fulfillment_plan(case), lambda: ba._stub_plan(case), "plan"))
         return {"case_id": case_id, "ai_mode": ai_mode, "note": note, **raw}
 
     def _agent_facts(self, case: dict[str, Any]) -> dict[str, Any]:
@@ -296,7 +287,7 @@ class StaffService:
             if reviewed:
                 details["compliance"] = reviewed
             if action == "approve" and isinstance(acknowledged_flags, list):
-                # Flagged checks on the packet that the advisor confirmed having reviewed before approving.
+                # Checks on the packet (review or flag) that the advisor confirmed having reviewed before approving.
                 details["acknowledged_flags"] = [f for f in acknowledged_flags if isinstance(f, str) and 0 < len(f) <= 80][:10]
             event = {"event": event_name, "at": now, "details": details}
             case.setdefault("history", []).append(event)

@@ -756,7 +756,8 @@ Hard rules:
   include identity verification (review), a suitability/advice note, and , if the request involves money
   movement or a distribution , a tax-not-assessed note. Flag any fraud/security or account-mismatch signal.
 - draft_client_message: a short, plain-language message to the client confirming what happens next (no advice,
-  no promises of timing the firm can't keep).
+  no promises of timing the firm can't keep). If any prepared field is empty, the message must ask the client
+  for it in plain words.
 - draft_advisor_followup: concise internal next steps for the advisor.
 
 Report by calling submit_plan exactly once."""
@@ -830,28 +831,39 @@ def _stub_plan(case: dict) -> dict:
     cats = case.get("categories") or []
     security = "fraud_or_security" in cats
     fields = []
+    money_movement = any(c in cats for c in ("withdrawal_or_distribution", "rollover_or_transfer"))
+    asks = []  # what the draft message has to ask the client for, one per empty field
     if ac:
         fields.append({"label": "Account", "value": f"{str(ac.get('account_type','')).replace('_',' ')} {ac.get('masked_identifier','')}".strip()})
+    else:
+        fields.append({"label": "Account", "value": ""})
+        asks.append("which account this is about")
     if case.get("amount_requested"):
         fields.append({"label": "Amount", "value": f"${case['amount_requested']:,}"})
+    elif money_movement:
+        fields.append({"label": "Amount", "value": ""})
+        asks.append("the amount you have in mind")
     fields.append({"label": "Request type", "value": (cats[0].replace('_', ' ') if cats else "account service")})
     checks = [
         {"item": "Client identity", "status": "review", "note": "Verify identity before actioning."},
         {"item": "Investment/tax advice", "status": "pass", "note": "No advice given; service request only."},
     ]
-    if any(c in cats for c in ("withdrawal_or_distribution", "rollover_or_transfer")):
+    if money_movement:
         checks.append({"item": "Tax implications", "status": "review", "note": "Tax effects not assessed; advisor to review."})
     if "client_term_did_not_match_account_type" in (case.get("flags") or []):
         checks.append({"item": "Account match", "status": "flag", "note": "Client wording did not match records; confirm account."})
     if security:
         checks.append({"item": "Security review", "status": "flag", "note": "Possible unauthorized access; route to specialist."})
     name = (case.get("client_display_name") or "there").split(" ")[0]
+    message = f"Hi {name}, thanks, we've prepared your request and an advisor will review it shortly. Nothing has been moved yet; we'll confirm the next step with you."
+    if asks:
+        message += f" To finish preparing it, could you tell us {' and '.join(asks)}?"
     return {
         "headline": case.get("staff_summary") or "Prepared service request",
         "action_type": (cats[0] if cats else "account_service"),
         "prepared_fields": fields,
         "compliance_checks": checks,
-        "draft_client_message": f"Hi {name}, thanks , we've prepared your request and an advisor will review it shortly. Nothing has been moved yet; we'll confirm the next step with you.",
+        "draft_client_message": message,
         "draft_advisor_followup": "Review the prepared action and compliance checks, confirm the account and intent with the client, then approve.",
     }
 

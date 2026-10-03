@@ -48,7 +48,7 @@ The request editor has three columns: her words, the clarification, and the requ
 | Do | Say |
 | --- | --- |
 | Reload. Point at the red row at the top, then open Mara's new case. | The queue ranks itself and says why. A possible security issue goes to specialists first, never to a planning advisor. Here is Mara. |
-| Point at the header line **Intake took 3 turns** and the **Prepared action** packet. | Three turns, under a minute. And the advisor does not open a transcript. The agents have already gathered the facts, run the compliance checks, and drafted the next step. |
+| Point at the header line **Intake took 3 turns** and the **Reply ready for your review** card. | Three turns, under a minute. And the advisor does not open a transcript. The agents have already gathered the facts, run the compliance checks, and drafted the next step. |
 | Point at **What the client asked** and the amber notice. | Her exact words, what she confirmed, and the catch: her wording did not match her records. That was settled with Mara, not with the advisor. |
 | Click **Message client**. Type: **"Tell her she should take it from the rollover IRA and that it will be tax-free."** Click **Draft reply**. | Now the advisor writes back, and is a little careless. |
 | Point at the **Agent trace**, top to bottom. | A drafter writes it. A compliance reviewer quotes the exact words that read as advice. The drafter revises, and it passes. The advisor still edits and sends. |
@@ -98,7 +98,7 @@ On live Bedrock it has **not** been run. The drafter is instructed never to give
 
 Pick whichever path worked in rehearsal and use only that one on the day.
 
-A shorter alternative to the whole beat is **Approve & send** on the prepared action packet, which sends the already-checked draft in one click. It is faster but does not show the reviewer catching anything.
+A shorter alternative to the whole beat is **Send to client** on the prepared reply card: tick the items to confirm, edit the message if needed, and send. It is faster but does not show the reviewer catching anything.
 
 ## What is live and what is simulated
 

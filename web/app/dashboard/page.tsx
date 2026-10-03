@@ -49,7 +49,6 @@ export default function DashboardPage() {
   const [actionBusy, setActionBusy] = useState(false);
   const [plan, setPlan] = useState<ActionPlan | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
-  const [planStage, setPlanStage] = useState(0);
   const [actionError, setActionError] = useState<string | null>(null);
   const [hc, setHc] = useState<any>(null);
 
@@ -74,15 +73,14 @@ export default function DashboardPage() {
     try { setBrief(await getBrief(id, refresh)); } catch { setBrief(null); } finally { setBriefLoading(false); }
   }, []);
 
-  const loadPlan = useCallback(async (id: string) => {
-    setPlan(null); setPlanLoading(true); setPlanStage(0);
-    const timers = [1, 2, 3, 4].map((i) => setTimeout(() => setPlanStage((s) => Math.max(s, i)), i * 650));
-    try { setPlan(await getPlan(id)); } catch { setPlan(null); }
-    finally { timers.forEach(clearTimeout); setPlanStage(5); setPlanLoading(false); }
+  const loadPlan = useCallback(async (id: string, refresh = false) => {
+    setPlan(null); setPlanLoading(true);
+    try { setPlan(await getPlan(id, refresh)); } catch { setPlan(null); } finally { setPlanLoading(false); }
   }, []);
 
   // Reloads the case without touching the brief, so acting on a case does not re-run the briefing agent.
-  const refreshCase = useCallback(async (id: string, showLoading: boolean) => {
+  // Resolves to the case, or null when it could not be loaded.
+  const refreshCase = useCallback(async (id: string, showLoading: boolean): Promise<any> => {
     if (showLoading) { setDetailLoading(true); setDetail(null); setCandidates([]); setCandMeta({}); setSnapshot(null); }
     try {
       const [c, cand, snap] = await Promise.all([
@@ -92,16 +90,22 @@ export default function DashboardPage() {
       setCandidates((cand as any).candidates || []);
       setCandMeta({ destination: (cand as any).destination, reason: (cand as any).reason });
       setSnapshot(snap);
+      return c;
     } catch (e) {
       setDetail({ _error: e instanceof ApiError ? e.message : "Could not load this request." });
+      return null;
     } finally { setDetailLoading(false); }
   }, []);
 
   const openCase = useCallback((id: string, tab?: CaseTab) => {
     setSelectedId(id); setInitialTab(tab); setActionError(null); setView("queue");
     window.history.replaceState(null, "", `?case=${encodeURIComponent(id)}`);
-    setBrief(null); loadPlan(id);  // the prepared action leads; the prep brief loads when its tab is opened
-    refreshCase(id, true);
+    setBrief(null); setPlan(null);  // the prepared reply leads; the prep brief loads when its tab is opened
+    // A request that was already answered or resolved shows what was sent, so no new reply is prepared for it.
+    refreshCase(id, true).then((c) => {
+      const done = (c?.history || []).some((h: any) => h.event === "action_approved" || h.event === "request_resolved");
+      if (c && !done) loadPlan(id);
+    });
   }, [loadPlan, refreshCase]);
 
   // A link to /dashboard?case=CASE-1042&tab=plan opens that request on that tab.
@@ -120,16 +124,31 @@ export default function DashboardPage() {
     finally { setAssigning(null); }
   };
 
-  // Resolves to whether the action went through, so callers only show success when it did.
-  const doAction = async (action: AdvisorAction, text?: string, compliance?: SentCompliance, acknowledgedFlags?: string[]): Promise<boolean> => {
-    if (!selectedId) return false;
+  // Resolves to the reason the action failed, or null when it went through.
+  const runAction = async (action: AdvisorAction, text?: string, compliance?: SentCompliance, acknowledgedFlags?: string[]): Promise<{ code: string; message: string } | null> => {
+    if (!selectedId) return { code: "NO_CASE", message: "No request is open." };
     setActionBusy(true); setActionError(null);
     try {
       await caseAction(selectedId, action, text, compliance, acknowledgedFlags);
       await Promise.all([load(true), refreshCase(selectedId, false)]);
-      return true;
-    } catch (e) { setActionError(e instanceof ApiError ? e.message : "That did not go through. Try again."); return false; }
-    finally { setActionBusy(false); }
+      return null;
+    } catch (e) {
+      return e instanceof ApiError ? { code: e.code, message: e.message } : { code: "UNKNOWN", message: "That did not go through. Try again." };
+    } finally { setActionBusy(false); }
+  };
+
+  const doAction = async (action: AdvisorAction, text?: string, compliance?: SentCompliance) => {
+    const failure = await runAction(action, text, compliance);
+    if (failure) setActionError(failure.message);
+  };
+
+  // Sends the prepared reply. A failure is returned so the card can show it next to the message.
+  const sendPrepared = async (message: string | undefined, reviewedChecks: string[]): Promise<string | null> => {
+    const failure = await runAction("approve", message, undefined, reviewedChecks);
+    if (!failure) return null;
+    return failure.code === "COMPLIANCE_REVIEW_FAILED"
+      ? "The compliance reviewer flagged this message, so it was not sent. Edit it and try again, or use Message client to send it with a recorded override."
+      : failure.message;
   };
 
   const isSecurity = (c: CaseRow) => c.categories?.includes("fraud_or_security");
@@ -306,9 +325,9 @@ export default function DashboardPage() {
                   brief={brief} briefLoading={briefLoading}
                   onLoadBrief={() => selectedId && loadBrief(selectedId)}
                   onRegenerateBrief={() => selectedId && loadBrief(selectedId, true)}
-                  plan={plan} planLoading={planLoading} planStage={planStage}
-                  onRegeneratePlan={() => selectedId && loadPlan(selectedId)}
-                  onApprove={(message, flags) => doAction("approve", message, undefined, flags)}
+                  plan={plan} planLoading={planLoading}
+                  onRegeneratePlan={() => selectedId && loadPlan(selectedId, true)}
+                  onSendPrepared={sendPrepared}
                   onAction={doAction} actionBusy={actionBusy} hc={hc}
                   error={actionError} onDismissError={() => setActionError(null)}
                   onOpenCase={(id) => openCase(id)} initialTab={initialTab}

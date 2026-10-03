@@ -134,9 +134,9 @@ def staff_action(case_id: str, body: dict, request: Request, _role: str = Depend
 
 
 @router.post("/staff/cases/{case_id}/plan", responses=_ERRORS, tags=["staff"])
-def staff_plan(case_id: str, request: Request, _role: str = Depends(require_staff)):
+def staff_plan(case_id: str, request: Request, body: dict | None = Body(default=None), _role: str = Depends(require_staff)):
     """Read-only Bedrock-prepared action packet (fields + compliance checks + drafts) for approval."""
-    return _staff(request).plan(case_id, request.app.state.settings.ai_mode)
+    return _staff(request).plan(case_id, request.app.state.settings.ai_mode, refresh=_refresh(body))
 
 
 @router.post("/staff/cases/{case_id}/reply-draft", responses=_ERRORS, tags=["staff"])
