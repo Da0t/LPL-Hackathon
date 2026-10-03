@@ -346,3 +346,74 @@ def test_account_creation_edit_validation_and_ownership(setup):
         ).status_code
         == 200
     )
+
+
+def test_authenticated_advisor_followup_preserves_portal_snapshot(setup):
+    c, p, _ = setup
+    signin(c)
+    session = c.post("/intake/start", json={"client_id": "CLIENT-017"}).json()[
+        "session_id"
+    ]
+    c.post(
+        "/intake/" + session + "/turn",
+        json={"text": "Discuss my retirement account", "input_mode": "text"},
+    )
+    case_id = c.post(
+        "/intake/" + session + "/confirm",
+        json={
+            "confirmed_plain_language_request": "Discuss my retirement account",
+            "selected_account_id": "ACCT-201",
+        },
+    ).json()["case_id"]
+    snapshot = copy.deepcopy(p.store.get_case(case_id)["_portal_document"])
+    staff_token = token("staff")
+    p.cognito.tokens[staff_token] = "staff"
+    p.table.put_item(
+        Item={
+            "pk": "IDENTITY#staff",
+            "sk": "IDENTITY",
+            "document": json.dumps(
+                {"sub": "staff", "role": "staff", "client_id": None}
+            ),
+        }
+    )
+    c.cookies.set(COOKIE, staff_token)
+    r = c.get("/staff/cases/" + case_id)
+    assert r.status_code == 200, r.text
+    assert (
+        "_portal_document" not in r.json()
+        and "portal_document_snapshot" not in r.json()
+    )
+    r = c.post(
+        "/staff/cases/" + case_id + "/action",
+        json={
+            "action": "clarify",
+            "text": "What would you like to discuss at our meeting?",
+        },
+    )
+    assert r.status_code == 200, r.text
+    signin(c)
+    r = c.get("/my/requests", headers={"X-Demo-Client-Id": "CLIENT-022"})
+    assert r.status_code == 200
+    request = next(x for x in r.json()["requests"] if x["case_id"] == case_id)
+    assert request["awaiting_reply"] and request["messages"][-1]["from"] == "advisor"
+    r = c.post(
+        "/my/requests/" + case_id + "/reply", json={"text": "My retirement options."}
+    )
+    assert r.status_code == 200, r.text
+    assert not r.json()["awaiting_reply"]
+    assert p.store.get_case(case_id)["_portal_document"] == snapshot
+    profile = p.get("CLIENT-017")
+    profile["accounts"][0]["balance"] = 99999
+    p.save(profile, profile["revision"])
+    assert c.post("/portal/requests/" + case_id + "/archive").json() == snapshot
+    signin(c, 1)
+    assert all(
+        x["case_id"] != case_id for x in c.get("/my/requests").json()["requests"]
+    )
+    assert (
+        c.post(
+            "/my/requests/" + case_id + "/reply", json={"text": "Another client"}
+        ).status_code
+        == 403
+    )

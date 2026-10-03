@@ -29,6 +29,7 @@ from backend.errors import ApiError
 from backend.services.agent_adapter import AgentAdapter, load_adapter
 from backend.services.intake import IntakeService
 from backend.services.staff import StaffService
+from backend.services.client_requests import ClientRequests
 from backend.settings import Settings, load_settings
 from backend.store import Store
 
@@ -101,6 +102,7 @@ def create_app(settings: Settings | None = None, *, store: Store | None = None, 
     app.state.adapter = adapter
     app.state.intake = IntakeService(store, adapter)
     app.state.staff = StaffService(store)
+    app.state.client_requests = ClientRequests(store)
     app.state.portal = None
     if os.getenv("COHERENT_PORTAL_CONFIG"):
         from backend.portal.service import Portal
@@ -116,7 +118,7 @@ def create_app(settings: Settings | None = None, *, store: Store | None = None, 
                 if origin and origin not in allowed:
                     return JSONResponse(status_code=403, content={"error_code":"ORIGIN_DENIED", "message":"This origin cannot change records."})
         response = await call_next(request)
-        if request.url.path.startswith(("/portal", "/auth", "/intake", "/staff/cases")):
+        if request.url.path.startswith(("/portal", "/auth", "/intake", "/staff/cases", "/my/requests")):
             response.headers["Cache-Control"] = "no-store"
         return response
 

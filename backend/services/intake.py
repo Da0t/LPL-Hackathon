@@ -137,6 +137,7 @@ class IntakeService:
             return self._turn(session_id, text, input_mode, selected_option_id)
 
     def _turn(self, session_id: str, text: str, input_mode: str, selected_option_id: str | None) -> dict[str, Any]:
+        received_at = now_iso()
         session = self.get_session(session_id)
         if session["status"] == "submitted":
             raise ApiError(409, "SESSION_ALREADY_SUBMITTED", "This request was already confirmed and sent.", {"case_id": session["case_id"]})
@@ -255,7 +256,7 @@ class IntakeService:
                 "selected_option_label": (session["last_selected_option"] or {}).get("label") if selected_option_id else None,
                 "suggestions": suggestions, "question": question, "uncertainty": uncertainty,
                 "candidate_intent": session["candidate_intent"], "candidate_account_id": session["candidate_account_id"],
-                "degraded": degraded, "at": now,
+                "degraded": degraded, "received_at": received_at, "at": now,
             }
         )
         session["updated_at"] = now

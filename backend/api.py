@@ -15,7 +15,9 @@ Additive helper endpoints: GET /health, GET /demo/clients, POST /demo/reset.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Body, Depends, Query, Request
+
+from backend.errors import ApiError
 
 from backend.schemas import (
     AssignRequest,
@@ -34,7 +36,7 @@ from backend.schemas import (
     ResetResponse,
     StaffCasesResponse,
 )
-from backend.services.auth import check_demo_client, require_client, require_staff
+from backend.services.auth import check_demo_client, demo_client_id, require_client, require_staff
 
 router = APIRouter()
 
@@ -113,16 +115,80 @@ def staff_assign(case_id: str, body: AssignRequest, request: Request, _role: str
     return AssignResponse(**_staff(request).assign(case_id, body.advisor_id, body.staff_reason))
 
 
+def _refresh(body: dict | None) -> bool:
+    """Agent endpoints reuse their last answer for an unchanged case unless asked to regenerate."""
+    return bool((body or {}).get("refresh"))
+
+
 @router.post("/staff/cases/{case_id}/brief", responses=_ERRORS, tags=["staff"])
-def staff_brief(case_id: str, request: Request, _role: str = Depends(require_staff)):
+def staff_brief(case_id: str, request: Request, body: dict | None = Body(default=None), _role: str = Depends(require_staff)):
     """Read-only Bedrock-generated advisor prep brief for a case (additive, not in v1)."""
-    return _staff(request).brief(case_id, request.app.state.settings.ai_mode)
+    return _staff(request).brief(case_id, request.app.state.settings.ai_mode, refresh=_refresh(body))
 
 
 @router.post("/staff/cases/{case_id}/action", responses=_ERRORS, tags=["staff"])
 def staff_action(case_id: str, body: dict, request: Request, _role: str = Depends(require_staff)):
-    """Record an advisor workflow action (claim/note/clarify/schedule/resolve) as a history event."""
-    return _staff(request).action(case_id, body.get("action", ""), body.get("text"))
+    """Record an advisor workflow action (claim/note/clarify/schedule/resolve/approve/escalate) as a history event."""
+    return _staff(request).action(case_id, body.get("action", ""), body.get("text"), body.get("compliance"),
+                                  ai_mode=request.app.state.settings.ai_mode)
+
+
+@router.post("/staff/cases/{case_id}/plan", responses=_ERRORS, tags=["staff"])
+def staff_plan(case_id: str, request: Request, _role: str = Depends(require_staff)):
+    """Read-only Bedrock-prepared action packet (fields + compliance checks + drafts) for approval."""
+    return _staff(request).plan(case_id, request.app.state.settings.ai_mode)
+
+
+@router.post("/staff/cases/{case_id}/reply-draft", responses=_ERRORS, tags=["staff"])
+def staff_reply_draft(case_id: str, request: Request, body: dict | None = Body(default=None), _role: str = Depends(require_staff)):
+    """Drafter + compliance-reviewer loop for a client message (read-only, additive, not in v1)."""
+    return _staff(request).reply_draft(case_id, (body or {}).get("instruction"), request.app.state.settings.ai_mode)
+
+
+@router.get("/staff/cases/{case_id}/client", responses=_ERRORS, tags=["staff"])
+def staff_client_snapshot(case_id: str, request: Request, _role: str = Depends(require_staff)):
+    """The whole client behind a case: accounts, recent activity, other requests (read-only, additive)."""
+    return _staff(request).client_snapshot(case_id)
+
+
+@router.post("/staff/cases/{case_id}/next-steps", responses=_ERRORS, tags=["staff"])
+def staff_next_steps(case_id: str, request: Request, body: dict | None = Body(default=None), _role: str = Depends(require_staff)):
+    """Next-steps planner agent: ordered, owned steps for the request (read-only, additive)."""
+    return _staff(request).next_steps(case_id, request.app.state.settings.ai_mode, refresh=_refresh(body))
+
+
+@router.post("/staff/cases/{case_id}/investigation", responses=_ERRORS, tags=["staff"])
+def staff_investigation(case_id: str, request: Request, body: dict | None = Body(default=None), _role: str = Depends(require_staff)):
+    """Fraud investigator agent for security cases: record-built timeline plus an assessment (read-only, additive)."""
+    return _staff(request).investigation(case_id, request.app.state.settings.ai_mode, refresh=_refresh(body))
+
+
+@router.post("/staff/cases/{case_id}/compliance-review", responses=_ERRORS, tags=["staff"])
+def staff_compliance_review(case_id: str, request: Request, body: dict | None = Body(default=None), _role: str = Depends(require_staff)):
+    """Compliance reviewer on the case record and an optional draft (read-only, additive, not in v1)."""
+    return _staff(request).compliance_review(case_id, (body or {}).get("draft"), request.app.state.settings.ai_mode)
+
+
+# ------------------------------------------------- the client's own requests (additive)
+
+
+def _signed_in_client(request: Request) -> str:
+    client_id = demo_client_id(request)
+    if not client_id:
+        raise ApiError(400, "MISSING_DEMO_CLIENT", "Send X-Demo-Client-Id to see a client's own requests (simulated access control).")
+    return client_id
+
+
+@router.get("/my/requests", responses=_ERRORS, tags=["client"])
+def my_requests(request: Request, _role: str = Depends(require_client)):
+    """The signed-in client's requests and the messages exchanged on them. No staff-only fields."""
+    return {"requests": request.app.state.client_requests.list(_signed_in_client(request))}
+
+
+@router.post("/my/requests/{case_id}/reply", responses=_ERRORS, tags=["client"])
+def my_request_reply(case_id: str, request: Request, body: dict | None = Body(default=None), _role: str = Depends(require_client)):
+    """The client answers an advisor's question; the case goes back to the advisor."""
+    return request.app.state.client_requests.reply(_signed_in_client(request), case_id, (body or {}).get("text"))
 
 
 # --------------------------------------------------------- additive helpers

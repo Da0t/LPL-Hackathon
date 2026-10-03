@@ -555,6 +555,9 @@ class Store:
 
     def save_case(self, case: dict[str, Any]) -> None:
         with self._lock:
+            previous = self.get_case(case["case_id"])
+            if previous and "_portal_document" in previous:
+                case = {**case, "_portal_document": previous["_portal_document"]}
             self._conn.execute(
                 "INSERT INTO cases(case_id, case_num, client_id, status, created_at, updated_at, seeded, doc) VALUES (?,?,?,?,?,?,0,?) "
                 "ON CONFLICT(case_id) DO UPDATE SET status=excluded.status, updated_at=excluded.updated_at, doc=excluded.doc",

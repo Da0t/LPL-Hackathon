@@ -731,10 +731,128 @@ def _stub_brief(case: dict) -> dict:
     cautions = ["This is a service request, not advice; no transaction is authorized.",
                 "Confirm the client's identity before discussing account details."]
     if "client_term_did_not_match_account_type" in (case.get("flags") or []):
-        cautions.append("Client used a term that did not match their records , confirm the account explicitly.")
+        cautions.append("Client used a term that did not match their records; confirm the account explicitly.")
     return {
         "headline": case.get("staff_summary") or case.get("confirmed_plain_language_request") or "Client service request.",
         "talking_points": points, "confirm": confirm, "cautions": cautions,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Fulfillment plan (read-only) , the "agent prepares the action" step.
+# Produces a pre-filled action + compliance checks + drafts for human approval.
+# --------------------------------------------------------------------------- #
+_FULFILL_SYSTEM = """You are an operations agent at a wealth-management firm. Given a client-confirmed service
+request and record-backed facts, PREPARE the action so a human only has to approve it. You never execute
+anything and you give no investment/tax/legal advice , you prepare and draft.
+
+Hard rules:
+- Use only the facts provided. Never invent an account, balance, amount, or history. If a field is unknown,
+  leave its value empty and add a compliance check with status "review".
+- prepared_fields: the concrete fields a human would need to action this request (label + value), pre-filled
+  from the facts (e.g. account, masked number, amount, delivery method, request type). Mark anything not
+  stated as empty.
+- compliance_checks: each is {item, status, note} where status is "pass", "review", or "flag". Always
+  include identity verification (review), a suitability/advice note, and , if the request involves money
+  movement or a distribution , a tax-not-assessed note. Flag any fraud/security or account-mismatch signal.
+- draft_client_message: a short, plain-language message to the client confirming what happens next (no advice,
+  no promises of timing the firm can't keep).
+- draft_advisor_followup: concise internal next steps for the advisor.
+
+Report by calling submit_plan exactly once."""
+
+_FULFILL_TOOL = {
+    "toolSpec": {
+        "name": "submit_plan",
+        "description": "Report the prepared action packet. Call exactly once.",
+        "inputSchema": {"json": {
+            "type": "object",
+            "properties": {
+                "headline": {"type": "string", "description": "One line naming the prepared action."},
+                "action_type": {"type": "string", "description": "A short slug, e.g. distribution_request, beneficiary_change, account_service, security_review."},
+                "prepared_fields": {"type": "array", "items": {"type": "object", "properties": {
+                    "label": {"type": "string"}, "value": {"type": "string"}}, "required": ["label", "value"]}},
+                "compliance_checks": {"type": "array", "items": {"type": "object", "properties": {
+                    "item": {"type": "string"}, "status": {"type": "string", "enum": ["pass", "review", "flag"]},
+                    "note": {"type": "string"}}, "required": ["item", "status"]}},
+                "draft_client_message": {"type": "string"},
+                "draft_advisor_followup": {"type": "string"},
+            },
+            "required": ["headline", "action_type", "prepared_fields", "compliance_checks", "draft_client_message", "draft_advisor_followup"],
+        }},
+    }
+}
+
+
+def fulfillment_plan(case: dict, tools=None, *, cfg: AwsConfig | None = None, client=None) -> dict:
+    """Read-only: prepare an action packet (pre-filled fields + compliance checks +
+    client/advisor drafts) from a confirmed case, for human approval. Never mutates."""
+    cfg = cfg or load_config()
+    if not cfg.is_bedrock:
+        return _stub_plan(case)
+    if not cfg.model_id:
+        raise BedrockAdapterError("NO_MODEL_CONFIGURED", "BEDROCK_MODEL_ID is not set.")
+    pacer = _pacer_for(cfg)
+    client = client or build_bedrock_client(cfg)
+    facts = {k: case.get(k) for k in (
+        "confirmed_plain_language_request", "staff_summary", "categories", "intent",
+        "amount_requested", "currency", "account_context", "unresolved_questions",
+        "flags", "conflicts", "original_words", "client_display_name",
+    )}
+    first_user = "Case facts:\n" + json.dumps(facts, ensure_ascii=False, default=str)
+    result = _run_tool_loop(client, cfg, pacer, _FULFILL_SYSTEM, first_user, [_FULFILL_TOOL], "submit_plan", {})
+    return _normalize_plan(result)
+
+
+def _normalize_plan(result: dict) -> dict:
+    fields = [{"label": str(f.get("label", "")), "value": str(f.get("value", ""))}
+              for f in (result.get("prepared_fields") or []) if isinstance(f, dict)]
+    checks = []
+    for c in (result.get("compliance_checks") or []):
+        if not isinstance(c, dict):
+            continue
+        status = c.get("status") if c.get("status") in ("pass", "review", "flag") else "review"
+        checks.append({"item": str(c.get("item", "")), "status": status, "note": str(c.get("note", ""))})
+    if not checks:
+        checks = [{"item": "Client identity", "status": "review", "note": "Confirm identity before actioning."}]
+    return {
+        "headline": str(result.get("headline") or "").strip(),
+        "action_type": str(result.get("action_type") or "account_service"),
+        "prepared_fields": fields,
+        "compliance_checks": checks,
+        "draft_client_message": str(result.get("draft_client_message") or "").strip(),
+        "draft_advisor_followup": str(result.get("draft_advisor_followup") or "").strip(),
+    }
+
+
+def _stub_plan(case: dict) -> dict:
+    ac = case.get("account_context") or {}
+    cats = case.get("categories") or []
+    security = "fraud_or_security" in cats
+    fields = []
+    if ac:
+        fields.append({"label": "Account", "value": f"{str(ac.get('account_type','')).replace('_',' ')} {ac.get('masked_identifier','')}".strip()})
+    if case.get("amount_requested"):
+        fields.append({"label": "Amount", "value": f"${case['amount_requested']:,}"})
+    fields.append({"label": "Request type", "value": (cats[0].replace('_', ' ') if cats else "account service")})
+    checks = [
+        {"item": "Client identity", "status": "review", "note": "Verify identity before actioning."},
+        {"item": "Investment/tax advice", "status": "pass", "note": "No advice given; service request only."},
+    ]
+    if any(c in cats for c in ("withdrawal_or_distribution", "rollover_or_transfer")):
+        checks.append({"item": "Tax implications", "status": "review", "note": "Tax effects not assessed; advisor to review."})
+    if "client_term_did_not_match_account_type" in (case.get("flags") or []):
+        checks.append({"item": "Account match", "status": "flag", "note": "Client wording did not match records; confirm account."})
+    if security:
+        checks.append({"item": "Security review", "status": "flag", "note": "Possible unauthorized access; route to specialist."})
+    name = (case.get("client_display_name") or "there").split(" ")[0]
+    return {
+        "headline": case.get("staff_summary") or "Prepared service request",
+        "action_type": (cats[0] if cats else "account_service"),
+        "prepared_fields": fields,
+        "compliance_checks": checks,
+        "draft_client_message": f"Hi {name}, thanks , we've prepared your request and an advisor will review it shortly. Nothing has been moved yet; we'll confirm the next step with you.",
+        "draft_advisor_followup": "Review the prepared action and compliance checks, confirm the account and intent with the client, then approve.",
     }
 
 

@@ -23,6 +23,9 @@ const users = JSON.parse(fs.readFileSync(process.env.PORTAL_ACCESS_FILE || 'var/
    if (user.role==='staff') {
     const cases=await (await context.request.get(base+'/api/staff/cases')).json();
     assert(cases.cases.some(c=>c.case_id===submitted));
+    const detail = await context.request.get(base+"/api/staff/cases/"+submitted);
+    assert.equal(detail.status(),200);
+    assert.equal((await detail.json()).case_id,submitted);
    } else {
     const profile = await (await context.request.get(base+'/api/portal/me')).json();
     assert.equal(profile.client_id,user.client_id);

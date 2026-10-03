@@ -2,10 +2,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Plus, FileText, Printer, X } from "lucide-react";
-import { PageHeading } from "@/components/portal/shell";
+import { MyRequests } from "@/components/my-requests";
+import { PageHeading, useClient } from "@/components/portal/shell";
 import { RequestDocument, portalApi, money } from "@/lib/portal";
 import { RequestPaper } from "@/components/portal/request-document";
 export default function Requests() {
+  const { client } = useClient();
   const [requests, setRequests] = useState<RequestDocument[]>([]),
     [selected, setSelected] = useState<RequestDocument | null>(null),
     [error, setError] = useState(""),
@@ -29,6 +31,8 @@ export default function Requests() {
           </Link>
         }
       />
+      <MyRequests clientId={client.client_id} />
+      <h2 className="text-xl font-semibold mb-4">Saved request documents</h2>
       {error && (
         <p className="portal-error" role="alert">
           {error}

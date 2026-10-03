@@ -248,6 +248,7 @@ class ConversationTurn(BaseModel):
     candidate_intent: str | None = None
     candidate_account_id: str | None = None
     degraded: bool = False
+    received_at: str | None = None  # additive: when the client's message arrived, before the model answered
     at: str
 
 
@@ -266,6 +267,9 @@ class TriageInfo(BaseModel):
 
 class CaseRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+    # Internal submission snapshot: accepted for stored records, never serialized by the API.
+    portal_document_snapshot: dict[str, Any] | None = Field(default=None, validation_alias="_portal_document", exclude=True)
 
     # contract (contracts/API_V1.md required fields)
     case_id: str
@@ -324,6 +328,9 @@ class StaffCaseSummary(BaseModel):
     clarification_needed: bool
     existing_advisor_id: str | None = None
     routing: QueueRouting
+    priority: dict[str, Any] = Field(default_factory=dict)  # {level, rank, reason}
+    lifecycle: str = "new"
+    intake: dict[str, int] | None = None  # {turns, seconds_to_confirm}; None for seeded cases
 
 
 class StaffCasesResponse(BaseModel):
