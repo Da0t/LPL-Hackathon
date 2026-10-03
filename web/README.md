@@ -36,8 +36,8 @@ Open **http://127.0.0.1:3200/login**. Private demo sign-ins are in ignored `../v
 - `/workspace` , client overview, with `/profile`, `/finances`, and `/requests` subpages
 - `/workspace/requests/new` , three-column request editor and printable A4 document
 - `/intake` , redirect to the authenticated request editor
-- `/dashboard` , advisor workspace (queue, case detail, **AI prep brief**, actions,
-  My pipeline board, compliance panel, impact charts)
+- `/dashboard` , advisor workspace (priority queue, prepared action packet, agent panels,
+  client messaging with compliance review, Pipeline board, Impact view)
 
 Browser API calls use the same-origin `/api` proxy to `http://127.0.0.1:8000`. HttpOnly Cognito cookies authorize requests. Client requests include current status and advisor clarification/reply threads alongside archived submission documents.
 

@@ -6,7 +6,7 @@ Run (one command, port 8000)::
     SAMEPAGE_AI_MODE=bedrock python -m backend.main   # live Bedrock via Agent 1's adapter
 
 ``python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000`` (the
-INTEGRATION_RUNBOOK.md command) also works. ``create_app`` builds an isolated
+README.md command) also works. ``create_app`` builds an isolated
 application for tests.
 """
 
