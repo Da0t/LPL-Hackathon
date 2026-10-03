@@ -11,8 +11,8 @@ import {
   ArrowLeft, MessageSquareQuote, Home, Columns3,
 } from "lucide-react";
 import {
-  getCases, getCase, getCandidates, assignCase, getBrief, caseAction, getClientSnapshot, health,
-  ApiError, prettyCategory, type CaseRow, type Candidate, type Brief, type AdvisorAction,
+  getCases, getCase, getCandidates, assignCase, getBrief, getPlan, caseAction, getClientSnapshot, health,
+  ApiError, prettyCategory, type CaseRow, type Candidate, type Brief, type ActionPlan, type AdvisorAction,
   type ClientSnapshot, type Lifecycle, type SentCompliance,
 } from "@/lib/api";
 import { Chip } from "@/components/dashboard/section";
@@ -47,6 +47,9 @@ export default function DashboardPage() {
   const [brief, setBrief] = useState<Brief | null>(null);
   const [briefLoading, setBriefLoading] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
+  const [plan, setPlan] = useState<ActionPlan | null>(null);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [planStage, setPlanStage] = useState(0);
   const [actionError, setActionError] = useState<string | null>(null);
   const [hc, setHc] = useState<any>(null);
 
@@ -71,6 +74,13 @@ export default function DashboardPage() {
     try { setBrief(await getBrief(id, refresh)); } catch { setBrief(null); } finally { setBriefLoading(false); }
   }, []);
 
+  const loadPlan = useCallback(async (id: string) => {
+    setPlan(null); setPlanLoading(true); setPlanStage(0);
+    const timers = [1, 2, 3, 4].map((i) => setTimeout(() => setPlanStage((s) => Math.max(s, i)), i * 650));
+    try { setPlan(await getPlan(id)); } catch { setPlan(null); }
+    finally { timers.forEach(clearTimeout); setPlanStage(5); setPlanLoading(false); }
+  }, []);
+
   // Reloads the case without touching the brief, so acting on a case does not re-run the briefing agent.
   const refreshCase = useCallback(async (id: string, showLoading: boolean) => {
     if (showLoading) { setDetailLoading(true); setDetail(null); setCandidates([]); setCandMeta({}); setSnapshot(null); }
@@ -90,9 +100,9 @@ export default function DashboardPage() {
   const openCase = useCallback((id: string, tab?: CaseTab) => {
     setSelectedId(id); setInitialTab(tab); setActionError(null); setView("queue");
     window.history.replaceState(null, "", `?case=${encodeURIComponent(id)}`);
-    loadBrief(id);
+    setBrief(null); loadPlan(id);  // the prepared action leads; the prep brief loads when its tab is opened
     refreshCase(id, true);
-  }, [loadBrief, refreshCase]);
+  }, [loadPlan, refreshCase]);
 
   // A link to /dashboard?case=CASE-1042&tab=plan opens that request on that tab.
   useEffect(() => {
@@ -291,7 +301,12 @@ export default function DashboardPage() {
                 <CaseDetail
                   key={selectedId} detail={detail} row={cases.find((c) => c.case_id === selectedId)} snapshot={snapshot}
                   candidates={candidates} candMeta={candMeta} assigning={assigning} onAssign={doAssign}
-                  brief={brief} briefLoading={briefLoading} onRegenerateBrief={() => selectedId && loadBrief(selectedId, true)}
+                  brief={brief} briefLoading={briefLoading}
+                  onLoadBrief={() => selectedId && loadBrief(selectedId)}
+                  onRegenerateBrief={() => selectedId && loadBrief(selectedId, true)}
+                  plan={plan} planLoading={planLoading} planStage={planStage}
+                  onRegeneratePlan={() => selectedId && loadPlan(selectedId)}
+                  onApprove={async () => { await doAction("approve"); }}
                   onAction={doAction} actionBusy={actionBusy} hc={hc}
                   error={actionError} onDismissError={() => setActionError(null)}
                   onOpenCase={(id) => openCase(id)} initialTab={initialTab}

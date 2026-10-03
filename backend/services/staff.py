@@ -102,6 +102,24 @@ class StaffService:
             ai_mode, lambda: ba.advisor_brief(case), lambda: ba._stub_brief(case), "brief"))
         return {"case_id": case_id, "ai_mode": ai_mode, "note": note, **raw}
 
+    def plan(self, case_id: str, ai_mode: str = "mock") -> dict[str, Any]:
+        """Read-only agentic action packet: pre-filled fields + compliance checks +
+        client/advisor drafts, for human approval. Never mutates the case."""
+        case = self._case(case_id)
+        from backend.aws import bedrock_agent as ba
+        note = None
+        if ai_mode == "bedrock":
+            try:
+                raw = ba.fulfillment_plan(case)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("fulfillment_plan fell back to offline: %s", exc)
+                raw = ba._stub_plan(case)
+                note = "Prepared offline (model temporarily unavailable)."
+        else:
+            raw = ba._stub_plan(case)
+            note = "Deterministic plan (set SAMEPAGE_AI_MODE=bedrock for the live agent)."
+        return {"case_id": case_id, "ai_mode": ai_mode, "note": note, **raw}
+
     def _agent_facts(self, case: dict[str, Any]) -> dict[str, Any]:
         """The case plus the approved plain-language definition of its account type, if any."""
         ac = case.get("account_context") or {}
@@ -217,6 +235,7 @@ class StaffService:
         "clarify": "clarification_requested",
         "schedule": "meeting_scheduled",
         "resolve": "request_resolved",
+        "approve": "action_approved",
         "escalate": "escalated_to_security",
     }
 

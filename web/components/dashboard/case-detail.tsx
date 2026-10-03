@@ -2,13 +2,14 @@
 
 import React, { useState } from "react";
 import {
-  CheckCircle2, Hand, StickyNote, Send, CalendarCheck, CheckCheck, PenLine, X, AlertTriangle,
+  CheckCircle2, Hand, StickyNote, Send, CalendarCheck, CheckCheck, PenLine, X, AlertTriangle, Sparkles, Workflow,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  prettyCategory, type AdvisorAction, type Brief, type Candidate, type CaseRow, type ClientSnapshot, type SentCompliance,
+  prettyCategory, type ActionPlan, type AdvisorAction, type Brief, type Candidate, type CaseRow, type ClientSnapshot, type SentCompliance,
 } from "@/lib/api";
 import { AgentCard, Chip, Section, Subheading } from "./section";
+import { ActionPacket } from "./action-packet";
 import { ReplyPanel } from "./reply-panel";
 import { CompliancePanel } from "./compliance-panel";
 import { NextStepsPanel } from "./next-steps-panel";
@@ -132,12 +133,26 @@ function Activity({ history }: { history: any[] }) {
   );
 }
 
-function Overview({ detail, brief, briefLoading, onRegenerateBrief }: any) {
+function Overview({ detail, brief, briefLoading, onLoadBrief, onRegenerateBrief, plan, planLoading, planStage, onRegeneratePlan, onApprove }: any) {
+  const [lead, setLead] = useState<"action" | "brief">("action");
   const ac = detail.account_context;
   const flags: string[] = detail.flags || [];
+  const leadClass = (active: boolean) =>
+    `flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium transition-colors ${active ? "bg-background text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`;
   return (
     <>
-      <div className="mt-6"><PrepBrief brief={brief} loading={briefLoading} onRegenerate={onRegenerateBrief} /></div>
+      {/* Prepared action (default) | prep brief, as on main */}
+      <div className="mt-5 inline-flex rounded-xl border border-border bg-muted/40 p-1 text-sm">
+        <button onClick={() => setLead("action")} className={leadClass(lead === "action")}>
+          <Workflow className="h-4 w-4" /> Prepared action
+        </button>
+        <button onClick={() => { setLead("brief"); if (!brief && !briefLoading) onLoadBrief(); }} className={leadClass(lead === "brief")}>
+          <Sparkles className="h-4 w-4" /> Prep brief
+        </button>
+      </div>
+      {lead === "action"
+        ? <ActionPacket plan={plan} loading={planLoading} stage={planStage} onRegenerate={onRegeneratePlan} onApprove={onApprove} />
+        : <div className="mt-5"><PrepBrief brief={brief} loading={briefLoading} onRegenerate={onRegenerateBrief} /></div>}
 
       <Section title="What the client asked">
         <blockquote className="rounded-lg border-l-2 border-primary bg-muted/40 p-3 text-sm italic">“{detail.original_words}”</blockquote>
@@ -253,13 +268,15 @@ function Assign({ detail, candidates, candMeta, assigning, onAssign, onAction, a
 }
 
 export function CaseDetail({
-  detail, row, snapshot, candidates, candMeta, assigning, onAssign, brief, briefLoading, onRegenerateBrief,
-  onAction, actionBusy, hc, error, onDismissError, onOpenCase, initialTab,
+  detail, row, snapshot, candidates, candMeta, assigning, onAssign, brief, briefLoading, onLoadBrief, onRegenerateBrief,
+  plan, planLoading, planStage, onRegeneratePlan, onApprove, onAction, actionBusy, hc, error, onDismissError, onOpenCase, initialTab,
 }: {
   detail: any; row?: CaseRow; snapshot: ClientSnapshot | null; candidates: Candidate[];
   candMeta: { destination?: string; reason?: string }; assigning: string | null;
   onAssign: (advisorId: string, reason: string) => void; brief: Brief | null; briefLoading: boolean;
-  onRegenerateBrief: () => void; onAction: (a: AdvisorAction, t?: string, c?: SentCompliance) => void;
+  onLoadBrief: () => void; onRegenerateBrief: () => void;
+  plan: ActionPlan | null; planLoading: boolean; planStage: number; onRegeneratePlan: () => void; onApprove: () => Promise<void>;
+  onAction: (a: AdvisorAction, t?: string, c?: SentCompliance) => void;
   actionBusy: boolean; hc: any; error: string | null; onDismissError: () => void;
   onOpenCase: (id: string) => void; initialTab?: CaseTab;
 }) {
@@ -316,7 +333,10 @@ export function CaseDetail({
         ))}
       </div>
 
-      {tab === "overview" && <Overview detail={detail} brief={brief} briefLoading={briefLoading} onRegenerateBrief={onRegenerateBrief} />}
+      {tab === "overview" && (
+        <Overview detail={detail} brief={brief} briefLoading={briefLoading} onLoadBrief={onLoadBrief} onRegenerateBrief={onRegenerateBrief}
+          plan={plan} planLoading={planLoading} planStage={planStage} onRegeneratePlan={onRegeneratePlan} onApprove={onApprove} />
+      )}
       {tab === "plan" && (
         <div className="mt-6 space-y-6">
           {security && <InvestigationPanel caseId={detail.case_id} />}

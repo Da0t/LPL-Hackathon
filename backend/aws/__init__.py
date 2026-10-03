@@ -13,6 +13,7 @@ callbacks. See ``AWS_SETUP.md`` for configuration and the live smoke test.
 from .bedrock_agent import (
     BedrockAdapterError,
     advisor_brief,
+    fulfillment_plan,
     intake_turn,
     triage_case,
 )
@@ -22,6 +23,7 @@ __all__ = [
     "intake_turn",
     "triage_case",
     "advisor_brief",
+    "fulfillment_plan",
     "BedrockAdapterError",
     "AwsConfig",
     "load_config",

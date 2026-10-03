@@ -128,9 +128,15 @@ def staff_brief(case_id: str, request: Request, body: dict | None = Body(default
 
 @router.post("/staff/cases/{case_id}/action", responses=_ERRORS, tags=["staff"])
 def staff_action(case_id: str, body: dict, request: Request, _role: str = Depends(require_staff)):
-    """Record an advisor workflow action (claim/note/clarify/schedule/resolve/escalate) as a history event."""
+    """Record an advisor workflow action (claim/note/clarify/schedule/resolve/approve/escalate) as a history event."""
     return _staff(request).action(case_id, body.get("action", ""), body.get("text"), body.get("compliance"),
                                   ai_mode=request.app.state.settings.ai_mode)
+
+
+@router.post("/staff/cases/{case_id}/plan", responses=_ERRORS, tags=["staff"])
+def staff_plan(case_id: str, request: Request, _role: str = Depends(require_staff)):
+    """Read-only Bedrock-prepared action packet (fields + compliance checks + drafts) for approval."""
+    return _staff(request).plan(case_id, request.app.state.settings.ai_mode)
 
 
 @router.post("/staff/cases/{case_id}/reply-draft", responses=_ERRORS, tags=["staff"])
