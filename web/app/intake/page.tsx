@@ -184,7 +184,7 @@ export default function IntakePage() {
           <div className="flex items-center justify-between border-b border-border px-5 py-3">
             <span className="font-mono text-xs font-semibold uppercase">Live routing</span>
             <span className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500 shadow-[0_0_10px_#2563eb]" />
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500 shadow-[0_0_10px_#1677ff]" />
               Interpreting with Amazon Bedrock
             </span>
           </div>
@@ -302,7 +302,7 @@ export default function IntakePage() {
 
       {screen === "success" && (
         <section className="mx-auto max-w-xl rounded-2xl border border-border bg-card/60 p-10 text-center">
-          <span className="mx-auto grid h-16 w-16 place-items-center rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-500 shadow-[0_0_40px_rgba(37, 99, 235,0.35)]"><Check className="h-7 w-7" /></span>
+          <span className="mx-auto grid h-16 w-16 place-items-center rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-500 shadow-[0_0_40px_rgba(22, 119, 255,0.35)]"><Check className="h-7 w-7" /></span>
           <p className="mt-6 font-mono text-xs uppercase text-muted-foreground">Ready for staff review</p>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight">Your request is on its way.</h1>
           <p className="mt-3 text-muted-foreground">{clientSummary}</p>

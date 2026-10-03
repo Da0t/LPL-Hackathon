@@ -9,12 +9,12 @@ function Node({
     <div
       className={`relative rounded-xl border px-4 py-3 backdrop-blur-sm ${
         active
-          ? "border-blue-500/50 bg-blue-500/5 shadow-[0_0_24px_-6px_rgba(37, 99, 235,0.5)]"
+          ? "border-blue-500/50 bg-blue-500/5 shadow-[0_0_24px_-6px_rgba(22, 119, 255,0.5)]"
           : "border-border bg-card/60"
       }`}
     >
       <div className="flex items-center gap-2">
-        <span className={`h-1.5 w-1.5 rounded-full ${active ? "bg-blue-500 shadow-[0_0_8px_rgba(37, 99, 235,0.9)]" : "bg-muted-foreground/60"}`} />
+        <span className={`h-1.5 w-1.5 rounded-full ${active ? "bg-blue-500 shadow-[0_0_8px_rgba(22, 119, 255,0.9)]" : "bg-muted-foreground/60"}`} />
         <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{kind}</span>
       </div>
       <p className="mt-1 text-sm font-medium text-foreground">{label}</p>
@@ -37,7 +37,7 @@ export default function PipelinePreview() {
       <div className="mb-3 flex items-center justify-between px-1">
         <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Live routing</span>
         <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500 shadow-[0_0_8px_rgba(37, 99, 235,0.9)]" />
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500 shadow-[0_0_8px_rgba(22, 119, 255,0.9)]" />
           Amazon Bedrock
         </span>
       </div>

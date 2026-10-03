@@ -80,9 +80,9 @@ export default function RoutingGraph(props: GraphState) {
           if (!a || !b) return null;
           return (
             <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-              stroke={active ? "#2563eb" : "rgba(15,23,42,0.14)"}
+              stroke={active ? "#1677ff" : "rgba(15,23,42,0.14)"}
               strokeWidth={active ? 1.6 : 1.1}
-              style={{ vectorEffect: "non-scaling-stroke", filter: active ? "drop-shadow(0 0 3px rgba(37, 99, 235,0.5))" : undefined, transition: "stroke .3s" }} />
+              style={{ vectorEffect: "non-scaling-stroke", filter: active ? "drop-shadow(0 0 3px rgba(22, 119, 255,0.5))" : undefined, transition: "stroke .3s" }} />
           );
         })}
       </svg>
@@ -93,7 +93,7 @@ export default function RoutingGraph(props: GraphState) {
             "rg-pop absolute flex items-center gap-2.5 rounded-xl border px-3 py-2",
             "bg-card shadow-sm",
             n.kind === "root" ? "border-border bg-background" : "border-border",
-            n.selected || n.done ? "border-blue-500 shadow-[0_0_18px_rgba(37,99,235,0.25)]" : "",
+            n.selected || n.done ? "border-blue-500 shadow-[0_0_18px_rgba(22, 119, 255,0.25)]" : "",
             n.kind === "clarify" ? "border-amber-400/60" : "",
             n.dim ? "opacity-40" : "",
           ].join(" ")}
@@ -101,7 +101,7 @@ export default function RoutingGraph(props: GraphState) {
         >
           <span className={[
             "h-1.5 w-1.5 flex-none rounded-full",
-            n.selected || n.done ? "bg-blue-500 shadow-[0_0_10px_#2563eb]" : n.kind === "root" || n.kind === "goal" ? "bg-zinc-600" : n.kind === "clarify" ? "bg-amber-500" : "bg-zinc-400",
+            n.selected || n.done ? "bg-blue-500 shadow-[0_0_10px_#1677ff]" : n.kind === "root" || n.kind === "goal" ? "bg-zinc-600" : n.kind === "clarify" ? "bg-amber-500" : "bg-zinc-400",
             n.pulse ? "animate-pulse" : "",
           ].join(" ")} />
           <span className="min-w-0 max-w-[170px]">

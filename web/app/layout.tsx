@@ -13,21 +13,8 @@ export const metadata: Metadata = {
     description: 'Coherent helps wealth-management clients describe what they need in plain language and routes a clear, confirmed request to the right advisor. AI intake and triage powered by Amazon Bedrock, built for LPL Financial.',
     generator: 'Coherent',
     icons: {
-        icon: [
-            {
-                url: '/icon-light-32x32.png',
-                media: '(prefers-color-scheme: light)',
-            },
-            {
-                url: '/icon-dark-32x32.png',
-                media: '(prefers-color-scheme: dark)',
-            },
-            {
-                url: '/icon.svg',
-                type: 'image/svg+xml',
-            },
-        ],
-        apple: '/apple-icon.png',
+        icon: '/coherent-icon.png',
+        apple: '/coherent-icon.png',
     },
 }
 

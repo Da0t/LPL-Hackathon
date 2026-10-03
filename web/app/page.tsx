@@ -19,7 +19,7 @@ export default function Home() {
                     waveSpeed={0.04}
                 />
             </div>
-            <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(70%_55%_at_78%_-8%,rgba(37,99,235,0.08),transparent_62%)]" />
+            <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(70%_55%_at_78%_-8%,rgba(22, 119, 255,0.08),transparent_62%)]" />
             <HeroSection />
             <FooterSection />
         </>

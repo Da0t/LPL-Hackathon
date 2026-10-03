@@ -17,8 +17,8 @@ import {
   type CaseRow, type Candidate,
 } from "@/lib/api";
 
-const BLUE = "#2563eb";
-const CHART_COLORS = ["#2563eb", "#60a5fa", "#93c5fd", "#1e40af", "#bfdbfe", "#3b82f6", "#1d4ed8", "#cbd5e1"];
+const BLUE = "#1677ff";
+const CHART_COLORS = ["#1677ff", "#60a5fa", "#93c5fd", "#1e40af", "#bfdbfe", "#3b82f6", "#1d4ed8", "#cbd5e1"];
 
 function timeAgo(iso: string): string {
   const t = Date.parse(iso);
@@ -413,7 +413,7 @@ function ImpactView({ impact }: { impact: any }) {
                 <CartesianGrid horizontal={false} stroke="#e5e7eb" />
                 <XAxis type="number" tick={{ fontSize: 11, fill: "#6b7280" }} allowDecimals={false} />
                 <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 11, fill: "#374151" }} />
-                <RTooltip cursor={{ fill: "rgba(37,99,235,0.06)" }} />
+                <RTooltip cursor={{ fill: "rgba(22, 119, 255,0.06)" }} />
                 <Bar dataKey="value" fill={BLUE} radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
