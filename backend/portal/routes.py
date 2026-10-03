@@ -8,6 +8,7 @@ from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel, Field, ConfigDict
 from backend.errors import ApiError
 from backend.portal.service import COOKIE
+from backend.portal.demo_access import LIFETIME_SECONDS, PREFIX as DEMO_TOKEN_PREFIX
 
 router = APIRouter()
 
@@ -41,16 +42,41 @@ class Login(BaseModel):
 @router.post("/auth/login")
 def login(body: Login, request: Request, response: Response):
     auth = portal(request).login(body.email, body.password, request.client.host)
+    _set_session_cookie(response, request, auth["AccessToken"], auth["ExpiresIn"])
+    return {"signed_in": True}
+
+
+def _set_session_cookie(response: Response, request: Request, token: str, max_age: int):
     response.set_cookie(
         COOKIE,
-        auth["AccessToken"],
-        max_age=auth["ExpiresIn"],
+        token,
+        max_age=max_age,
         httponly=True,
         secure=os.getenv("COHERENT_SECURE_COOKIES") == "1" or request.url.scheme == "https",
         samesite="strict",
         path="/",
     )
     response.headers["Cache-Control"] = "no-store"
+
+
+@router.get("/auth/demo-characters")
+def demo_characters(request: Request):
+    access = getattr(portal(request), "demo_access", None)
+    return {"characters": access.characters() if access else []}
+
+
+class DemoEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    character_id: str = Field(min_length=1, max_length=64)
+
+
+@router.post("/auth/demo-enter")
+def demo_enter(body: DemoEntry, request: Request, response: Response):
+    access = getattr(portal(request), "demo_access", None)
+    if not access:
+        raise ApiError(404, "DEMO_ACCESS_DISABLED", "Demo character entry is unavailable.")
+    token = access.issue(body.character_id)
+    _set_session_cookie(response, request, token, LIFETIME_SECONDS)
     return {"signed_in": True}
 
 
@@ -64,7 +90,7 @@ def dev_users(request: Request):
 @router.post("/auth/logout")
 def logout(request: Request, response: Response):
     token = request.cookies.get(COOKIE)
-    if token:
+    if token and not token.startswith(DEMO_TOKEN_PREFIX + "."):
         try:
             portal(request).cognito.global_sign_out(AccessToken=token)
         except Exception:

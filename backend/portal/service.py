@@ -2,6 +2,7 @@
 
 import base64
 import json
+import os
 import threading
 import time
 from datetime import datetime, timezone
@@ -12,6 +13,7 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 from backend.errors import ApiError
 from backend.store import normalize_account, normalize_client, normalize_event
+from backend.portal.demo_access import DemoAccess, PREFIX as DEMO_TOKEN_PREFIX
 
 COOKIE = "coherent_session"
 
@@ -19,6 +21,11 @@ COOKIE = "coherent_session"
 class Portal:
     def __init__(self, config_path, store):
         self.config = json.loads(Path(config_path).read_text())
+        self.demo_access = (
+            DemoAccess(os.environ.get("COHERENT_DEMO_SECRET", ""))
+            if os.environ.get("COHERENT_DEMO_ACCESS") == "1"
+            else None
+        )
         aws = boto3.Session(region_name=self.config["region"])
         self.table = aws.resource(
             "dynamodb",
@@ -46,6 +53,12 @@ class Portal:
         token = request.cookies.get(COOKIE)
         if not token:
             raise ApiError(401, "SIGN_IN_REQUIRED", "Please sign in to continue.")
+        if token.startswith(DEMO_TOKEN_PREFIX + "."):
+            if not self.demo_access:
+                raise ApiError(401, "SESSION_EXPIRED", "Demo sign-in is unavailable.")
+            actor = self.demo_access.actor(token)
+            request.state.portal_actor = actor
+            return actor
         try:
             # Cognito validates signature, expiry, and revocation. We additionally scope
             # the token to our app/pool and resolve authorization from our own identity map.

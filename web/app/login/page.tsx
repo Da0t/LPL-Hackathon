@@ -11,6 +11,7 @@ import { portalApi } from "@/lib/portal";
 import "../workspace/portal.css";
 
 type DevUser = { email: string; display_name: string; role: string };
+type DemoCharacter = { id: string; display_name: string; role: "client" | "staff" };
 
 const ease = [0.2, 0.7, 0.2, 1] as const;
 const rise = {
@@ -23,7 +24,8 @@ export default function Login() {
     [password, setPassword] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
-    [devUsers, setDevUsers] = useState<DevUser[]>([]);
+    [devUsers, setDevUsers] = useState<DevUser[]>([]),
+    [demoCharacters, setDemoCharacters] = useState<DemoCharacter[]>([]);
   const router = useRouter();
   const reduce = useReducedMotion();
 
@@ -41,8 +43,25 @@ export default function Login() {
     }
   };
 
+  const enterDemo = async (characterId: string) => {
+    setBusy(true);
+    setError("");
+    try {
+      await portalApi("/auth/demo-enter", "POST", { character_id: characterId });
+      const me = await portalApi("/auth/me");
+      router.replace(me.role === "staff" ? "/dashboard" : "/workspace");
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   // Populated only when the backend runs with COHERENT_DEV_LOGIN=1.
   useEffect(() => {
+    portalApi("/auth/demo-characters")
+      .then((r) => setDemoCharacters(r.characters || []))
+      .catch(() => {});
     portalApi("/auth/dev-users")
       .then((r) => setDevUsers(r.users || []))
       .catch(() => {});
@@ -86,6 +105,31 @@ export default function Login() {
           </motion.div>
           <motion.h2 variants={rise}>Welcome back.</motion.h2>
           <motion.p variants={rise}>Sign in to your Coherent workspace.</motion.p>
+          {demoCharacters.length > 0 && (
+            <motion.div variants={rise} className="demo-entry">
+              <strong>Explore as a demo character</strong>
+              <p>Choose a fictional client or advisor. No password needed.</p>
+              <div className="demo-entry-grid">
+                {demoCharacters.map((person) => (
+                  <button
+                    key={person.id}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => enterDemo(person.id)}
+                    aria-label={`Enter as ${person.display_name}`}
+                  >
+                    <span>{person.display_name}</span>
+                    <small>{person.role === "staff" ? "Advisor workspace" : "Client dashboard"}</small>
+                    <ArrowRight size={16} aria-hidden="true" />
+                  </button>
+                ))}
+              </div>
+              <small>These fictional records are shared across demo visits.</small>
+            </motion.div>
+          )}
+          {demoCharacters.length > 0 && (
+            <motion.div variants={rise} className="login-divider">Or sign in with email</motion.div>
+          )}
           <motion.label variants={rise}>
             Email address
             <input

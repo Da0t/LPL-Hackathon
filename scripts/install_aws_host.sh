@@ -31,6 +31,12 @@ chown -R ec2-user:ec2-user /opt/coherent/web/.next/cache
 
 install -d -m 750 -o ec2-user -g ec2-user /var/lib/coherent
 install -d -m 750 /etc/coherent
+if [ ! -f /etc/coherent/demo-secret ]; then
+  python3.12 -c 'import secrets; print(secrets.token_hex(32))' > /etc/coherent/demo-secret
+fi
+chmod 640 /etc/coherent/demo-secret
+chgrp ec2-user /etc/coherent/demo-secret
+demo_secret="$(cat /etc/coherent/demo-secret)"
 printf '%s' "$COHERENT_PORTAL_CONFIG_B64" | base64 -d > /etc/coherent/portal-aws.json
 chmod 640 /etc/coherent/portal-aws.json
 cat > /etc/coherent/backend.env <<EOF
@@ -43,6 +49,8 @@ SAMEPAGE_DB_PATH=/var/lib/coherent/samepage.db
 COHERENT_PORTAL_CONFIG=/etc/coherent/portal-aws.json
 COHERENT_ALLOWED_ORIGINS=$COHERENT_PUBLIC_ORIGIN
 COHERENT_SECURE_COOKIES=1
+COHERENT_DEMO_ACCESS=1
+COHERENT_DEMO_SECRET=$demo_secret
 EOF
 if [ -n "$COHERENT_GUARDRAIL_ID" ] && [ -n "$COHERENT_GUARDRAIL_VERSION" ]; then
   printf 'BEDROCK_GUARDRAIL_ID=%s\nBEDROCK_GUARDRAIL_VERSION=%s\n' "$COHERENT_GUARDRAIL_ID" "$COHERENT_GUARDRAIL_VERSION" >> /etc/coherent/backend.env

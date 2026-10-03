@@ -835,6 +835,59 @@
 .login-form-area label {
   margin: 22px 0;
 }
+.demo-entry {
+  padding: 18px;
+  border: 1px solid #cfdef4;
+  border-radius: 16px;
+  background: #f6f9ff;
+  margin: 18px 0 12px;
+}
+.demo-entry > strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 650;
+  color: #193052;
+}
+.demo-entry > p {
+  margin: 5px 0 14px !important;
+  font-size: 12px !important;
+  color: #657995;
+}
+.demo-entry-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin-bottom: 11px;
+}
+.demo-entry-grid button {
+  min-width: 0;
+  min-height: 68px;
+  position: relative;
+  padding: 11px 24px 11px 12px;
+  text-align: left;
+  border: 1px solid #d9e4f4;
+  border-radius: 10px;
+  background: #fff;
+  color: #1d3456;
+  cursor: pointer;
+  transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+}
+.demo-entry-grid button:hover:not(:disabled) {
+  border-color: #1677ff;
+  transform: translateY(-2px);
+  box-shadow: 0 7px 18px rgba(26, 73, 137, .09);
+}
+.demo-entry-grid button:focus-visible {
+  outline: 3px solid #1677ff;
+  outline-offset: 2px;
+}
+.demo-entry-grid button:disabled { opacity: .6; cursor: wait; }
+.demo-entry-grid button span { display: block; font-size: 12px; font-weight: 650; }
+.demo-entry-grid button small { display: block; margin-top: 4px; font-size: 10px; color: #7183a0; }
+.demo-entry-grid button svg { position: absolute; right: 9px; top: 13px; color: #1677ff; }
+.demo-entry > small { display: block; font-size: 10px; line-height: 1.5; color: #7789a2; }
+.login-divider { display: flex; align-items: center; gap: 11px; color: #8797aa; font-size: 11px; margin: 16px 0 4px; }
+.login-divider::before, .login-divider::after { content: ""; height: 1px; background: #e2e9f3; flex: 1; }
 .login-form-area .portal-primary {
   width: 100%;
   margin: 10px 0 25px;

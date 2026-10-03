@@ -94,6 +94,8 @@ application code, so a confident but wrong model answer can never become a false
   A private, on-demand DynamoDB table holds client profiles, accounts, history, and immutable
   snapshots of submitted request documents. Identity-to-client and staff-role mappings are owned by
   the server, so changing a request header cannot impersonate another client.
+  The public synthetic demo also offers one-click fictional characters with a separate signed,
+  one-hour demo cookie; password sign-in remains available.
 - **Safety by construction.** The adapter injects authorized ids (never the model's), drops invented
   accounts, forces fraud cases to specialist review, and never asserts balances or history. The
   compliance verdict is computed in code from what the reviewer quoted, never taken from the model.
@@ -123,6 +125,12 @@ Systems Manager. No long-lived AWS key is copied to the host; the role supplies 
 origin also requires a private header set by this CloudFront distribution. Login cookies are `Secure`
 on the hosted URL. CloudFront forwards cookies, headers, query strings, and all request methods with
 caching disabled, so authenticated responses are not shared.
+The hosted sign-in shows all three fictional clients and a fictional staff advisor as one-click
+characters. The backend maps each button to a fixed server-side role and client id, signs the demo
+session with a private key generated on the instance, and expires it after one hour. It never sends
+the private Cognito demo passwords to the browser or instance. Demo users share fictional cloud
+profiles and case history, so their edits are visible to other demo visitors. Never put real client
+records in this public demo.
 
 First complete the existing portal and Knowledge Base provisioning below. Run
 `python -m scripts.provision_guardrail` to enable the tested PII Guardrail, then run this from a clean,
@@ -241,8 +249,9 @@ synthetic case and writes screenshots under `/tmp`.
 
 - `/`: animated Coherent logo, a replayable example showing a client's words become a confirmed
   request record, and the technology logo strip.
-- `/login`: email and password sign-in beside a moving board showing a sample request route to
-  an advisor by specialty. Reduced-motion settings skip the moving transition.
+- `/login`: one-click fictional client/advisor entry or email and password sign-in, beside a moving
+  board showing a sample request route to an advisor by specialty. Reduced-motion settings skip
+  the moving transition.
 - `/workspace`: client overview with a recorded-value chart that can be scrubbed, 1M/3M/YTD/1Y/ALL
   ranges, cash, account sparklines, recent activity, and requests. Chart points carry each account's
   recorded balance forward from its opening value; they are not market forecasts.

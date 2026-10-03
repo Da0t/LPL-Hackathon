@@ -11,6 +11,7 @@ from backend.main import create_app
 from backend.settings import Settings
 from backend.portal.seed import make_profiles
 from backend.portal.service import Portal, COOKIE
+from backend.portal.demo_access import DemoAccess
 
 
 class Table:
@@ -120,6 +121,49 @@ def test_hosted_login_marks_cookie_secure(setup, monkeypatch):
     assert response.status_code == 200
     assert "secure" in response.headers["set-cookie"].lower()
     assert "httponly" in response.headers["set-cookie"].lower()
+
+
+def test_demo_characters_are_fixed_signed_and_role_scoped(setup, monkeypatch):
+    c, portal, _ = setup
+    assert c.get("/auth/demo-characters").json() == {"characters": []}
+    assert c.post("/auth/demo-enter", json={"character_id": "staff"}).status_code == 404
+    portal.demo_access = DemoAccess("a" * 64)
+    listed = c.get("/auth/demo-characters").json()["characters"]
+    assert len(listed) == 4
+    assert [person["role"] for person in listed] == ["client", "client", "client", "staff"]
+    assert all("email" not in person for person in listed)
+    assert c.post("/auth/demo-enter", json={"character_id": "not-a-person"}).status_code == 404
+    assert c.post("/auth/demo-enter", json={"character_id": "CLIENT-017", "role": "staff"}).status_code == 422
+
+    assert c.post("/auth/demo-enter", json={"character_id": "CLIENT-017"}).status_code == 200
+    assert c.get("/auth/me").json()["client_id"] == "CLIENT-017"
+    assert c.get("/portal/me").json()["client_id"] == "CLIENT-017"
+    assert c.get("/staff/cases").status_code == 403
+    signed = c.cookies.get(COOKIE)
+    c.cookies.set(COOKIE, signed[:-1] + ("A" if signed[-1] != "A" else "B"))
+    assert c.get("/auth/me").status_code == 401
+    c.cookies.clear()
+
+    assert c.post("/auth/demo-enter", json={"character_id": "staff"}).status_code == 200
+    assert c.get("/auth/me").json()["role"] == "staff"
+    assert c.get("/staff/cases").status_code == 200
+    assert c.get("/portal/me").status_code == 403
+    assert c.post("/auth/logout").status_code == 200
+    assert c.get("/auth/me").status_code == 401
+
+
+def test_demo_character_token_expires(monkeypatch):
+    from backend.portal import demo_access
+
+    access = DemoAccess("s" * 64)
+    now = 1_700_000_000
+    monkeypatch.setattr(demo_access.time, "time", lambda: now)
+    signed = access.issue("CLIENT-022")
+    assert access.actor(signed)["client_id"] == "CLIENT-022"
+    monkeypatch.setattr(demo_access.time, "time", lambda: now + 3601)
+    with pytest.raises(Exception) as error:
+        access.actor(signed)
+    assert error.value.error_code == "SESSION_EXPIRED"
 
 
 def test_seed_reconciles_and_transfers_are_paired():
