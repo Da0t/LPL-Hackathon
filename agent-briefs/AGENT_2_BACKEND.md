@@ -1,6 +1,6 @@
 # Agent 2 Backend API and Case Logic
 
-You are one of four parallel development agents building SamePage for the LPL hackathon. **You own the backend API, application state, demo authorization boundary, and case validation.** Work in your own clone or worktree of [Da0t/LPL-Hackathon](https://github.com/Da0t/LPL-Hackathon) on branch `codex/agent2-backend`. First read `HACKATHON_PROJECT_BRIEF.md`, `SAMEPAGE_PRODUCT_SPEC.md`, `contracts/API_V1.md`, and `contracts/demo_fixture_v1.json`. The contract and fixture are already frozen, so start independently without waiting for another agent. Agent 1 owns AWS; Agents 3 and 4 own the interfaces.
+You are one of four parallel development agents building SamePage for the LPL hackathon. **You own the backend API, application state, demo authorization boundary, and case validation.** Work in your own clone or worktree of [Da0t/LPL-Hackathon](https://github.com/Da0t/LPL-Hackathon) on branch `codex/agent2-backend`. First read `HACKATHON_PROJECT_BRIEF.md`, `SAMEPAGE_PRODUCT_SPEC.md`, `contracts/API_V1.md`, `contracts/demo_fixture_v1.json`, and `INTEGRATION_RUNBOOK.md`. The contract and fixture are already frozen, so start independently without waiting for another agent. Agent 1 owns AWS; Agents 3 and 4 own the interfaces.
 
 ## Your mission
 
@@ -8,9 +8,9 @@ Build a small FastAPI app that accepts a client request, calls Agent 1's Bedrock
 
 ## Files you own
 
-- `backend/main.py`, `backend/api.py`, `backend/schemas.py`, and `backend/services/`: HTTP routes, validation, state machine, deterministic routing rules, and static page serving.
+- `backend/main.py`, `backend/api.py`, `backend/schemas.py`, and `backend/services/`: HTTP routes, validation, state machine, deterministic routing rules, and static page serving. `backend/main.py` must expose `app` for the runbook's Uvicorn command.
 - `backend/store.py` and local SQLite setup for synthetic clients, accounts, cases, and assignments. Import `contracts/demo_fixture_v1.json` immediately; Agent 4 may later add richer `data/` files without changing the fixed IDs.
-- `requirements.txt`, `README.md`, and `tests/backend/`: app dependencies, run instructions, and meaningful API tests.
+- `backend/reset_demo.py`, `requirements.txt`, `README.md`, and `tests/backend/`: synthetic-data reset, app dependencies, run instructions, and meaningful API tests. `python -m backend.reset_demo` must restore the fixture state. Include Agent 1's `requirements-aws.txt` in the app install path.
 - No ownership of `contracts/API_V1.md`; it is frozen. Propose a version-two contract to the team if needed.
 
 Do not edit `backend/aws/` (Agent 1), `frontend/client/` (Agent 3), `frontend/staff/` or `data/` (Agent 4). Serve those paths even if their files are still being built.
@@ -50,7 +50,7 @@ Agent 1 exposes `intake_turn(client_id, transcript, selected_option_id, tools) -
 4. Swap endpoint stubs for Agent 1's live Bedrock adapter. Keep an explicit mock mode for offline UI development, but the final judged path must use Bedrock.
 5. Run a full synthetic end-to-end test for ambiguous IRA, clear request, and specialist security routing. Record one-command startup and demo reset in `README.md`.
 
-Done means a client request submitted through the API appears in the staff queue, displays supported account facts, and can be manually assigned. The core path must work with typed input and live Bedrock.
+Done means a client request submitted through the API appears in the staff queue, displays supported account facts, and can be manually assigned. The core path must work with typed input and live Bedrock. The exact launch and reset commands in `INTEGRATION_RUNBOOK.md` must work from a clean checkout.
 
 ## Synchronization with the other agents
 

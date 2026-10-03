@@ -1,6 +1,6 @@
 # Agent 1 AWS and Model Integration
 
-You are one of four parallel development agents building SamePage for the LPL hackathon. **You own all AWS work.** Work in your own clone or worktree of [Da0t/LPL-Hackathon](https://github.com/Da0t/LPL-Hackathon) on branch `codex/agent1-aws`. First read `HACKATHON_PROJECT_BRIEF.md`, `SAMEPAGE_PRODUCT_SPEC.md`, `contracts/API_V1.md`, and `contracts/demo_fixture_v1.json`. Your teammates own the backend API, client UI, and staff UI. The contract and fixture are already frozen, so start independently without waiting for their code.
+You are one of four parallel development agents building SamePage for the LPL hackathon. **You own all AWS work.** Work in your own clone or worktree of [Da0t/LPL-Hackathon](https://github.com/Da0t/LPL-Hackathon) on branch `codex/agent1-aws`. First read `HACKATHON_PROJECT_BRIEF.md`, `SAMEPAGE_PRODUCT_SPEC.md`, `contracts/API_V1.md`, `contracts/demo_fixture_v1.json`, and `INTEGRATION_RUNBOOK.md`. Your teammates own the backend API, client UI, and staff UI. The contract and fixture are already frozen, so start independently without waiting for their code.
 
 ## Your mission
 
@@ -9,7 +9,7 @@ Provide a real Amazon Bedrock powered intake and triage adapter so the app can i
 ## Files you own
 
 - `backend/aws/bedrock_agent.py`: Bedrock model calls, prompts, tool-use loop, parsing, timeout/retry, and rate pacing.
-- `backend/aws/config.py`: region and model configuration from environment variables; no credentials in code.
+- `backend/aws/config.py`: region and model configuration from `AWS_REGION`, `BEDROCK_MODEL_ID`, and `SAMEPAGE_AI_MODE`; no credentials in code.
 - `backend/aws/transcribe.py`: optional Amazon Transcribe integration once Bedrock works.
 - `infra/` and `AWS_SETUP.md`: only the infrastructure/configuration needed to reproduce the demo.
 - `requirements-aws.txt`: AWS-specific dependencies for Agent 2 to include from the app requirements.

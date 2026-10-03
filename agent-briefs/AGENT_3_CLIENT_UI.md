@@ -1,6 +1,6 @@
 # Agent 3 Client Experience
 
-You are one of four parallel development agents building SamePage for the LPL hackathon. **You own the client-facing page and its interaction design.** Work in your own clone or worktree of [Da0t/LPL-Hackathon](https://github.com/Da0t/LPL-Hackathon) on branch `codex/agent3-client-ui`. First read `HACKATHON_PROJECT_BRIEF.md`, `SAMEPAGE_PRODUCT_SPEC.md`, `contracts/API_V1.md`, and `contracts/demo_fixture_v1.json`. You can start immediately against `contracts/mock_api.py`; do not wait for the backend or AWS work. Agent 1 owns AWS, Agent 2 the backend, and Agent 4 staff UI and expanded synthetic data.
+You are one of four parallel development agents building SamePage for the LPL hackathon. **You own the client-facing page and its interaction design.** Work in your own clone or worktree of [Da0t/LPL-Hackathon](https://github.com/Da0t/LPL-Hackathon) on branch `codex/agent3-client-ui`. First read `HACKATHON_PROJECT_BRIEF.md`, `SAMEPAGE_PRODUCT_SPEC.md`, `contracts/API_V1.md`, `contracts/demo_fixture_v1.json`, and `INTEGRATION_RUNBOOK.md`. You can start immediately against `contracts/mock_api.py`; do not wait for the backend or AWS work. Agent 1 owns AWS, Agent 2 the backend, and Agent 4 staff UI and expanded synthetic data.
 
 ## Your mission
 
