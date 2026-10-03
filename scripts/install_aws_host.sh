@@ -10,7 +10,6 @@ set -euo pipefail
 
 dnf install -y git nginx python3.12 python3.12-pip nodejs22 nodejs22-npm
 alternatives --set node /usr/bin/node-22
-alternatives --set npm /usr/bin/npm-22
 
 if [ ! -d /opt/coherent/.git ]; then
   git clone https://github.com/Da0t/LPL-Hackathon.git /opt/coherent
