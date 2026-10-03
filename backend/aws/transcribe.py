@@ -1,31 +1,36 @@
-"""Optional Amazon Transcribe Streaming support (stretch, after Bedrock works).
+"""Optional Amazon Transcribe speech-to-text with a financial custom vocabulary.
 
-The judged, must-work path is **typed** intake. Voice is additive and on-thesis
-for the older-investor persona, but live streaming is the biggest reliability
-risk, so this module is intentionally a thin, dependency-guarded wrapper that
-never breaks the app when the optional dependency or credentials are absent.
+The judged, must-work path is typed intake, and the client page already offers
+browser speech recognition. This module adds the AWS-native voice path:
 
-Two honest options for the demo, in order of reliability:
+* A **custom vocabulary** of financial terms (ROI, Roth IRA, RMD, 1099-R, ...)
+  biases Transcribe toward the right words. Combined with the intake agent's
+  term normalization, spoken shorthand resolves to approved terms. No S3 is
+  needed; the vocabulary is created from an inline phrase list.
+* ``transcribe_wav`` transcribes a recorded clip (easy to test on the presenting
+  machine); ``transcribe_pcm_chunks`` streams live microphone audio.
 
-1. **Browser speech recognition** (Web Speech API) in the client page. No AWS
-   dependency; label it accurately as a browser feature in the presentation.
-2. **Amazon Transcribe Streaming** via the ``amazon-transcribe`` async SDK
-   (HTTP/2). Enable by installing that package and calling
-   :func:`stream_microphone` from an async context. No S3 is required for
-   streaming; if audio is ever persisted, the bucket must stay private.
-
-Usage::
-
-    from backend.aws import transcribe
-    if transcribe.available():
-        text = await transcribe.transcribe_pcm_chunks(chunks, region="us-east-1")
+Vocabulary management uses boto3 (always available). Live streaming additionally
+needs the ``amazon-transcribe`` package (see requirements-aws.txt); the typed and
+browser-speech paths keep working if it is absent.
 """
 
 from __future__ import annotations
 
 import os
+import time
 
 REGION = os.environ.get("AWS_REGION", "us-east-1")
+FINANCIAL_VOCAB_NAME = os.environ.get("TRANSCRIBE_VOCAB_NAME", "samepage-financial-terms")
+
+# Inline phrases (letters + hyphens only, per Transcribe rules). Multi-word terms
+# are hyphen-joined. These bias recognition toward financial vocabulary.
+FINANCIAL_VOCAB_PHRASES = [
+    "ROI", "Roth-IRA", "rollover-IRA", "traditional-IRA", "IRA",
+    "RMD", "required-minimum-distribution", "distribution", "withdrawal",
+    "dividend", "dividends", "capital-gains", "beneficiary", "brokerage",
+    "transfer", "ten-ninety-nine", "trusted-contact",
+]
 
 
 def available() -> bool:
@@ -37,12 +42,50 @@ def available() -> bool:
     return True
 
 
+def ensure_financial_vocabulary(region: str | None = None, wait: bool = True) -> str:
+    """Create or update the financial custom vocabulary. Returns its state.
+
+    Idempotent: creates it if missing, updates it if it already exists. Uses
+    boto3 (no streaming SDK needed). When ``wait`` is True, blocks until the
+    vocabulary reaches READY or FAILED.
+    """
+    import boto3
+    from botocore.exceptions import ClientError
+
+    tc = boto3.client("transcribe", region_name=region or REGION)
+    try:
+        tc.create_vocabulary(
+            VocabularyName=FINANCIAL_VOCAB_NAME,
+            LanguageCode="en-US",
+            Phrases=FINANCIAL_VOCAB_PHRASES,
+        )
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") == "ConflictException":
+            tc.update_vocabulary(
+                VocabularyName=FINANCIAL_VOCAB_NAME,
+                LanguageCode="en-US",
+                Phrases=FINANCIAL_VOCAB_PHRASES,
+            )
+        else:
+            raise
+
+    state = "PENDING"
+    while wait:
+        info = tc.get_vocabulary(VocabularyName=FINANCIAL_VOCAB_NAME)
+        state = info["VocabularyState"]
+        if state in ("READY", "FAILED"):
+            break
+        time.sleep(5)
+    return state
+
+
 async def transcribe_pcm_chunks(
     chunks,
     *,
     region: str | None = None,
     sample_rate_hz: int = 16000,
     language_code: str = "en-US",
+    vocabulary_name: str | None = FINANCIAL_VOCAB_NAME,
 ) -> str:
     """Transcribe an async iterable of 16-bit PCM audio chunks to text.
 
@@ -52,7 +95,7 @@ async def transcribe_pcm_chunks(
     if not available():
         raise RuntimeError(
             "Transcribe streaming is optional and not installed. Add "
-            "'amazon-transcribe' to the environment or use the typed path / "
+            "'amazon-transcribe' to the environment, or use the typed path / "
             "browser speech recognition instead."
         )
 
@@ -71,11 +114,14 @@ async def transcribe_pcm_chunks(
                     collected.append(alt.transcript)
 
     client = TranscribeStreamingClient(region=region or REGION)
-    stream = await client.start_stream_transcription(
+    kwargs = dict(
         language_code=language_code,
         media_sample_rate_hz=sample_rate_hz,
         media_encoding="pcm",
     )
+    if vocabulary_name:
+        kwargs["vocabulary_name"] = vocabulary_name
+    stream = await client.start_stream_transcription(**kwargs)
 
     async def _write():
         async for chunk in chunks:
@@ -87,3 +133,29 @@ async def transcribe_pcm_chunks(
 
     await asyncio.gather(_write(), handler.handle_events())
     return " ".join(collected).strip()
+
+
+async def transcribe_wav(path: str, *, region: str | None = None,
+                         vocabulary_name: str | None = FINANCIAL_VOCAB_NAME) -> str:
+    """Transcribe a 16-bit PCM mono WAV file (easy to test a recorded clip)."""
+    import wave
+
+    with wave.open(path, "rb") as wav:
+        rate = wav.getframerate()
+        frames = wav.readframes(wav.getnframes())
+
+    async def _chunks():
+        step = 1024 * 8
+        for i in range(0, len(frames), step):
+            yield frames[i:i + step]
+
+    return await transcribe_pcm_chunks(
+        _chunks(), region=region, sample_rate_hz=rate, vocabulary_name=vocabulary_name
+    )
+
+
+if __name__ == "__main__":
+    # Create/refresh the financial custom vocabulary from the command line:
+    #   AWS_PROFILE=lpl-hackathon python -m backend.aws.transcribe
+    print(f"Ensuring Transcribe vocabulary '{FINANCIAL_VOCAB_NAME}' in {REGION} ...")
+    print("state:", ensure_financial_vocabulary())

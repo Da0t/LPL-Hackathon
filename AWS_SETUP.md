@@ -13,7 +13,28 @@ tool use. The typed client flow must work before voice is attempted.
 | Region/model/config from env (no creds in code) | **Required, runs** | `backend/aws/config.py` |
 | Bedrock Guardrails (blocks investment/tax advice, masks PII) | **Optional, recommended** | `infra/guardrail.json` |
 | Least-privilege IAM policy | **Required to deploy** | `infra/iam_policy.json` |
-| Amazon Transcribe streaming (voice) | **Stretch, after typed flow** | `backend/aws/transcribe.py` |
+| Amazon Transcribe streaming (voice) + financial custom vocabulary | **Built, vocabulary live** | `backend/aws/transcribe.py` |
+
+### Voice: Transcribe financial custom vocabulary
+
+Two layers give better speech handling:
+
+1. **Understanding (always on):** the intake agent normalizes shorthand, acronyms,
+   phonetic fragments, and loosely named documents to approved glossary terms
+   ("R O I" → return on investment, "the tax form" → 1099-R) via
+   `Store.suggest_terms` and the `suggest_financial_terms` tool. Works for typed
+   input and any speech source.
+2. **Hearing (Amazon Transcribe):** a custom vocabulary biases speech-to-text
+   toward financial terms. Create/refresh it (boto3 only, no S3):
+
+   ```bash
+   AWS_PROFILE=lpl-hackathon python -m backend.aws.transcribe   # -> state: READY
+   ```
+
+   Then `transcribe_pcm_chunks(...)` / `transcribe_wav(path)` use it automatically.
+   Vocabulary name: `samepage-financial-terms` (override with `TRANSCRIBE_VOCAB_NAME`).
+   The client page still ships browser speech recognition as the default, labeled
+   as a browser feature; the Transcribe path is the AWS-native upgrade.
 
 ## 2. Configuration (environment only)
 

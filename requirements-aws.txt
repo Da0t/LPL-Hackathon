@@ -3,6 +3,6 @@
 boto3>=1.35.0
 botocore>=1.35.0
 
-# Optional, only for the stretch Amazon Transcribe Streaming path (voice input).
-# Uncomment if/when implementing live microphone transcription:
-# amazon-transcribe>=0.6.2
+# Amazon Transcribe Streaming (voice input with the financial custom vocabulary).
+# Vocabulary management uses boto3 alone; this is only needed for live streaming.
+amazon-transcribe>=0.6.2
