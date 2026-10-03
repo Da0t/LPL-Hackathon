@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#234e44" />
+    <title>SamePage · Tell us what you need</title>
+    <script>
+      // Works at /client and /client/, as well as a standalone static preview.
+      const clientAssets = location.pathname
+        .replace(/index\.html$/, "")
+        .replace(/\/?$/, "/");
+      const stylesheet = document.createElement("link");
+      stylesheet.rel = "stylesheet";
+      stylesheet.href = clientAssets + "style.css";
+      document.head.append(stylesheet);
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to your request</a>
+    <header class="site-header">
+      <a class="brand" href="" aria-label="SamePage home"
+        ><span class="brand-icon" aria-hidden="true">≋</span> SamePage<span
+          class="brand-dot"
+          >.</span
+        ></a
+      >
+      <span class="demo-badge"
+        ><span aria-hidden="true">●</span> Fictional client demo</span
+      >
+    </header>
+    <main id="main">
+      <nav aria-label="Request progress">
+        <ol class="steps">
+          <li id="step-describe" aria-current="step">
+            <span>1</span> Describe
+          </li>
+          <li id="step-review"><span>2</span> Review</li>
+          <li id="step-sent"><span>3</span> Send</li>
+        </ol>
+      </nav>
+
+      <section id="start-screen" class="start-layout">
+        <div class="intro">
+          <p class="eyebrow">A little clarity. A good next step.</p>
+          <h1>Your words.<br />A clearer way forward.</h1>
+          <p class="lede">
+            You don’t need to know the financial terms. Tell us what’s on your
+            mind, and we’ll help you put a request together.
+          </p>
+          <div class="promise">
+            <span aria-hidden="true">✓</span> In your own words
+            <span aria-hidden="true">✓</span> At your own pace
+          </div>
+        </div>
+        <form id="start-form" class="panel welcome-panel">
+          <span class="small-icon" aria-hidden="true">↗</span>
+          <h2>Let’s get on the same page.</h2>
+          <p>Choose a fictional client to try the experience.</p>
+          <label for="client">Demo client</label>
+          <select id="client">
+            <option value="CLIENT-017">Mara Ellis</option>
+            <option value="CLIENT-022">Evan Brooks</option>
+          </select>
+          <p id="restored" class="notice" hidden>
+            Your draft is here. Nothing has been sent. Start when you’re ready.
+          </p>
+          <button id="start" class="primary wide" type="submit">
+            Start a request <span aria-hidden="true">→</span>
+          </button>
+          <p class="fine">Simulated client access · Fictional records only</p>
+        </form>
+      </section>
+
+      <section id="intake-screen" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow" id="greeting">Your request</p>
+            <h1>What can we help you with?</h1>
+            <p>
+              Start with what matters to you. You can change your words at any
+              time.
+            </p>
+          </div>
+        </div>
+        <div class="intake-grid">
+          <div class="panel words-panel">
+            <div class="panel-top">
+              <label for="words">In your own words</label
+              ><button
+                id="mic"
+                class="secondary mic"
+                type="button"
+                aria-pressed="false"
+              >
+                <span aria-hidden="true">◉</span> Speak instead
+              </button>
+            </div>
+            <textarea
+              id="words"
+              rows="5"
+              maxlength="4000"
+              placeholder="For example, “I need help with the retirement money from my old job.”"
+              aria-describedby="words-hint"
+            ></textarea>
+            <p id="words-hint" class="fine">
+              Type here, or use your microphone. Both work the same way.
+            </p>
+            <p id="speech-status" class="fine" role="status"></p>
+            <div class="input-actions">
+              <button id="update" type="button" class="primary">
+                Find the right next step
+                <span aria-hidden="true">→</span></button
+              ><button
+                id="pause"
+                type="button"
+                class="text-button"
+                aria-pressed="false"
+              >
+                Pause suggestions
+              </button>
+            </div>
+            <p id="turn-status" class="status" role="status">
+              Suggestions will appear after you pause typing.
+            </p>
+          </div>
+          <aside class="guidance">
+            <span class="small-icon" aria-hidden="true">“</span>
+            <h2>No perfect words needed.</h2>
+            <p>
+              A life change, a question, or an account you can’t quite name.
+              Start anywhere.
+            </p>
+            <hr />
+            <p class="fine">
+              You’ll review every detail before sending. This creates a service
+              request; it doesn’t move money.
+            </p>
+          </aside>
+          <section
+            id="suggestion-section"
+            class="suggestion-section"
+            aria-labelledby="question"
+            hidden
+          >
+            <p class="eyebrow">Let’s make sure we understand</p>
+            <h2 id="question" aria-live="polite"></h2>
+            <details id="why" hidden>
+              <summary>Why am I being asked?</summary>
+              <p id="uncertainty"></p>
+            </details>
+            <div id="definitions" class="definitions"></div>
+            <div id="suggestions" class="suggestions"></div>
+          </section>
+        </div>
+        <div class="intake-footer">
+          <div class="alternative-actions">
+            <button id="none" class="secondary" type="button">
+              None of these</button
+            ><button id="person" class="text-button" type="button">
+              Talk to a person <span aria-hidden="true">↗</span>
+            </button>
+          </div>
+          <button id="review" class="primary" type="button" disabled>
+            Review my request <span aria-hidden="true">→</span>
+          </button>
+        </div>
+      </section>
+
+      <section id="review-screen" hidden>
+        <div class="section-heading">
+          <p class="eyebrow">You have the final say</p>
+          <h1>Does this sound right?</h1>
+          <p>
+            Check the details. Edit anything that doesn’t match what you mean.
+          </p>
+        </div>
+        <form id="confirm-form">
+          <div class="review-grid">
+            <section class="panel original-panel">
+              <p class="eyebrow">What you said</p>
+              <blockquote id="original"></blockquote>
+              <button id="edit-words" class="text-button" type="button">
+                Edit my words
+              </button>
+              <hr />
+              <h3>What happens next</h3>
+              <p>
+                Staff will review your request and help identify the next step.
+              </p>
+              <p class="fine">
+                Sending this request does not make a withdrawal, book an
+                appointment, or assign an advisor.
+              </p>
+            </section>
+            <section class="panel review-panel">
+              <label class="eyebrow" for="summary">What we understood</label
+              ><textarea
+                id="summary"
+                rows="4"
+                maxlength="4000"
+                required
+              ></textarea>
+              <p class="fine">
+                This is the wording staff will receive. Make it your own.
+              </p>
+              <label for="account">Account to discuss</label
+              ><select id="account">
+                <option value="">I’m not sure / no account needed</option>
+              </select>
+              <label for="amount"
+                >Amount to discuss
+                <span class="optional">(optional, USD)</span></label
+              ><input
+                id="amount"
+                inputmode="decimal"
+                type="text"
+                maxlength="20"
+                placeholder="Enter only if you want to discuss an amount"
+                aria-describedby="amount-hint"
+              />
+              <p class="fine" id="amount-hint">
+                Enter the amount yourself, or leave it blank. No money will
+                move.
+              </p>
+              <p id="unresolved" class="notice" hidden>
+                Staff can help clarify which account you mean.
+              </p>
+            </section>
+          </div>
+          <div class="review-actions">
+            <button id="back" class="text-button" type="button">
+              ← Back to my request</button
+            ><button id="confirm" class="primary" type="submit">
+              Confirm and send request <span aria-hidden="true">→</span>
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section id="success-screen" class="success panel" hidden tabindex="-1">
+        <span class="success-icon" aria-hidden="true">✓</span>
+        <p class="eyebrow">Ready for staff review</p>
+        <h1>Your request is on its way.</h1>
+        <p id="client-summary"></p>
+        <div class="case-number">
+          <span>Your case number</span><strong id="case-id"></strong>
+        </div>
+        <p>
+          Staff will review what you shared and help identify the next step.
+        </p>
+        <p class="fine">
+          No money has moved. An appointment and advisor have not been assigned.
+        </p>
+        <button id="new-request" class="secondary" type="button">
+          Start another request
+        </button>
+      </section>
+      <div id="error" class="error" role="alert" hidden></div>
+      <p id="environment-note" class="environment-note" hidden>
+        Development preview · Preset fictional responses · No live AI
+      </p>
+    </main>
+    <footer class="site-footer">
+      <span
+        >SamePage <span aria-hidden="true">/</span> A clearer conversation
+        starts here.</span
+      ><span>LPL hackathon prototype</span>
+    </footer>
+    <script>
+      const appScript = document.createElement("script");
+      appScript.src = clientAssets + "app.js";
+      document.body.append(appScript);
+    </script>
+  </body>
+</html>
