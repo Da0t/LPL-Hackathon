@@ -1,0 +1,171 @@
+{
+  "meta": {
+    "version": "1",
+    "synthetic_only": true,
+    "description": "Fictional records for independent development and UI mocks"
+  },
+  "clients": [
+    {
+      "client_id": "CLIENT-017",
+      "display_name": "Mara Ellis",
+      "preferred_contact_channel": "phone",
+      "meeting_preference": "phone",
+      "existing_advisor_id": null
+    },
+    {
+      "client_id": "CLIENT-022",
+      "display_name": "Evan Brooks",
+      "preferred_contact_channel": "email",
+      "meeting_preference": "video",
+      "existing_advisor_id": "ADV-01"
+    }
+  ],
+  "accounts": [
+    {
+      "account_id": "ACCT-201",
+      "client_id": "CLIENT-017",
+      "account_type": "rollover_ira",
+      "familiar_label": "Retirement account from former employer",
+      "masked_identifier": "****4821",
+      "balance": 84000,
+      "currency": "USD",
+      "balance_as_of": "2026-10-01",
+      "source_id": "ACCOUNT-RECORD-201"
+    },
+    {
+      "account_id": "ACCT-202",
+      "client_id": "CLIENT-017",
+      "account_type": "brokerage",
+      "familiar_label": "Everyday investments",
+      "masked_identifier": "****7314",
+      "balance": 23100,
+      "currency": "USD",
+      "balance_as_of": "2026-10-01",
+      "source_id": "ACCOUNT-RECORD-202"
+    },
+    {
+      "account_id": "ACCT-301",
+      "client_id": "CLIENT-022",
+      "account_type": "roth_ira",
+      "familiar_label": "Roth retirement account",
+      "masked_identifier": "****6205",
+      "balance": 51750,
+      "currency": "USD",
+      "balance_as_of": "2026-10-01",
+      "source_id": "ACCOUNT-RECORD-301"
+    }
+  ],
+  "events": [
+    {
+      "source_id": "EVENT-09",
+      "account_id": "ACCT-201",
+      "type": "rollover",
+      "date": "2023-06-12",
+      "summary": "Fictional rollover from former workplace plan"
+    },
+    {
+      "source_id": "EVENT-14",
+      "account_id": "ACCT-201",
+      "type": "service_request",
+      "date": "2025-04-09",
+      "summary": "Fictional contact-information update"
+    }
+  ],
+  "advisors": [
+    {
+      "advisor_id": "ADV-03",
+      "display_name": "Jordan Lee",
+      "specialties": ["retirement_income", "withdrawal_or_distribution"],
+      "active": true,
+      "available": true,
+      "meeting_mode": ["phone", "video"],
+      "capacity": 3
+    },
+    {
+      "advisor_id": "ADV-01",
+      "display_name": "Taylor Morgan",
+      "specialties": ["investment_planning", "rollover_or_transfer"],
+      "active": true,
+      "available": true,
+      "meeting_mode": ["video"],
+      "capacity": 2
+    }
+  ],
+  "glossary": [
+    {
+      "term": "rollover IRA",
+      "plain": "A retirement account that holds money moved from an earlier workplace retirement plan."
+    },
+    {
+      "term": "Roth IRA",
+      "plain": "A type of retirement account generally funded with money that has already been taxed. Withdrawal rules vary."
+    },
+    {
+      "term": "distribution",
+      "plain": "Money taken out of a retirement account. Taxes and other rules may apply."
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "CASE-1042",
+      "client_id": "CLIENT-017",
+      "client_display_name": "Mara Ellis",
+      "created_at": "2026-10-02T20:00:00Z",
+      "status": "submitted",
+      "input_mode": "voice",
+      "original_words": "I need six thousand dollars from the Roth thing from my old job.",
+      "confirmed_plain_language_request": "I want to speak with an advisor about using $6,000 from my retirement account from my former employer.",
+      "staff_summary": "Client requests discussion of a possible $6,000 distribution from a rollover IRA for care expenses.",
+      "intent": "discuss_possible_withdrawal",
+      "amount_requested": 6000,
+      "currency": "USD",
+      "selected_account_id": "ACCT-201",
+      "account_match_status": "client_confirmed",
+      "categories": ["withdrawal_or_distribution", "retirement_income"],
+      "unresolved_questions": ["Desired timing", "Potential tax implications for advisor review"],
+      "flags": ["client_term_did_not_match_account_type"],
+      "account_context": {
+        "account_type": "rollover_ira",
+        "masked_identifier": "****4821",
+        "balance": 84000,
+        "balance_as_of": "2026-10-01",
+        "account_source_id": "ACCOUNT-RECORD-201",
+        "relevant_events": [
+          {"type": "rollover", "date": "2023-06-12", "source_id": "EVENT-09"}
+        ]
+      },
+      "routing": {
+        "destination": "retirement_advisor_review",
+        "recommended_advisor_ids": ["ADV-03"],
+        "assigned_advisor_id": null,
+        "staff_decision": null
+      }
+    },
+    {
+      "case_id": "CASE-SEC-1",
+      "client_id": "CLIENT-022",
+      "client_display_name": "Evan Brooks",
+      "created_at": "2026-10-02T20:10:00Z",
+      "status": "submitted",
+      "input_mode": "text",
+      "original_words": "I don't recognize a sign-in alert on my account.",
+      "confirmed_plain_language_request": "I need help reviewing an account sign-in I do not recognize.",
+      "staff_summary": "Client reports a possible unauthorized sign-in and requests account-access review.",
+      "intent": "review_account_access",
+      "amount_requested": null,
+      "currency": null,
+      "selected_account_id": null,
+      "account_match_status": "not_needed",
+      "categories": ["fraud_or_security", "account_service"],
+      "unresolved_questions": ["Time and device of the alert"],
+      "flags": ["possible_unauthorized_access"],
+      "account_context": null,
+      "routing": {
+        "destination": "security_specialist_review",
+        "recommended_advisor_ids": [],
+        "assigned_advisor_id": null,
+        "staff_decision": null
+      }
+    }
+  ]
+}

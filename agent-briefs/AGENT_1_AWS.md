@@ -1,6 +1,6 @@
 # Agent 1 AWS and Model Integration
 
-You are one of four parallel development agents building SamePage for the LPL hackathon. **You own all AWS work.** Work in your own clone or worktree of [Da0t/LPL-Hackathon](https://github.com/Da0t/LPL-Hackathon) on branch `codex/agent1-aws`. First read `HACKATHON_PROJECT_BRIEF.md` and `SAMEPAGE_PRODUCT_SPEC.md`, especially the AWS and API contract sections. Your teammates own the backend API, client UI, and staff UI. Do not build their screens or change the shared API without agreement.
+You are one of four parallel development agents building SamePage for the LPL hackathon. **You own all AWS work.** Work in your own clone or worktree of [Da0t/LPL-Hackathon](https://github.com/Da0t/LPL-Hackathon) on branch `codex/agent1-aws`. First read `HACKATHON_PROJECT_BRIEF.md`, `SAMEPAGE_PRODUCT_SPEC.md`, `contracts/API_V1.md`, and `contracts/demo_fixture_v1.json`. Your teammates own the backend API, client UI, and staff UI. The contract and fixture are already frozen, so start independently without waiting for their code.
 
 ## Your mission
 
@@ -25,7 +25,7 @@ intake_turn(client_id: str, transcript: str, selected_option_id: str | None, too
 triage_case(confirmed_request: dict, tools) -> dict
 ```
 
-Agent 2 supplies authorized `tools` callbacks. Expected callbacks are `get_relevant_accounts`, `get_approved_definition`, `get_relevant_account_history`, and `search_advisor_directory`. Your adapter must **not** query files or a database directly. This keeps account access and role checks in Agent 2's service layer.
+Agent 2 will supply authorized `tools` callbacks in the integrated app. Expected callbacks are `get_relevant_accounts`, `get_approved_definition`, `get_relevant_account_history`, and `search_advisor_directory`. For independent development, make local fake callbacks backed by `contracts/demo_fixture_v1.json`; keep those in `tests/aws/`. Your production adapter must **not** query files or a database directly. This keeps account access and role checks in Agent 2's service layer.
 
 `intake_turn` returns at most three suggestion objects `{id, label, account_id?}`, one `question` or null, `definitions` as `{term, plain}`, `candidate_intent`, `selected_account_id` or null, and `uncertainty` or null. `triage_case` returns a plain-language client summary, a staff summary, categories from the fixed taxonomy in the spec, unresolved questions, and flags. Do not invent an account, balance, transaction history, or amount. Missing data stays missing. Keep the client's original words available to Agent 2.
 
@@ -40,7 +40,7 @@ Agent 2 supplies authorized `tools` callbacks. Expected callbacks are `get_relev
 ## Build order and definition of done
 
 1. Confirm region, model access, and one successful generation call. Tell the team the chosen **model name and ID**; do not share credentials.
-2. Implement `intake_turn` against fake tool callbacks and the synthetic “Roth thing from my old job” scenario. It should notice that the synthetic account list contains no Roth IRA and ask a question instead of claiming a match.
+2. Implement `intake_turn` against your fixture-backed fake callbacks and the synthetic “Roth thing from my old job” scenario. It should notice that the synthetic account list contains no Roth IRA and ask a question instead of claiming a match.
 3. Implement `triage_case` with schema-constrained output and a second scenario. The downstream backend makes the final routing decision.
 4. Add bounded retries, pacing, and a failure path. Run one live smoke test with synthetic data and record the exact command in `AWS_SETUP.md`.
 5. Only then attempt Transcribe Streaming. If it is incomplete, leave the typed flow intact and state clearly that microphone transcription is a browser/demo feature or pending.
@@ -49,4 +49,4 @@ Done means Agent 2 can import your adapter and run the core request through live
 
 ## Synchronization with the other agents
 
-The version-one contract in `SAMEPAGE_PRODUCT_SPEC.md` is the shared source of truth. At the first check-in, confirm your Python signatures with Agent 2. Push your branch and open a pull request; do not push directly to `main`. At each milestone, send the team your branch/commit, what works, any interface change proposed, and any blocker. If a contract change is needed, wait for Agent 2 to update the shared contract and for Agents 3 and 4 to acknowledge it before relying on the change. Pull merged `main` before final integration.
+`contracts/API_V1.md` is the frozen interface. Implement its Python signatures without waiting for Agent 2. Push your branch and open a pull request; do not push directly to `main`. At each milestone, send the team your branch/commit, what works, and any blocker. If the contract is insufficient, propose a version-two change to the team; do not silently alter version one. Pull merged `main` before final integration.
