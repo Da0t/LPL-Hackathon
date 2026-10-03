@@ -72,6 +72,55 @@ class StaffService:
             reason = f"{name}: possible unauthorized access or fraud. Advisor matching is turned off; staff route this request to the specialist queue."
         return {"candidates": ranked, "case_id": case_id, "destination": destination, "reason": reason}
 
+    # ---- advisor workspace (additive; brief is read-only, actions use history) ----
+
+    def brief(self, case_id: str, ai_mode: str = "mock") -> dict[str, Any]:
+        """Read-only Bedrock-generated advisor prep brief. Never mutates the case."""
+        case = self._case(case_id)
+        from backend.aws import bedrock_agent as ba  # local import keeps layering light
+        note = None
+        if ai_mode == "bedrock":
+            try:
+                raw = ba.advisor_brief(case)
+            except Exception as exc:  # noqa: BLE001 , fall back so the demo never dead-ends
+                log.warning("advisor_brief fell back to offline: %s", exc)
+                raw = ba._stub_brief(case)
+                note = "Generated offline (model temporarily unavailable)."
+        else:
+            raw = ba._stub_brief(case)
+            note = "Deterministic brief (set SAMEPAGE_AI_MODE=bedrock for the live model)."
+        return {"case_id": case_id, "ai_mode": ai_mode, "note": note, **raw}
+
+    _ACTIONS = {
+        "claim": "advisor_claimed",
+        "note": "advisor_note",
+        "clarify": "clarification_requested",
+        "schedule": "meeting_scheduled",
+        "resolve": "request_resolved",
+    }
+
+    def action(self, case_id: str, action: str, text: str | None = None) -> dict[str, Any]:
+        """Record an advisor action as a history event. 'clarify' moves the case to
+        needs_client_followup; others keep the status and are derived from history."""
+        event_name = self._ACTIONS.get(action)
+        if not event_name:
+            raise ApiError(400, "INVALID_ACTION", f"Unknown advisor action {action!r}.")
+        if action in ("note", "clarify", "resolve") and not (text or "").strip():
+            raise ApiError(400, "MISSING_TEXT", f"The '{action}' action needs text.")
+        with self.store.lock:
+            case = self._case(case_id)
+            now = now_iso()
+            details: dict[str, Any] = {"by": "advisor-demo"}
+            if text:
+                details["text"] = text.strip()
+            event = {"event": event_name, "at": now, "details": details}
+            case.setdefault("history", []).append(event)
+            if action == "clarify":
+                case["status"] = "needs_client_followup"
+            case["updated_at"] = now
+            self.store.save_case(CaseRecord.model_validate(case).model_dump())
+        return {"case_id": case_id, "status": case["status"], "event": event}
+
     def assign(self, case_id: str, advisor_id: str, staff_reason: str) -> dict[str, Any]:
         with self.store.lock:
             return self._assign(case_id, advisor_id, staff_reason)

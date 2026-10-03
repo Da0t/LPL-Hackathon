@@ -113,6 +113,18 @@ def staff_assign(case_id: str, body: AssignRequest, request: Request, _role: str
     return AssignResponse(**_staff(request).assign(case_id, body.advisor_id, body.staff_reason))
 
 
+@router.post("/staff/cases/{case_id}/brief", responses=_ERRORS, tags=["staff"])
+def staff_brief(case_id: str, request: Request, _role: str = Depends(require_staff)):
+    """Read-only Bedrock-generated advisor prep brief for a case (additive, not in v1)."""
+    return _staff(request).brief(case_id, request.app.state.settings.ai_mode)
+
+
+@router.post("/staff/cases/{case_id}/action", responses=_ERRORS, tags=["staff"])
+def staff_action(case_id: str, body: dict, request: Request, _role: str = Depends(require_staff)):
+    """Record an advisor workflow action (claim/note/clarify/schedule/resolve) as a history event."""
+    return _staff(request).action(case_id, body.get("action", ""), body.get("text"))
+
+
 # --------------------------------------------------------- additive helpers
 
 

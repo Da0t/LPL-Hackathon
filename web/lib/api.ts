@@ -118,6 +118,18 @@ export const assignCase = (id: string, advisor_id: string, staff_reason: string)
     method: "POST", role: "staff", body: { advisor_id, staff_reason },
   });
 
+export type Brief = {
+  case_id: string; ai_mode: string; note: string | null;
+  headline: string; talking_points: string[]; confirm: string[]; cautions: string[];
+};
+export const getBrief = (id: string) =>
+  call<Brief>(`/staff/cases/${encodeURIComponent(id)}/brief`, { method: "POST", role: "staff" });
+
+export type AdvisorAction = "claim" | "note" | "clarify" | "schedule" | "resolve";
+export const caseAction = (id: string, action: AdvisorAction, text?: string) =>
+  call<{ case_id: string; status: string; event: { event: string; at: string; details: Record<string, unknown> } }>(
+    `/staff/cases/${encodeURIComponent(id)}/action`, { method: "POST", role: "staff", body: { action, text } });
+
 export const health = () => call<any>("/health", { role: "client" });
 
 // ---- Friendly labels ----

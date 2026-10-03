@@ -644,6 +644,101 @@ def _normalize_triage(result: dict) -> dict:
 
 
 # --------------------------------------------------------------------------- #
+# Advisor prep brief (read-only) , Bedrock-generated talking points for staff.
+# --------------------------------------------------------------------------- #
+_BRIEF_SYSTEM = """You prepare a financial advisor for a client conversation at a wealth-management firm.
+Given a client-confirmed service request and record-backed facts, produce a concise, practical prep brief.
+
+Hard rules:
+- Do NOT give investment, tax, or legal advice and do NOT tell the advisor what the client should do.
+- Do NOT invent accounts, balances, amounts, or history. Use only the facts provided.
+- Frame talking points as things to discuss or clarify, not recommendations.
+- Always include at least one compliance caution (e.g., confirm identity, no advice given, note suitability, tax not assessed).
+
+Report the brief by calling submit_brief exactly once."""
+
+_BRIEF_TOOL = {
+    "toolSpec": {
+        "name": "submit_brief",
+        "description": "Report the advisor prep brief. Call exactly once.",
+        "inputSchema": {"json": {
+            "type": "object",
+            "properties": {
+                "headline": {"type": "string", "description": "One sentence: what this client is really asking for, in advisor terms."},
+                "talking_points": {"type": "array", "items": {"type": "string"}, "description": "2-4 things to discuss, framed as questions/topics, not advice."},
+                "confirm": {"type": "array", "items": {"type": "string"}, "description": "Facts or intentions to confirm with the client."},
+                "cautions": {"type": "array", "items": {"type": "string"}, "description": "Compliance/risk cautions for the advisor."},
+            },
+            "required": ["headline", "talking_points", "confirm", "cautions"],
+        }},
+    }
+}
+
+
+def advisor_brief(case: dict, tools=None, *, cfg: AwsConfig | None = None, client=None) -> dict:
+    """Generate a read-only advisor prep brief from a case's confirmed facts.
+
+    ``case`` should carry confirmed_plain_language_request, staff_summary,
+    categories, amount_requested, account_context, unresolved_questions, flags,
+    conflicts, original_words. Never mutates the case. ``tools`` is unused today
+    (facts are passed in the prompt) but accepted for signature symmetry.
+    """
+    cfg = cfg or load_config()
+    if not cfg.is_bedrock:
+        return _stub_brief(case)
+    if not cfg.model_id:
+        raise BedrockAdapterError("NO_MODEL_CONFIGURED", "BEDROCK_MODEL_ID is not set.")
+
+    pacer = _pacer_for(cfg)
+    client = client or build_bedrock_client(cfg)
+    facts = {k: case.get(k) for k in (
+        "confirmed_plain_language_request", "staff_summary", "categories", "intent",
+        "amount_requested", "currency", "account_context", "unresolved_questions",
+        "flags", "conflicts", "original_words",
+    )}
+    first_user = "Case facts:\n" + json.dumps(facts, ensure_ascii=False, default=str)
+    result = _run_tool_loop(client, cfg, pacer, _BRIEF_SYSTEM, first_user, [_BRIEF_TOOL], "submit_brief", {})
+    return _normalize_brief(result)
+
+
+def _normalize_brief(result: dict) -> dict:
+    as_list = lambda v: [str(x) for x in v] if isinstance(v, list) else ([str(v)] if v else [])
+    cautions = as_list(result.get("cautions"))
+    if not cautions:
+        cautions = ["Confirm the client's identity. This is a service request, not advice; no transaction is authorized."]
+    return {
+        "headline": str(result.get("headline") or "").strip(),
+        "talking_points": as_list(result.get("talking_points")),
+        "confirm": as_list(result.get("confirm")),
+        "cautions": cautions,
+    }
+
+
+def _stub_brief(case: dict) -> dict:
+    cats = case.get("categories") or []
+    points = []
+    if "withdrawal_or_distribution" in cats or "retirement_income" in cats:
+        points.append("Discuss the purpose and timing of the requested distribution.")
+    if "rollover_or_transfer" in cats:
+        points.append("Clarify which accounts are involved in the transfer.")
+    if "beneficiary_or_estate" in cats:
+        points.append("Review the current beneficiary designation and the requested change.")
+    if "fraud_or_security" in cats:
+        points.append("Verify identity and review the unrecognized activity before anything else.")
+    if not points:
+        points.append("Clarify what outcome the client is hoping for.")
+    confirm = list(case.get("unresolved_questions") or []) or ["The account and intent the client confirmed."]
+    cautions = ["This is a service request, not advice; no transaction is authorized.",
+                "Confirm the client's identity before discussing account details."]
+    if "client_term_did_not_match_account_type" in (case.get("flags") or []):
+        cautions.append("Client used a term that did not match their records , confirm the account explicitly.")
+    return {
+        "headline": case.get("staff_summary") or case.get("confirmed_plain_language_request") or "Client service request.",
+        "talking_points": points, "confirm": confirm, "cautions": cautions,
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Offline stub mode (SAMEPAGE_AI_MODE=stub) - dev only, never the judged path.
 # --------------------------------------------------------------------------- #
 def _stub_intake(client_id: str, transcript: str, selected_option_id, tools) -> dict:

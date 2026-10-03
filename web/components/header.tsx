@@ -3,10 +3,14 @@ import Link from 'next/link'
 import { Menu, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import React from 'react'
+import { usePathname } from 'next/navigation'
 import { BrandLogo } from '@/components/brand-logo'
 
 export const HeroHeader = () => {
     const [menuState, setMenuState] = React.useState(false)
+    const pathname = usePathname()
+    // The advisor workspace has its own sidebar/chrome; hide the marketing header there.
+    if (pathname?.startsWith('/dashboard')) return null
     return (
         <header>
             <nav
