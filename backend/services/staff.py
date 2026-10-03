@@ -9,7 +9,7 @@ from backend.errors import ApiError
 from backend.schemas import CaseRecord, SECURITY_DESTINATION
 from backend.services import routing
 from backend.services.priority import intake_metrics, lifecycle_of, priority_for
-from backend.services.common import now_iso
+from backend.services.common import clean_text, now_iso
 from backend.services.reply_workflow import run_reply_workflow
 from backend.store import Store
 
@@ -205,7 +205,7 @@ class StaffService:
     def reply_draft(self, case_id: str, instruction: str | None = None, ai_mode: str = "mock") -> dict[str, Any]:
         """Drafter + compliance-reviewer loop for a client message. Never mutates the case."""
         facts = self._agent_facts(self._case(case_id))
-        instruction = (instruction or "").strip() or None
+        instruction = clean_text(instruction, "The instruction")
         from backend.aws import advisor_agents as aa
         result, note = self._run_agent(
             ai_mode,
@@ -217,7 +217,7 @@ class StaffService:
     def compliance_review(self, case_id: str, draft: str | None = None, ai_mode: str = "mock") -> dict[str, Any]:
         """Compliance reviewer on the case record and, if given, a draft. Never mutates the case."""
         facts = self._agent_facts(self._case(case_id))
-        draft = (draft or "").strip() or None
+        draft = clean_text(draft, "The draft")
         from backend.aws import advisor_agents as aa
         result, note = self._run_agent(ai_mode, lambda: aa.compliance_review(facts, draft),
                                        lambda: aa.stub_compliance_review(facts, draft), "review")
@@ -239,38 +239,60 @@ class StaffService:
         "escalate": "escalated_to_security",
     }
 
+    @staticmethod
+    def _refuse_if_closed(case: dict[str, Any], action: str) -> None:
+        """Actions that no longer make sense: anything but a note on a resolved request,
+        and a second approval or escalation (a double click must not repeat the side effect)."""
+        events = {h.get("event") for h in case.get("history") or []}
+        if action != "note" and lifecycle_of(case) == "resolved":
+            raise ApiError(409, "CASE_RESOLVED", "This request is resolved. You can still add a note.")
+        if action == "approve" and "action_approved" in events:
+            raise ApiError(409, "ALREADY_APPROVED", "This prepared action was already approved.")
+        if action == "escalate" and "escalated_to_security" in events:
+            raise ApiError(409, "ALREADY_ESCALATED", "This request is already with the security specialist team.")
+
     def action(self, case_id: str, action: str, text: str | None = None, compliance: dict[str, Any] | None = None,
-               ai_mode: str = "mock") -> dict[str, Any]:
+               ai_mode: str = "mock", acknowledged_flags: Any = None) -> dict[str, Any]:
         """Record an advisor action as a history event. 'clarify' moves the case to
         needs_client_followup; others keep the status and are derived from history.
-        A 'clarify' message is checked by the compliance reviewer here, whatever the browser
+        'approve' with text is the advisor signing off a prepared action: its message goes to
+        the client the same way, so the case then waits on them too.
+        A message to the client is checked by the compliance reviewer here, whatever the browser
         claims: a flagged message is refused unless ``compliance.override`` is set, and the
         verdict and any override are recorded on the event."""
         event_name = self._ACTIONS.get(action)
         if not event_name:
             raise ApiError(400, "INVALID_ACTION", f"Unknown advisor action {action!r}.")
-        if action in ("note", "clarify", "resolve") and not (text or "").strip():
+        text = clean_text(text)
+        if action in ("note", "clarify", "resolve") and not text:
             raise ApiError(400, "MISSING_TEXT", f"The '{action}' action needs text.")
-        if action == "escalate" and "fraud_or_security" not in self._case(case_id).get("categories", []):
+        current = self._case(case_id)
+        if action == "escalate" and "fraud_or_security" not in current.get("categories", []):
             raise ApiError(400, "NOT_A_SECURITY_CASE", "Only security cases go to the security specialist team.")
+        self._refuse_if_closed(current, action)  # before the model call; repeated under the lock below
         reviewed = None
-        if action == "clarify":
-            verdict = self._message_verdict(case_id, text.strip(), ai_mode)  # may call the model; outside the lock
-            override = verdict == "needs_changes" and bool((compliance or {}).get("override"))
+        to_client = action == "clarify" or (action == "approve" and bool(text))
+        if to_client:
+            verdict = self._message_verdict(case_id, text, ai_mode)  # may call the model; outside the lock
+            override = verdict == "needs_changes" and isinstance(compliance, dict) and bool(compliance.get("override"))
             if verdict == "needs_changes" and not override:
                 raise ApiError(409, "COMPLIANCE_REVIEW_FAILED", "The compliance reviewer flagged this message. Revise it, or send it with an override.")
             reviewed = {"verdict": verdict, "override": override}
         with self.store.lock:
             case = self._case(case_id)
+            self._refuse_if_closed(case, action)
             now = now_iso()
             details: dict[str, Any] = {"by": "advisor-demo"}
             if text:
-                details["text"] = text.strip()
+                details["text"] = text
             if reviewed:
                 details["compliance"] = reviewed
+            if action == "approve" and isinstance(acknowledged_flags, list):
+                # Flagged checks on the packet that the advisor confirmed having reviewed before approving.
+                details["acknowledged_flags"] = [f for f in acknowledged_flags if isinstance(f, str) and 0 < len(f) <= 80][:10]
             event = {"event": event_name, "at": now, "details": details}
             case.setdefault("history", []).append(event)
-            if action == "clarify":
+            if to_client:
                 case["status"] = "needs_client_followup"
             case["updated_at"] = now
             self.store.save_case(CaseRecord.model_validate(case).model_dump())

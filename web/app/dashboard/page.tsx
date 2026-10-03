@@ -120,13 +120,15 @@ export default function DashboardPage() {
     finally { setAssigning(null); }
   };
 
-  const doAction = async (action: AdvisorAction, text?: string, compliance?: SentCompliance) => {
-    if (!selectedId) return;
+  // Resolves to whether the action went through, so callers only show success when it did.
+  const doAction = async (action: AdvisorAction, text?: string, compliance?: SentCompliance, acknowledgedFlags?: string[]): Promise<boolean> => {
+    if (!selectedId) return false;
     setActionBusy(true); setActionError(null);
     try {
-      await caseAction(selectedId, action, text, compliance);
+      await caseAction(selectedId, action, text, compliance, acknowledgedFlags);
       await Promise.all([load(true), refreshCase(selectedId, false)]);
-    } catch (e) { setActionError(e instanceof ApiError ? e.message : "That did not go through. Try again."); }
+      return true;
+    } catch (e) { setActionError(e instanceof ApiError ? e.message : "That did not go through. Try again."); return false; }
     finally { setActionBusy(false); }
   };
 
@@ -306,7 +308,7 @@ export default function DashboardPage() {
                   onRegenerateBrief={() => selectedId && loadBrief(selectedId, true)}
                   plan={plan} planLoading={planLoading} planStage={planStage}
                   onRegeneratePlan={() => selectedId && loadPlan(selectedId)}
-                  onApprove={async () => { await doAction("approve"); }}
+                  onApprove={(message, flags) => doAction("approve", message, undefined, flags)}
                   onAction={doAction} actionBusy={actionBusy} hc={hc}
                   error={actionError} onDismissError={() => setActionError(null)}
                   onOpenCase={(id) => openCase(id)} initialTab={initialTab}

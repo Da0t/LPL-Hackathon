@@ -177,3 +177,119 @@ def test_an_offline_fallback_is_not_cached_so_the_model_is_retried(live, monkeyp
     for _ in range(2):
         assert "offline" in live.post("/staff/cases/CASE-1041/next-steps", json={}, headers=STAFF).json()["note"]
     assert len(calls) == 2
+
+
+# ------------------------------------------------------------- approving a prepared action sends its message
+
+
+def approve(client, case_id="CASE-1042", **body):
+    return client.post(f"/staff/cases/{case_id}/action", json={"action": "approve", **body}, headers=STAFF)
+
+
+def test_approving_a_prepared_action_sends_its_message_to_the_client(client):
+    draft = client.post("/staff/cases/CASE-1042/plan", headers=STAFF).json()["draft_client_message"]
+    response = approve(client, text=draft)
+    assert response.status_code == 200, response.text
+    event = response.json()["event"]
+    assert event["event"] == "action_approved" and event["details"]["text"] == draft
+    assert event["details"]["compliance"] == {"verdict": "pass", "override": False}
+    assert row(client, "CASE-1042")["lifecycle"] == "awaiting_client"
+    request = client.get("/my/requests", headers=MARA).json()["requests"][0]
+    assert request["awaiting_reply"] is True and [(m["from"], m["text"]) for m in request["messages"]] == [("advisor", draft)]
+
+
+def test_client_can_answer_an_approved_action(client):
+    approve(client, text="Hi Mara, we have prepared your request. When is a good time to talk?")
+    assert client.post("/my/requests/CASE-1042/reply", json={"text": "Tomorrow morning."}, headers=MARA).status_code == 200
+    assert row(client, "CASE-1042")["priority"]["reason"] == "The client replied"
+
+
+def test_approval_is_refused_when_the_message_fails_compliance(client):
+    response = approve(client, text="Hi Mara, you should take the full amount out now.")
+    assert response.status_code == 409 and response.json()["error_code"] == "COMPLIANCE_REVIEW_FAILED"
+    assert row(client, "CASE-1042")["lifecycle"] == "new"
+    assert client.get("/my/requests", headers=MARA).json()["requests"][0]["messages"] == []
+
+
+def test_approval_without_a_message_is_only_logged(client):
+    response = approve(client)
+    assert response.status_code == 200 and "text" not in response.json()["event"]["details"]
+    assert row(client, "CASE-1042")["lifecycle"] == "new"
+    assert client.get("/my/requests", headers=MARA).json()["requests"][0]["messages"] == []
+
+
+# ------------------------------------------------------------- edge cases
+
+
+OK_MESSAGE = "Hi Mara, we have prepared your request. When is a good time to talk?"
+
+
+def messages(client, headers=MARA):
+    return client.get("/my/requests", headers=headers).json()["requests"][0]["messages"]
+
+
+def test_a_prepared_action_can_only_be_approved_once(client):
+    assert approve(client, text=OK_MESSAGE).status_code == 200
+    again = approve(client, text=OK_MESSAGE)
+    assert again.status_code == 409 and again.json()["error_code"] == "ALREADY_APPROVED"
+    assert len(messages(client)) == 1, "a double click must not message the client twice"
+
+
+def test_a_resolved_request_takes_notes_but_no_further_actions(client):
+    client.post("/staff/cases/CASE-1042/action", json={"action": "resolve", "text": "Handled by phone."}, headers=STAFF)
+    for body in ({"action": "approve", "text": OK_MESSAGE}, {"action": "clarify", "text": OK_MESSAGE},
+                 {"action": "schedule"}, {"action": "claim"}, {"action": "resolve", "text": "Again."}):
+        response = client.post("/staff/cases/CASE-1042/action", json=body, headers=STAFF)
+        assert response.status_code == 409 and response.json()["error_code"] == "CASE_RESOLVED", body
+    assert client.post("/staff/cases/CASE-1042/action", json={"action": "note", "text": "Filed."}, headers=STAFF).status_code == 200
+    assert messages(client) == []
+
+
+def test_resolving_a_request_stops_asking_the_client_for_an_answer(client):
+    clarify(client)
+    client.post("/staff/cases/CASE-1042/action", json={"action": "resolve", "text": "Client called in."}, headers=STAFF)
+    request = client.get("/my/requests", headers=MARA).json()["requests"][0]
+    assert request["awaiting_reply"] is False and request["lifecycle"] == "resolved"
+    late = client.post("/my/requests/CASE-1042/reply", json={"text": "Thursday."}, headers=MARA)
+    assert late.status_code == 409 and late.json()["error_code"] == "NOT_AWAITING_REPLY"
+
+
+def test_a_security_request_is_escalated_only_once(client):
+    assert client.post("/staff/cases/CASE-SEC-1/action", json={"action": "escalate"}, headers=STAFF).status_code == 200
+    again = client.post("/staff/cases/CASE-SEC-1/action", json={"action": "escalate"}, headers=STAFF)
+    assert again.status_code == 409 and again.json()["error_code"] == "ALREADY_ESCALATED"
+
+
+def test_malformed_action_bodies_are_refused_not_crashed(client):
+    for body, code in (
+        ({"action": "approve", "text": 42}, "INVALID_TEXT"),
+        ({"action": "note", "text": ["a"]}, "INVALID_TEXT"),
+        ({"action": "clarify", "text": "x" * 2001}, "MESSAGE_TOO_LONG"),
+        ({"action": "approve", "text": "y" * 2001}, "MESSAGE_TOO_LONG"),
+    ):
+        response = client.post("/staff/cases/CASE-1042/action", json=body, headers=STAFF)
+        assert response.status_code == 400 and response.json()["error_code"] == code, body
+    assert clarify(client, compliance="yes").status_code == 200, "a non-object compliance field is ignored"
+
+
+def test_malformed_client_replies_are_refused_not_crashed(client):
+    clarify(client)
+    assert client.post("/my/requests/CASE-1042/reply", json={"text": 7}, headers=MARA).json()["error_code"] == "INVALID_TEXT"
+    assert client.post("/my/requests/CASE-1042/reply", json={"text": "z" * 2001}, headers=MARA).json()["error_code"] == "MESSAGE_TOO_LONG"
+    assert len(messages(client)) == 1
+
+
+def test_malformed_agent_inputs_are_refused_not_crashed(client):
+    assert client.post("/staff/cases/CASE-1042/reply-draft", json={"instruction": 5}, headers=STAFF).json()["error_code"] == "INVALID_TEXT"
+    assert client.post("/staff/cases/CASE-1042/compliance-review", json={"draft": {"a": 1}}, headers=STAFF).json()["error_code"] == "INVALID_TEXT"
+
+
+def test_approval_records_the_flagged_checks_the_advisor_acknowledged(client):
+    response = approve(client, text=OK_MESSAGE, acknowledged_flags=["Account match", 9, "x" * 500])
+    assert response.json()["event"]["details"]["acknowledged_flags"] == ["Account match"]
+
+
+def test_messaging_a_client_twice_keeps_both_messages_in_order(client):
+    clarify(client)
+    approve(client, text=OK_MESSAGE)
+    assert [m["text"] for m in messages(client)] == [QUESTION, OK_MESSAGE]

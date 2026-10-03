@@ -71,8 +71,8 @@ function PrepBrief({ brief, loading, onRegenerate }: { brief: Brief | null; load
   );
 }
 
-function ActionBar({ onAction, onDraftReply, busy, replyOpen }: {
-  onAction: (a: AdvisorAction, t?: string) => void; onDraftReply: () => void; busy: boolean; replyOpen: boolean;
+function ActionBar({ onAction, onDraftReply, busy, replyOpen, resolved }: {
+  onAction: (a: AdvisorAction, t?: string) => void; onDraftReply: () => void; busy: boolean; replyOpen: boolean; resolved: boolean;
 }) {
   const [open, setOpen] = useState<AdvisorAction | null>(null);
   const [text, setText] = useState("");
@@ -87,17 +87,18 @@ function ActionBar({ onAction, onDraftReply, busy, replyOpen }: {
   return (
     <div className="mt-5 rounded-2xl border border-border bg-muted/20 p-3">
       <div className="flex flex-wrap gap-2">
-        <Button size="sm" variant={replyOpen ? "default" : "outline"} disabled={busy} onClick={() => { setOpen(null); onDraftReply(); }}>
+        <Button size="sm" variant={replyOpen ? "default" : "outline"} disabled={busy || resolved} onClick={() => { setOpen(null); onDraftReply(); }}>
           <PenLine className="mr-1.5 h-4 w-4" />Message client
         </Button>
-        <Button size="sm" variant="outline" disabled={busy} onClick={() => onAction("claim")}><Hand className="mr-1.5 h-4 w-4" />Claim</Button>
+        <Button size="sm" variant="outline" disabled={busy || resolved} onClick={() => onAction("claim")}><Hand className="mr-1.5 h-4 w-4" />Claim</Button>
         <Button size="sm" variant="outline" disabled={busy} onClick={() => toggle("note")}><StickyNote className="mr-1.5 h-4 w-4" />Add note</Button>
-        <Button size="sm" variant="outline" disabled={busy} onClick={() => toggle("schedule")}><CalendarCheck className="mr-1.5 h-4 w-4" />Mark scheduled</Button>
-        <Button size="sm" variant="outline" disabled={busy} onClick={() => toggle("resolve")}><CheckCheck className="mr-1.5 h-4 w-4" />Resolve</Button>
+        <Button size="sm" variant="outline" disabled={busy || resolved} onClick={() => toggle("schedule")}><CalendarCheck className="mr-1.5 h-4 w-4" />Mark scheduled</Button>
+        <Button size="sm" variant="outline" disabled={busy || resolved} onClick={() => toggle("resolve")}><CheckCheck className="mr-1.5 h-4 w-4" />Resolve</Button>
       </div>
+      {resolved && <p className="mt-2 text-xs text-muted-foreground">This request is resolved. You can still add a note.</p>}
       {open && form && (
         <div className="mt-3">
-          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} placeholder={form.prompt} autoFocus
+          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} maxLength={2000} placeholder={form.prompt} autoFocus
             className="w-full rounded-lg border border-border bg-background p-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30" />
           <div className="mt-2 flex gap-2">
             <Button size="sm" disabled={busy || (form.required && !text.trim())} onClick={submit}>{busy ? "Saving…" : "Save"}</Button>
@@ -119,6 +120,9 @@ function Activity({ history }: { history: any[] }) {
             <span className="absolute -left-[21px] top-1.5 h-2 w-2 rounded-full bg-primary/50" />
             <div className="text-sm font-medium">{HISTORY_LABELS[h.event] || sentence(h.event)}</div>
             {h.details?.text && <div className="text-sm text-muted-foreground">“{h.details.text}”</div>}
+            {h.details?.acknowledged_flags?.length > 0 && (
+              <div className="text-xs text-muted-foreground">Flagged checks reviewed: {h.details.acknowledged_flags.join(", ")}</div>
+            )}
             {h.details?.compliance && (
               <div className="text-xs text-muted-foreground">
                 Compliance review: {h.details.compliance.verdict === "pass" ? "passed" : "flagged"}
@@ -151,7 +155,9 @@ function Overview({ detail, brief, briefLoading, onLoadBrief, onRegenerateBrief,
         </button>
       </div>
       {lead === "action"
-        ? <ActionPacket plan={plan} loading={planLoading} stage={planStage} onRegenerate={onRegeneratePlan} onApprove={onApprove} />
+        ? <ActionPacket plan={plan} loading={planLoading} stage={planStage} onRegenerate={onRegeneratePlan} onApprove={onApprove}
+            alreadyApproved={(detail.history || []).some((h: any) => h.event === "action_approved")}
+            resolved={(detail.history || []).some((h: any) => h.event === "request_resolved")} />
         : <div className="mt-5"><PrepBrief brief={brief} loading={briefLoading} onRegenerate={onRegenerateBrief} /></div>}
 
       <Section title="What the client asked">
@@ -275,7 +281,7 @@ export function CaseDetail({
   candMeta: { destination?: string; reason?: string }; assigning: string | null;
   onAssign: (advisorId: string, reason: string) => void; brief: Brief | null; briefLoading: boolean;
   onLoadBrief: () => void; onRegenerateBrief: () => void;
-  plan: ActionPlan | null; planLoading: boolean; planStage: number; onRegeneratePlan: () => void; onApprove: () => Promise<void>;
+  plan: ActionPlan | null; planLoading: boolean; planStage: number; onRegeneratePlan: () => void; onApprove: (message?: string, acknowledgedFlags?: string[]) => Promise<boolean>;
   onAction: (a: AdvisorAction, t?: string, c?: SentCompliance) => void;
   actionBusy: boolean; hc: any; error: string | null; onDismissError: () => void;
   onOpenCase: (id: string) => void; initialTab?: CaseTab;
@@ -289,6 +295,7 @@ export function CaseDetail({
   const assignedName = snapshot?.assigned_advisor?.display_name
     || candidates.find((c) => c.advisor_id === assignedId)?.display_name || "an advisor";
   const priority = row?.priority;
+  const resolved = (detail.history || []).some((h: any) => h.event === "request_resolved");
 
   return (
     <div className="mx-auto max-w-3xl p-6 lg:p-8">
@@ -317,8 +324,8 @@ export function CaseDetail({
         </div>
       )}
 
-      <ActionBar onAction={onAction} onDraftReply={() => setReplyOpen((v) => !v)} busy={actionBusy} replyOpen={replyOpen} />
-      {replyOpen && (
+      <ActionBar onAction={onAction} onDraftReply={() => setReplyOpen((v) => !v)} busy={actionBusy} replyOpen={replyOpen} resolved={resolved} />
+      {replyOpen && !resolved && (
         <ReplyPanel caseId={detail.case_id} busy={actionBusy} onClose={() => setReplyOpen(false)}
           onSend={(text, compliance) => onAction("clarify", text, compliance)} />
       )}

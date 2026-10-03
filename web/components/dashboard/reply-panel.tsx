@@ -64,7 +64,7 @@ export function ReplyPanel({ caseId, busy, onSend, onClose }: {
 
       <div className="space-y-4 p-4">
         <div>
-          <textarea value={instruction} onChange={(e) => setInstruction(e.target.value)} rows={2}
+          <textarea value={instruction} onChange={(e) => setInstruction(e.target.value)} rows={2} maxLength={2000}
             placeholder="What do you need from the client? (optional) e.g. ‘Ask when they need the money.’"
             className="w-full rounded-lg border border-border bg-background p-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30" />
           <Button size="sm" className="mt-2" disabled={!!working} onClick={runDraft}>
@@ -79,7 +79,7 @@ export function ReplyPanel({ caseId, busy, onSend, onClose }: {
           <>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Draft · edit before sending</p>
-              <textarea value={text} onChange={(e) => setText(e.target.value)} rows={6}
+              <textarea value={text} onChange={(e) => setText(e.target.value)} rows={6} maxLength={2000}
                 className="mt-1.5 w-full rounded-lg border border-border bg-background p-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30" />
             </div>
 

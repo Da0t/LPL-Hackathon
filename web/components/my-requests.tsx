@@ -64,7 +64,7 @@ export function MyRequests({ clientId }: { clientId: string }) {
             {r.awaiting_reply && (
               <div className="mt-4">
                 <label htmlFor={`reply-${r.case_id}`} className="text-sm font-medium">Your answer</label>
-                <textarea id={`reply-${r.case_id}`} rows={2} value={drafts[r.case_id] || ""}
+                <textarea id={`reply-${r.case_id}`} rows={2} maxLength={2000} value={drafts[r.case_id] || ""}
                   onChange={(e) => setDrafts((d) => ({ ...d, [r.case_id]: e.target.value }))}
                   placeholder="Answer in your own words."
                   className="mt-2 w-full rounded-md border border-border bg-background p-3 text-base text-foreground outline-none focus:ring-2 focus:ring-primary/40" />

@@ -144,9 +144,10 @@ export const getBrief = (id: string, refresh = false) =>
 export type AdvisorAction = "claim" | "note" | "clarify" | "schedule" | "resolve" | "approve" | "escalate";
 // The server re-checks a message itself before sending; only `override` is honoured from here.
 export type SentCompliance = { verdict: "pass" | "needs_changes"; override: boolean };
-export const caseAction = (id: string, action: AdvisorAction, text?: string, compliance?: SentCompliance) =>
+export const caseAction = (id: string, action: AdvisorAction, text?: string, compliance?: SentCompliance, acknowledgedFlags?: string[]) =>
   call<{ case_id: string; status: string; event: { event: string; at: string; details: Record<string, unknown> } }>(
-    `/staff/cases/${encodeURIComponent(id)}/action`, { method: "POST", role: "staff", body: { action, text, compliance } });
+    `/staff/cases/${encodeURIComponent(id)}/action`,
+    { method: "POST", role: "staff", body: { action, text, compliance, acknowledged_flags: acknowledgedFlags } });
 
 export type ActionPlan = {
   case_id: string; ai_mode: string; note: string | null;

@@ -70,11 +70,25 @@ function ComplianceBadge({ status }: { status: string }) {
   return <span className={`inline-flex flex-none items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${m.cls}`}><m.icon className="h-3 w-3" />{m.label}</span>;
 }
 
-export function ActionPacket({ plan, loading, stage, onRegenerate, onApprove }: { plan: ActionPlan | null; loading: boolean; stage: number; onRegenerate: () => void; onApprove: () => Promise<void> }) {
+// Approving sends the packet's draft message to the client (the server compliance-checks it first)
+// and moves the request to "waiting on client". `alreadyApproved` comes from the case history, so
+// the approved state survives a reload.
+// A packet with flagged checks needs the advisor to confirm they reviewed them first, and a
+// resolved request can no longer be approved.
+export function ActionPacket({ plan, loading, stage, onRegenerate, onApprove, alreadyApproved, resolved }: { plan: ActionPlan | null; loading: boolean; stage: number; onRegenerate: () => void; onApprove: (message?: string, acknowledgedFlags?: string[]) => Promise<boolean>; alreadyApproved: boolean; resolved: boolean }) {
   const [approving, setApproving] = useState(false);
-  const [approved, setApproved] = useState(false);
-  useEffect(() => { setApproved(false); }, [plan]);
-  const approve = async () => { setApproving(true); try { await onApprove(); setApproved(true); } finally { setApproving(false); } };
+  const [approved, setApproved] = useState(alreadyApproved);
+  const [acknowledged, setAcknowledged] = useState(false);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { setApproved(alreadyApproved); setAcknowledged(false); setFailed(false); }, [plan, alreadyApproved]);
+  const message = plan?.draft_client_message?.trim() || undefined;
+  const flagged = (plan?.compliance_checks || []).filter((c) => c.status === "flag").map((c) => c.item);
+  const approve = async () => {
+    if (approving) return;
+    setApproving(true); setFailed(false);
+    try { if (await onApprove(message, flagged)) setApproved(true); else setFailed(true); }
+    finally { setApproving(false); }
+  };
   const actionTitle = (plan?.action_type || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   return (
     <div className="mt-5 overflow-hidden rounded-2xl border border-primary/30 bg-primary/[0.03]">
@@ -125,16 +139,29 @@ export function ActionPacket({ plan, loading, stage, onRegenerate, onApprove }: 
               {plan.draft_client_message && <CopyCard title="Draft message to client" text={plan.draft_client_message} />}
               {plan.draft_advisor_followup && <CopyCard title="Advisor follow-up" text={plan.draft_advisor_followup} />}
             </div>
+            {!approved && !resolved && flagged.length > 0 && (
+              <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                <input type="checkbox" checked={acknowledged} onChange={() => setAcknowledged((v) => !v)} className="mt-0.5 h-4 w-4 flex-none" />
+                <span>I have reviewed the flagged {flagged.length === 1 ? "check" : "checks"}: {flagged.join(", ")}. This is recorded on the request.</span>
+              </label>
+            )}
             <div className="flex flex-wrap items-center gap-3 pt-1">
-              {approved ? (
+              {resolved && !approved ? (
+                <p className="text-sm text-muted-foreground">This request is resolved, so there is nothing left to approve.</p>
+              ) : approved ? (
                 <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
-                  <CheckCircle2 className="h-4 w-4" /> Approved. Nothing was actually sent , synthetic demo.
+                  <CheckCircle2 className="h-4 w-4" /> {message ? "Approved. The message was sent to the client and the request is waiting on their reply." : "Approved."}
                 </div>
               ) : (
-                <Button onClick={approve} disabled={approving} className="px-5">{approving ? "Approving…" : "Approve & send"}</Button>
+                <Button onClick={approve} disabled={approving || (flagged.length > 0 && !acknowledged)} className="px-5">{approving ? "Approving…" : message ? "Approve & send" : "Approve"}</Button>
               )}
-              <span className="text-xs text-muted-foreground">You approve; the agent did the prep. Nothing is executed.</span>
+              {!approved && !resolved && (
+                <span className="text-xs text-muted-foreground">
+                  {message ? "Approving sends the draft message to the client. No money moves and no paperwork is submitted." : "You approve; the agent did the prep."}
+                </span>
+              )}
             </div>
+            {failed && <p role="alert" className="text-sm text-red-600">Not approved and nothing was sent. The reason is shown at the top of this request.</p>}
             {plan.note && <p className="text-xs text-muted-foreground">{plan.note}</p>}
           </>
         )}
