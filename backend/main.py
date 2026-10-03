@@ -101,6 +101,24 @@ def create_app(settings: Settings | None = None, *, store: Store | None = None, 
     app.state.adapter = adapter
     app.state.intake = IntakeService(store, adapter)
     app.state.staff = StaffService(store)
+    app.state.portal = None
+    if os.getenv("COHERENT_PORTAL_CONFIG"):
+        from backend.portal.service import Portal
+        app.state.portal = Portal(os.environ["COHERENT_PORTAL_CONFIG"], store)
+        app.state.intake.portal = app.state.portal
+
+    @app.middleware("http")
+    async def protect_portal(request: Request, call_next):
+        if app.state.portal:
+            if request.method not in ("GET", "HEAD", "OPTIONS"):
+                allowed = os.getenv("COHERENT_ALLOWED_ORIGINS", "http://127.0.0.1:3200,http://localhost:3200").split(",")
+                origin = request.headers.get("origin")
+                if origin and origin not in allowed:
+                    return JSONResponse(status_code=403, content={"error_code":"ORIGIN_DENIED", "message":"This origin cannot change records."})
+        response = await call_next(request)
+        if request.url.path.startswith(("/portal", "/auth", "/intake", "/staff/cases")):
+            response.headers["Cache-Control"] = "no-store"
+        return response
 
     # Local-only CORS so UI agents can develop with a separate static server if they prefer.
     app.add_middleware(
@@ -135,6 +153,8 @@ def create_app(settings: Settings | None = None, *, store: Store | None = None, 
         return JSONResponse(status_code=500, content={"error_code": "INTERNAL_ERROR", "message": "Something went wrong on our side. Your draft is preserved; please try again."})
 
     app.include_router(api.router)
+    from backend.portal.routes import router as portal_router
+    app.include_router(portal_router)
 
     # ---------------------------------------------------- static pages
 

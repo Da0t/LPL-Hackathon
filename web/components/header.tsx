@@ -10,7 +10,7 @@ export const HeroHeader = () => {
     const [menuState, setMenuState] = React.useState(false)
     const pathname = usePathname()
     // The advisor workspace has its own sidebar/chrome; hide the marketing header there.
-    if (pathname?.startsWith('/dashboard')) return null
+    if (pathname?.startsWith('/dashboard') || pathname?.startsWith('/workspace') || pathname==='/login') return null
     return (
         <header>
             <nav
@@ -32,7 +32,7 @@ export const HeroHeader = () => {
                         </div>
                         <div className="bg-background in-data-[state=active]:block lg:in-data-[state=active]:flex mb-6 hidden w-full flex-wrap items-center justify-end gap-3 rounded-3xl border p-6 shadow-2xl md:flex-nowrap lg:m-0 lg:flex lg:w-fit lg:gap-3 lg:border-transparent lg:bg-transparent lg:p-0 lg:shadow-none">
                             <Button asChild size="sm" variant="ghost">
-                                <Link href="/dashboard"><span>Advisor dashboard</span></Link>
+                                <Link href="/login"><span>Sign in</span></Link>
                             </Button>
                             <Button asChild size="sm">
                                 <Link href="/intake"><span>Start a request</span></Link>

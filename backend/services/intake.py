@@ -313,6 +313,11 @@ class IntakeService:
             confirmed_plain_language_request=wording, selected_account=selected_account, amount_requested=amount_requested,
         )
         client_summary = case.pop("_client_summary", None) or CONFIRM_CLIENT_SUMMARY_DEFAULT
+        if getattr(self, "portal", None):
+            case["_portal_document"] = self.portal.document(
+                session["client_id"], session["transcript"], wording,
+                selected_account_id, amount_requested, case["case_id"],
+            )
         self.store.insert_case(case)
 
         now = now_iso()
