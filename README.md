@@ -66,7 +66,8 @@ The speaking and clicking plan is in [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md).
    intake, triage,           (sign-in) and           cases, assignments
    action packet, brief,     DynamoDB (client        (local; reference records
    four advisor agents       records, archived       synchronized from the
-   (+ Guardrails hook)       request documents)      cloud profiles)
+   (+ PII Guardrail)         request documents)      cloud profiles; on EBS
+                                                    in the AWS demo)
 ```
 
 The language model only **interprets, classifies, and drafts**. Every fact, authorization check,
@@ -108,6 +109,11 @@ Bedrock setup, model verification, and the live smoke test: [`AWS_SETUP.md`](AWS
 
 ### AWS hosted demo
 
+**Live demo:** [Coherent sign-in](https://d2gkrph97rdk92.cloudfront.net/login) (deployed October
+3, 2026). The public login and health endpoints, client and staff browser sign-in, live Bedrock
+intake and audited advisor plan, cited Knowledge Base retrieval, and Polly audio were checked over
+HTTPS. The PII Guardrail allows ordinary account questions and blocks a full SSN in the AWS check.
+
 `python -m scripts.deploy_aws` deploys the **pushed main commit** to a dedicated Amazon Linux 2023
 EC2 instance in `us-east-1`. It reuses the existing Cognito pool, DynamoDB table, and indexed Bedrock
 Knowledge Base. It creates a scoped EC2 role, encrypted 30 GB EBS root disk, static public address,
@@ -132,7 +138,8 @@ URL after the host and CloudFront are ready. Re-run it after pushing a new main 
 host. Check the public `/login` and `/api/health` paths, then sign in with the private demo identities
 in `var/demo-access.json`. The deployment uses the same fictional accounts and cloud portal records as
 the local app. If `var/guardrail-aws.json` exists, deployment grants the instance access to that one
-Guardrail and configures its version for Bedrock intake. The case SQLite file is separate on the instance's EBS disk; it survives reboot and
+Guardrail and configures its version for Bedrock intake. The case SQLite file is separate on the
+instance's EBS disk; it survives reboot and
 restart. Do not terminate the instance if you need its case history.
 
 This is a **single-instance hackathon deployment** with synthetic data. It has no automatic failover
