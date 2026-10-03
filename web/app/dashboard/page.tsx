@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import Link from "next/link";
+import { AGENTS, AgentAvatar, type Agent, type AgentStatus } from "@/components/dashboard/agents";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer,
   PieChart, Pie, Cell, CartesianGrid,
@@ -11,6 +12,7 @@ import {
   ArrowLeft, MessageSquareQuote, Home, Clock, Hash, Sparkles, Columns3,
   Hand, StickyNote, Send, CalendarCheck, CheckCheck, ShieldCheck,
   Brain, Layers, ClipboardList, PenLine, Loader2, Copy, Check, AlertTriangle, Workflow,
+  Users, ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -74,7 +76,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
-  const [view, setView] = useState<"queue" | "pipeline" | "impact">("queue");
+  const [view, setView] = useState<"queue" | "pipeline" | "impact" | "agents">("queue");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<any>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -225,6 +227,11 @@ export default function DashboardPage() {
               view === "pipeline" ? "bg-primary/10 text-primary" : "text-foreground hover:bg-foreground/5"}`}>
             <Columns3 className="h-4 w-4" /> My pipeline
           </button>
+          <button onClick={() => setView("agents")}
+            className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
+              view === "agents" ? "bg-primary/10 text-primary" : "text-foreground hover:bg-foreground/5"}`}>
+            <Users className="h-4 w-4" /> Agents
+          </button>
           <button onClick={() => setView("impact")}
             className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
               view === "impact" ? "bg-primary/10 text-primary" : "text-foreground hover:bg-foreground/5"}`}>
@@ -240,7 +247,9 @@ export default function DashboardPage() {
 
       {/* Main */}
       <main className="flex-1 overflow-hidden">
-        {view === "impact" ? (
+        {view === "agents" ? (
+          <AgentsView cases={cases} onOpenInQueue={(id) => { setView("queue"); openCase(id); }} />
+        ) : view === "impact" ? (
           <ImpactView impact={impact} />
         ) : view === "pipeline" ? (
           <PipelineBoard cases={cases} overrides={overrides} onOpen={(id) => { setView("queue"); openCase(id); }} />
@@ -823,5 +832,239 @@ function ImpactView({ impact }: { impact: any }) {
         <Tile big="~$80M/yr" label="illustrative recovered advisor capacity at LPL scale (model, not measured)." tone="text-primary" />
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------- Agents view
+
+function AgentStatusChip({ status }: { status: AgentStatus }) {
+  if (status === "done") return <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600"><Check className="h-3 w-3" />done</span>;
+  if (status === "working") return <span className="inline-flex items-center gap-1 text-[11px] font-medium text-primary"><Loader2 className="h-3 w-3 animate-spin" />working…</span>;
+  return <span className="text-[11px] text-muted-foreground">idle</span>;
+}
+
+type AgentData = { detail?: any; candidates?: Candidate[]; candMeta?: any; brief?: Brief | null; plan?: ActionPlan | null };
+
+function AgentsView({ cases, onOpenInQueue }: { cases: CaseRow[]; onOpenInQueue: (id: string) => void }) {
+  const [caseId, setCaseId] = useState<string | null>(null);
+  const [data, setData] = useState<AgentData>({});
+  const [status, setStatus] = useState<Record<Agent["id"], AgentStatus>>({ iris: "idle", atlas: "idle", sage: "idle", forge: "idle", sentinel: "idle" });
+  const [openAgent, setOpenAgent] = useState<Agent["id"]>("iris");
+  const cacheRef = useRef<Record<string, AgentData>>({});
+  const runRef = useRef(0);
+
+  useEffect(() => {
+    if (!caseId && cases.length) {
+      const c = cases.find((x) => !x.categories?.includes("fraud_or_security")) || cases[0];
+      setCaseId(c.case_id);
+    }
+  }, [cases, caseId]);
+
+  const runAgents = useCallback(async (id: string) => {
+    const myRun = ++runRef.current;
+    setOpenAgent("iris");
+    const cached = cacheRef.current[id];
+    if (cached) { setData(cached); setStatus({ iris: "done", atlas: "done", sage: "done", forge: "done", sentinel: "done" }); return; }
+    setData({}); setStatus({ iris: "working", atlas: "idle", sage: "idle", forge: "idle", sentinel: "idle" });
+    const live = () => runRef.current === myRun;
+    const acc: AgentData = {};
+    try {
+      acc.detail = await getCase(id);
+      if (!live()) return;
+      setData((d) => ({ ...d, detail: acc.detail })); setStatus((s) => ({ ...s, iris: "done", atlas: "working" }));
+      const cand: any = await getCandidates(id).catch(() => ({ candidates: [] }));
+      if (!live()) return;
+      acc.candidates = cand.candidates || []; acc.candMeta = { destination: cand.destination, reason: cand.reason };
+      setData((d) => ({ ...d, candidates: acc.candidates, candMeta: acc.candMeta })); setStatus((s) => ({ ...s, atlas: "done", sage: "working" }));
+      acc.brief = await getBrief(id).catch(() => null);
+      if (!live()) return;
+      setData((d) => ({ ...d, brief: acc.brief })); setStatus((s) => ({ ...s, sage: "done", forge: "working" }));
+      acc.plan = await getPlan(id).catch(() => null);
+      if (!live()) return;
+      setData((d) => ({ ...d, plan: acc.plan })); setStatus((s) => ({ ...s, forge: "done", sentinel: "working" }));
+      setTimeout(() => { if (live()) setStatus((s) => ({ ...s, sentinel: "done" })); }, 500);
+      cacheRef.current[id] = acc;
+    } catch {
+      if (live()) setStatus({ iris: "done", atlas: "done", sage: "done", forge: "done", sentinel: "done" });
+    }
+  }, []);
+
+  useEffect(() => { if (caseId) runAgents(caseId); }, [caseId, runAgents]);
+
+  const selectedCase = cases.find((c) => c.case_id === caseId);
+
+  return (
+    <div className="h-screen overflow-y-auto p-8">
+      <div className="flex items-center gap-2">
+        <Users className="h-5 w-5 text-primary" />
+        <h1 className="text-2xl font-semibold">The agent team</h1>
+      </div>
+      <p className="mt-1 text-sm text-muted-foreground">Five Bedrock-powered specialists. Each one does a real job, then hands off to the next.</p>
+
+      {/* Meet the team */}
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        {AGENTS.map((a) => (
+          <button key={a.id} onClick={() => setOpenAgent(a.id)}
+            className={`rounded-2xl border bg-card p-4 text-left transition-all ${openAgent === a.id ? "border-primary/50 shadow-[0_0_0_3px_rgba(22,119,255,0.08)]" : "border-border hover:border-primary/30"}`}>
+            <div className="flex items-center gap-2">
+              <AgentAvatar agent={a} size={38} />
+              <div>
+                <div className="text-sm font-semibold leading-tight">{a.name}</div>
+                <div className="text-[11px] text-muted-foreground">{a.role}</div>
+              </div>
+            </div>
+            <p className="mt-3 text-xs italic text-foreground/80">“{a.tagline}”</p>
+            <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">{a.does}</p>
+            <p className="mt-2 text-[10px] font-medium text-primary/70">Powered by Amazon Bedrock</p>
+          </button>
+        ))}
+      </div>
+
+      {/* On a case */}
+      <div className="mt-10 flex flex-wrap items-center gap-3">
+        <h2 className="text-sm font-mono uppercase tracking-wider text-muted-foreground">Watch them on a request</h2>
+        <select value={caseId || ""} onChange={(e) => setCaseId(e.target.value)}
+          className="rounded-lg border border-border bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/30">
+          {cases.map((c) => <option key={c.case_id} value={c.case_id}>{c.client_display_name} · {c.case_id}</option>)}
+        </select>
+        {selectedCase && <span className="text-xs text-muted-foreground line-clamp-1 max-w-sm">“{selectedCase.confirmed_plain_language_request}”</span>}
+      </div>
+
+      {/* Handoff flow */}
+      <div className="mt-4 flex flex-wrap items-stretch gap-1">
+        {AGENTS.map((a, i) => (
+          <React.Fragment key={a.id}>
+            <button onClick={() => setOpenAgent(a.id)}
+              className={`flex min-w-[120px] flex-1 flex-col items-center gap-1.5 rounded-xl border p-3 text-center transition-all ${
+                openAgent === a.id ? "border-primary/50 bg-primary/[0.04]" : "border-border bg-card hover:border-primary/30"}`}>
+              <AgentAvatar agent={a} size={34} className={status[a.id] === "working" ? "animate-pulse" : ""} />
+              <span className="text-xs font-semibold">{a.name}</span>
+              <AgentStatusChip status={status[a.id]} />
+            </button>
+            {i < AGENTS.length - 1 && <div className="flex items-center text-muted-foreground"><ChevronRight className="h-4 w-4" /></div>}
+          </React.Fragment>
+        ))}
+      </div>
+
+      {/* Open agent panel */}
+      <div className="mt-5">
+        <AgentPanel agent={AGENTS.find((a) => a.id === openAgent)!} data={data} status={status[openAgent]} onOpenInQueue={() => caseId && onOpenInQueue(caseId)} />
+      </div>
+    </div>
+  );
+}
+
+function AgentPanel({ agent, data, status, onOpenInQueue }: { agent: Agent; data: AgentData; status: AgentStatus; onOpenInQueue: () => void }) {
+  const voice: Record<Agent["id"], string> = {
+    iris: "Here's what I heard , and what I made of it.",
+    atlas: "I sorted the request and found who should take it.",
+    sage: "Here's the advisor's prep for this conversation.",
+    forge: "I prepped the whole action. You just approve.",
+    sentinel: "I checked everything. Here's what needs eyes.",
+  };
+  const working = status === "working" || (status === "idle");
+  return (
+    <div className="overflow-hidden rounded-2xl border border-border bg-card">
+      <div className="flex items-center gap-3 border-b border-border px-4 py-3" style={{ background: `linear-gradient(90deg, ${agent.from}14, transparent)` }}>
+        <AgentAvatar agent={agent} size={40} />
+        <div>
+          <div className="text-sm font-semibold">{agent.name} <span className="font-normal text-muted-foreground">· {agent.role}</span></div>
+          <div className="text-xs italic text-muted-foreground">“{voice[agent.id]}”</div>
+        </div>
+        <span className="ml-auto"><AgentStatusChip status={status} /></span>
+      </div>
+      <div className="p-4">
+        {working && !hasOutput(agent, data) ? (
+          <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />{agent.name} is working…</p>
+        ) : (
+          <AgentOutput agent={agent} data={data} onOpenInQueue={onOpenInQueue} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function hasOutput(agent: Agent, data: AgentData): boolean {
+  if (agent.id === "iris" || agent.id === "atlas") return !!data.detail;
+  if (agent.id === "sage") return !!data.brief;
+  return !!data.plan;
+}
+
+function AgentOutput({ agent, data, onOpenInQueue }: { agent: Agent; data: AgentData; onOpenInQueue: () => void }) {
+  const d = data.detail;
+  if (agent.id === "iris") {
+    if (!d) return <p className="text-sm text-muted-foreground">Nothing yet.</p>;
+    const ac = d.account_context;
+    return (
+      <div className="space-y-3 text-sm">
+        <div><p className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">They said</p>
+          <blockquote className="mt-1 rounded-lg border-l-2 border-primary bg-muted/40 p-3 italic">“{d.original_words}”</blockquote></div>
+        <div><p className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">I understood</p>
+          <p className="mt-1">{d.confirmed_plain_language_request}</p></div>
+        {ac && <p className="text-xs text-muted-foreground">Grounded to {prettyStatus(ac.account_type || "")} {ac.masked_identifier}.</p>}
+      </div>
+    );
+  }
+  if (agent.id === "atlas") {
+    if (!d) return <p className="text-sm text-muted-foreground">Nothing yet.</p>;
+    const security = d.categories?.includes("fraud_or_security");
+    return (
+      <div className="space-y-3 text-sm">
+        <div className="flex flex-wrap gap-1.5">{(d.categories || []).map((c: string) => <Chip key={c} tone={c === "fraud_or_security" ? "red" : "muted"}>{prettyCategory(c)}</Chip>)}</div>
+        <div><span className="text-muted-foreground">Routed to </span><span className={security ? "font-medium text-red-600" : "font-medium"}>{prettyStatus(d.routing?.destination || data.candMeta?.destination || "")}</span></div>
+        {security ? (
+          <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">Possible security concern , sent to specialist review, not a general advisor.</p>
+        ) : (
+          <div className="space-y-2">
+            {(data.candidates || []).slice(0, 3).map((a) => (
+              <div key={a.advisor_id} className="rounded-lg border border-border p-3">
+                <div className="flex items-center gap-2"><span className="font-medium">{a.display_name}</span>{a.available ? <Chip>available</Chip> : <Chip tone="amber">full</Chip>}</div>
+                <p className="mt-1 text-xs text-muted-foreground">{a.reason}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+  if (agent.id === "sage") {
+    const b = data.brief;
+    if (!b) return <p className="text-sm text-muted-foreground">No brief available.</p>;
+    return (
+      <div className="space-y-3 text-sm">
+        <p className="font-medium">{b.headline}</p>
+        {b.talking_points?.length > 0 && <div><p className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">Talking points</p>
+          <ul className="mt-1.5 space-y-1">{b.talking_points.map((t, i) => <li key={i} className="flex gap-2"><span className="mt-1.5 h-1 w-1 flex-none rounded-full bg-primary" />{t}</li>)}</ul></div>}
+        {b.cautions?.length > 0 && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3"><p className="text-[11px] font-mono uppercase tracking-wider text-amber-700">Cautions</p>
+          <ul className="mt-1.5 space-y-1">{b.cautions.map((t, i) => <li key={i} className="text-amber-800">• {t}</li>)}</ul></div>}
+      </div>
+    );
+  }
+  if (agent.id === "forge") {
+    const p = data.plan;
+    if (!p) return <p className="text-sm text-muted-foreground">No action prepared.</p>;
+    return (
+      <div className="space-y-3 text-sm">
+        <p className="font-medium">{p.headline}</p>
+        <dl className="grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2">
+          {(p.prepared_fields || []).slice(0, 6).map((f, i) => (
+            <div key={i}><dt className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">{f.label}</dt>
+              <dd>{f.value || <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">— to confirm</span>}</dd></div>
+          ))}
+        </dl>
+        <Button size="sm" onClick={onOpenInQueue}>Open the full packet to approve</Button>
+      </div>
+    );
+  }
+  // sentinel
+  const p = data.plan;
+  if (!p) return <p className="text-sm text-muted-foreground">No checks yet.</p>;
+  return (
+    <ul className="space-y-2.5 text-sm">
+      {(p.compliance_checks || []).map((c, i) => (
+        <li key={i} className="flex items-start gap-2"><ComplianceBadge status={c.status} />
+          <div><span className="font-medium">{c.item}</span>{c.note && <p className="text-xs text-muted-foreground">{c.note}</p>}</div></li>
+      ))}
+    </ul>
   );
 }
