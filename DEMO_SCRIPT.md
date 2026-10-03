@@ -34,7 +34,7 @@ Roles: one person speaks, one clicks, one watches the clock and calls the cuts.
 | Speak or type: **"I need six thousand dollars from the Roth thing from my old job."** | Mara is signed in. She just says what she needs. |
 | Wait for the question and suggestions. | Our agent, running on Amazon Bedrock, looked up her accounts. It did not guess. It says: I don't see a Roth IRA here. Could you mean your rollover IRA from your former employer? |
 | Open the "rollover IRA" definition. | She can ask what that means. The answer is plain language from an approved glossary, not improvised advice. |
-| Select the former-employer retirement account. Show the review page. | She picks the retirement account from her old job and reviews the request in her own words. The amount is there only because she said it and confirmed it. |
+| Select the former-employer retirement account. Open the review page. **Check the "What we understood" text.** If it still shows her raw words, edit it to: *I want to speak with an advisor about using $6,000 from my retirement account from my former employer.* Enter the amount **6,000** if it is empty. | She picks the retirement account from her old job and reviews the request in her own words. The amount is there only because she said it and confirmed it. |
 | Click **Confirm and send request**. Read the case number aloud. | She confirms. Nothing is sent without that. This is her case number. |
 
 ## 2:55 Staff demo (1 minute, live, staff tab)
@@ -102,6 +102,22 @@ Keep this on a slide and say it if asked.
 - **What stops the model inventing an account?** It can only suggest accounts returned by the backend's lookup, the client must confirm, and staff see the source of every account fact.
 - **Is this advice?** No. It creates and routes a service request. It does not recommend or execute anything.
 - **What would production need?** Real authentication, the firm's advisor directory with verified licence and state eligibility, audit logging, and review of the glossary by compliance.
+
+## Contingency: if the backend is not ready
+
+As of the evening of October 2, Agent 2's backend was not on the remote. If `backend/main.py` is still missing when you rehearse, the preview server can stand in. It serves both pages and the version-one API on one origin and sends intake and triage through Agent 1's adapter, so the AI path is still live Bedrock.
+
+After merging the Agent 1, Agent 3, and Agent 4 branches:
+
+```bash
+pip install -r requirements-aws.txt
+export AWS_REGION=us-east-1 BEDROCK_MODEL_ID=<verified allowlisted model ID> SAMEPAGE_AI_MODE=bedrock
+python3 frontend/staff/dev_server.py --ai adapter --port 8000
+```
+
+Open `http://127.0.0.1:8000/client` and `http://127.0.0.1:8000/staff`. The startup line says whether it is using live Bedrock or the offline stub; only live Bedrock may be shown as the AI demo. Cases are kept in memory, so **restarting the server is the reset**. This path was tested end to end with Agent 1's offline stub. It has not been run against live Bedrock, because that needs the event account.
+
+Be accurate in the pitch if you use it: it is a single-process prototype server with in-memory cases, not the FastAPI backend in the architecture slide.
 
 ## Staff page preview without the backend
 

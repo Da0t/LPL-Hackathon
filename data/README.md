@@ -32,6 +32,8 @@ The client and account files hold no interpretations of these requests. `cases.j
 
 ## For Agent 2
 
+- `data/store.py` is a ready data layer you can use or ignore. `Store()` is a valid `tools` object for Agent 1's `intake_turn` and `triage_case` (Agent 1's nine tests pass with it in place of their fixture tools). It also provides `account_context(account_id, categories)`, `rank_candidates(client_id, categories)` in the spec's routing order, `wording_conflicts(...)`, and `owns(client_id, account_id)`. Unknown IDs return `None` or an empty list, never invented values.
+
 - Import cases from one place. `cases.json` already contains the two fixture cases, so loading both it and the fixture's `cases` would duplicate them.
 - `python3 data/validate_data.py --export` prints all six files merged into one document with the fixture's shape, if a single file is easier to load.
 - `ADV-08` is inactive and must never be a candidate. `ADV-05` is active but at capacity.

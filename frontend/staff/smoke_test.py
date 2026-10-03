@@ -1,7 +1,8 @@
 """Browser check for the staff page against the local preview server.
 
 Needs Playwright (pip install playwright; python3 -m playwright install chromium).
-It is a development check, not part of the app's requirements.
+It is a development check, not part of the app's requirements. When the client page is
+also being served, the request is typed into it; otherwise it is posted to the API.
 
 Run from the repository root:
 
@@ -17,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import time
@@ -54,6 +56,30 @@ def submit_case(base: str) -> str:
     })["case_id"]
 
 
+def submit_through_client_page(page, base: str) -> str:
+    """Type the request into the client page, as the presenter will."""
+    page.goto(base + "/client/")
+    page.click("#start")
+    page.wait_for_selector("#words", state="visible")
+    page.fill("#words", REQUEST)
+    page.wait_for_selector(".suggestion-card", timeout=30000)
+    page.locator(".suggestion-card").first.click()
+    page.click("#review")
+    page.wait_for_selector("#summary", state="visible")
+    page.fill("#summary", CONFIRMED)
+    page.fill("#amount", "6,000")
+    page.click("#confirm")
+    page.wait_for_selector("#success-screen", state="visible", timeout=30000)
+    return re.search(r"CASE-[\w-]+", page.inner_text("#success-screen")).group(0)
+
+
+def has_client_page(base: str) -> bool:
+    try:
+        return urllib.request.urlopen(base + "/client/", timeout=10).status == 200
+    except OSError:
+        return False
+
+
 def run(base: str, shots: Path | None, preview: bool):
     def shot(page, name, **kwargs):
         if shots:
@@ -75,7 +101,14 @@ def run(base: str, shots: Path | None, preview: bool):
         check("bundled fonts load", page.evaluate("document.fonts.check('16px \"Public Sans\"') && document.fonts.check('16px Newsreader')"))
         shot(page, "1-queue.png")
 
-        case_id = submit_case(base)
+        if has_client_page(base):
+            client_page = browser.new_page(viewport={"width": 1280, "height": 900})
+            client_page.on("pageerror", lambda error: page_errors.append("client page: " + str(error)))
+            case_id = submit_through_client_page(client_page, base)
+            check("the client page submits a request and shows its case number", bool(case_id))
+            client_page.close()
+        else:
+            case_id = submit_case(base)
         page.wait_for_selector(f".case-row:has-text('{case_id}')", timeout=9000)
         check("a newly confirmed case appears without a reload", True)
 
@@ -143,6 +176,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--base", help="address of a running app; default starts the preview server")
     parser.add_argument("--v2", action="store_true", help="start the preview with the proposed v2 fields")
+    parser.add_argument("--ai", choices=("preset", "adapter"), default="preset",
+                        help="start the preview with Agent 1's adapter (needs backend/aws in the checkout)")
     parser.add_argument("--screenshots", type=Path, help="folder to save screenshots in")
     args = parser.parse_args()
     if args.screenshots:
@@ -153,7 +188,8 @@ if __name__ == "__main__":
     if not base:
         port = 8011
         command = [sys.executable, str(ROOT / "frontend/staff/dev_server.py"), "--port", str(port)]
-        server = subprocess.Popen(command + (["--v2"] if args.v2 else []), stdout=subprocess.PIPE, text=True)
+        command += ["--ai", args.ai] + (["--v2"] if args.v2 else [])
+        server = subprocess.Popen(command, stdout=subprocess.PIPE, text=True)
         server.stdout.readline()  # wait for the startup line
         base = f"http://127.0.0.1:{port}"
     try:
